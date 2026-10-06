@@ -1,0 +1,36 @@
+/* Dark theme tokens, sampled from reference-layout.png */
+:root {
+	color-scheme: dark;
+	--bg: #1b1e26; /* top bar, rails */
+	--bg-editor: #1e2230; /* editor surface */
+	--panel: #262b36; /* sidebar, toolbars */
+	--panel-raised: #2f3542; /* hover, active line */
+	--border: #3a404d;
+	--accent: #2f6a31; /* selected item, primary buttons */
+	--accent-bright: #4caf50;
+	--text: #e6e8ec;
+	--text-muted: #9aa1ad;
+	--focus: #7cb8ff;
+	--font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	background: var(--bg);
+	color: var(--text);
+	font: 14px/1.4 var(--font-ui);
+}
+
+:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
+}
