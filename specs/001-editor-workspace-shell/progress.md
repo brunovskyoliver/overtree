@@ -17,5 +17,7 @@ Updated: 2026-10-06T12:45:00+02:00
 - 2026-10-06 tasks: tasks.md, 41 tasks in 8 phases (MVP = phases 1-3).
 - 2026-10-06 analyze: 1 CRITICAL (snapshot-only persistence vs constitution I "persists updates and snapshots"), 0 HIGH, 3 MEDIUM, 2 LOW. Checklist requirements.md 16/16. Docker Desktop daemon not running.
 - 2026-10-06 remediation: research, data-model, contracts/collab, plan, tasks updated; analyze rerun: 0 CRITICAL, 0 HIGH.
+- 2026-10-06 implement phase 1 setup (87b8696) + phase 2 foundational (e58d758): T001-T012 [X]; pnpm check 0 errors, pnpm test 5/5, build + node server.ts boot OK (verified). Notes: SvelteKit 3 has no svelte.config.js (adapter in vite.config.ts); openDb(dataDir)/attachCollab(httpServer, dataDir?) -> {hocuspocus, wss, db}; seed written to updates directly.
+- 2026-10-06 implement phase 3 US1: T013-T020 [X]; pnpm check 0 errors, pnpm test 5/5, e2e 18/18 (6 each chromium/firefox/webkit). Notes: SvelteKit 3 env is `src/env.ts` (defineEnvVars) + `$app/env/public`, not `$env/dynamic/public`; Editor setup in onMount ($effect looped on the bindable write); T015 covered by the existing restart case in collab.test.ts; e2e workers 1, tests reset the doc to SEED in afterEach.
 
 ## Report

@@ -58,17 +58,17 @@ description: "Task list for feature 001 Editor workspace shell"
 
 ### Tests for User Story 1
 
-- [ ] T013 [P] [US1] Playwright `tests/e2e/persistence.spec.ts`: fresh start shows the seed text with the editor focused and ready (US1-1); type then reload within one second, text kept (US1-2, SC-001); undo/redo by keyboard and by toolbar buttons (US1-4); line numbers, matching-bracket highlight and distinct token classes for command, comment and math present, asserting the classes the stex mode actually emits (US1-5)
-- [ ] T014 [P] [US1] Playwright `tests/e2e/sync.spec.ts`: two browser contexts, an edit in one appears in the other in < 300 ms (US1-6, SC-003); closing the socket through `window.__overtree.provider` shows "Offline", and edits made then appear in the other context after reconnect (edge case, FR-015)
-- [ ] T015 [P] [US1] Vitest `tests/unit/restart.test.ts`: write through a provider, close the server, reopen on the same `DATA_DIR`, identical text (US1-3, SC-002)
+- [X] T013 [P] [US1] Playwright `tests/e2e/persistence.spec.ts`: fresh start shows the seed text with the editor focused and ready (US1-1); type then reload within one second, text kept (US1-2, SC-001); undo/redo by keyboard and by toolbar buttons (US1-4); line numbers, matching-bracket highlight and distinct token classes for command, comment and math present, asserting the classes the stex mode actually emits (US1-5)
+- [X] T014 [P] [US1] Playwright `tests/e2e/sync.spec.ts`: two browser contexts, an edit in one appears in the other in < 300 ms (US1-6, SC-003); closing the socket through `window.__overtree.provider` shows "Offline", and edits made then appear in the other context after reconnect (edge case, FR-015)
+- [X] T015 [P] [US1] Vitest `tests/unit/restart.test.ts`: write through a provider, close the server, reopen on the same `DATA_DIR`, identical text (US1-3, SC-002). Done as the existing "keeps text across a restart" case in `tests/unit/collab.test.ts` (phase 2); no separate file.
 
 ### Implementation for User Story 1
 
-- [ ] T016 [P] [US1] Editor theme and highlight style in `src/lib/editor/theme.ts` (dark, matching reference: commands, arguments, comments, math, active line, selection, matching bracket, gutter)
-- [ ] T017 [US1] `src/lib/components/Editor.svelte`: create `Y.Doc` + `HocuspocusProvider` (`url` from `location`, path `/collab`, name `main.tex`); `EditorView` with `basicSetup` minus `history`, `StreamLanguage.define(stex)`, theme, `yCollab(ytext, provider.awareness, { undoManager })`; focus the editor on load; destroy everything on unmount; expose `{ view, undoManager, provider }` to the parent via a bindable prop; expose `window.__overtree = { provider }` only when `import.meta.env.DEV` or `PUBLIC_TEST_HOOKS` from `$env/dynamic/public` is set
-- [ ] T018 [US1] Tab strip above the editor in `Editor.svelte` showing `main.tex` and the sync badge (`role="status"`: "Saved" / "Connecting…" / "Offline" from provider status events), per contracts/ui.md
-- [ ] T019 [US1] Undo/redo buttons at the start of the toolbar in `src/lib/components/Toolbar.svelte` calling `undoManager.undo()/redo()` (`role="toolbar" aria-label="Formatting"`, `aria-label` + `title` on each button)
-- [ ] T020 [US1] `src/routes/+page.svelte`: top bar (app name "Overtree" + constant `PROJECT_NAME`) and the editor filling the page (layout panes come in US2); SSR off for the page (`export const ssr = false` in `+page.ts`) since the editor is client-only
+- [X] T016 [P] [US1] Editor theme and highlight style in `src/lib/editor/theme.ts` (dark, matching reference: commands, arguments, comments, math, active line, selection, matching bracket, gutter)
+- [X] T017 [US1] `src/lib/components/Editor.svelte`: create `Y.Doc` + `HocuspocusProvider` (`url` from `location`, path `/collab`, name `main.tex`); `EditorView` with `basicSetup` minus `history`, `StreamLanguage.define(stex)`, theme, `yCollab(ytext, provider.awareness, { undoManager })`; focus the editor on load; destroy everything on unmount; expose `{ view, undoManager, provider }` to the parent via a bindable prop; expose `window.__overtree = { provider }` only when `import.meta.env.DEV` or `PUBLIC_TEST_HOOKS` from `$env/dynamic/public` is set
+- [X] T018 [US1] Tab strip above the editor in `Editor.svelte` showing `main.tex` and the sync badge (`role="status"`: "Saved" / "Connecting…" / "Offline" from provider status events), per contracts/ui.md
+- [X] T019 [US1] Undo/redo buttons at the start of the toolbar in `src/lib/components/Toolbar.svelte` calling `undoManager.undo()/redo()` (`role="toolbar" aria-label="Formatting"`, `aria-label` + `title` on each button)
+- [X] T020 [US1] `src/routes/+page.svelte`: top bar (app name "Overtree" + constant `PROJECT_NAME`) and the editor filling the page (layout panes come in US2); SSR off for the page (`export const ssr = false` in `+page.ts`) since the editor is client-only
 
 **Checkpoint**: MVP. Editing persists and syncs; T013–T015 pass.
 

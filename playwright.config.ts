@@ -7,6 +7,9 @@ const PORT = 4173;
 
 export default defineConfig({
 	testDir: 'tests/e2e',
+	// one shared server + document: specs run one at a time
+	workers: 1,
+	fullyParallel: false,
 	use: { baseURL: `http://127.0.0.1:${PORT}` },
 	projects: [
 		{ name: 'chromium', use: { ...devices['Desktop Chrome'] } },
