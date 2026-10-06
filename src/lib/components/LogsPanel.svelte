@@ -4,9 +4,10 @@
 	// onopenat: open a project file in a tab with the cursor on that line
 	let {
 		entries,
+		logUrl,
 		onopenat,
 		onclose
-	}: { entries: LogEntry[]; onopenat?: (fileId: string, line: number) => void; onclose: () => void } = $props();
+	}: { entries: LogEntry[]; logUrl: string; onopenat?: (fileId: string, line: number) => void; onclose: () => void } = $props();
 
 	const sections = $derived(
 		(
@@ -27,7 +28,7 @@
 
 	async function loadRaw(e: Event) {
 		if (!(e.currentTarget as HTMLDetailsElement).open) return;
-		const res = await fetch('/api/compile/output.log');
+		const res = await fetch(logUrl);
 		raw = res.ok ? await res.text() : 'No log for the last compile.';
 	}
 </script>

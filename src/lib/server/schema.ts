@@ -1,4 +1,4 @@
-import { blob, index, integer, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { blob, index, integer, primaryKey, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Compiler } from '../compile-types.ts';
 import type { FileKind } from '../files.ts';
 
@@ -21,10 +21,44 @@ export const updates = sqliteTable(
 	(t) => [index('updates_doc_name_idx').on(t.docName)]
 );
 
-// Compiler per project ('main' until feature 005); no row means pdflatex.
+// Compiler per project; no row means pdflatex.
 export const compileSettings = sqliteTable('compile_settings', {
 	project: text('project').primaryKey(),
 	compiler: text('compiler').$type<Compiler>().notNull()
+});
+
+export type SiteRole = 'admin' | 'user';
+export type MemberRole = 'editor' | 'reader';
+
+// Users mirrored from Clerk (or the test bypass) on first sight (005 data-model.md).
+export const users = sqliteTable('users', {
+	id: text('id').primaryKey(), // Clerk user id, or `test_<email>`
+	email: text('email').notNull().unique(), // lower-cased primary email
+	name: text('name').notNull(),
+	avatarUrl: text('avatar_url'),
+	role: text('role').$type<SiteRole>().notNull(),
+	disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
+	createdAt: integer('created_at').notNull(),
+	lastSeenAt: integer('last_seen_at').notNull(),
+	syncedAt: integer('synced_at').notNull() // last profile refresh from Clerk
+});
+
+// One row, id 1.
+export const settings = sqliteTable('settings', {
+	id: integer('id').primaryKey(),
+	signupMode: text('signup_mode').$type<'open' | 'invite'>().notNull().default('invite'),
+	allowlist: text('allowlist').notNull().default('[]') // JSON array of `name@host` / `@host`
+});
+
+export const projects = sqliteTable('projects', {
+	id: text('id').primaryKey(), // uuid; the pre-005 project is 'main'
+	title: text('title').notNull(),
+	ownerId: text('owner_id').references(() => users.id), // null only for the migrated project until the first admin
+	mainFileId: text('main_file_id'),
+	linkToken: text('link_token').unique(), // null: link sharing off
+	linkRole: text('link_role').$type<MemberRole>(),
+	createdAt: integer('created_at').notNull(),
+	updatedAt: integer('updated_at').notNull()
 });
 
 // Project tree (data-model.md). Text file ids are also their Hocuspocus document names.
@@ -32,6 +66,10 @@ export const files = sqliteTable(
 	'files',
 	{
 		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.default('main')
+			.references(() => projects.id),
 		parentId: text('parent_id').references((): AnySQLiteColumn => files.id),
 		name: text('name').notNull(),
 		kind: text('kind').$type<FileKind>().notNull(),
@@ -40,11 +78,54 @@ export const files = sqliteTable(
 		createdAt: integer('created_at').notNull(),
 		updatedAt: integer('updated_at').notNull()
 	},
-	(t) => [index('files_parent_idx').on(t.parentId)]
+	(t) => [index('files_parent_idx').on(t.parentId), index('files_project_parent_idx').on(t.projectId, t.parentId)]
 );
 
-// One row ('main') until feature 005.
-export const project = sqliteTable('project', {
-	id: text('id').primaryKey(),
-	mainFileId: text('main_file_id')
-});
+// The owner has no row. `role` comes from an invite (null: joined by link only); `viaLink` counts while the link is on.
+export const memberships = sqliteTable(
+	'memberships',
+	{
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id),
+		role: text('role').$type<MemberRole>(),
+		viaLink: integer('via_link', { mode: 'boolean' }).notNull().default(false),
+		createdAt: integer('created_at').notNull()
+	},
+	(t) => [primaryKey({ columns: [t.projectId, t.userId] }), index('memberships_user_idx').on(t.userId)]
+);
+
+// Pending invites for emails without an account; become memberships when that email is mirrored.
+export const invites = sqliteTable(
+	'invites',
+	{
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id),
+		email: text('email').notNull(), // lower-cased
+		role: text('role').$type<MemberRole>().notNull(),
+		createdAt: integer('created_at').notNull()
+	},
+	(t) => [primaryKey({ columns: [t.projectId, t.email] }), index('invites_email_idx').on(t.email)]
+);
+
+// Per-file or per-folder role of one member, raising or lowering their project role.
+export const overrides = sqliteTable(
+	'overrides',
+	{
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id),
+		fileId: text('file_id')
+			.notNull()
+			.references(() => files.id),
+		role: text('role').$type<MemberRole>().notNull()
+	},
+	(t) => [primaryKey({ columns: [t.projectId, t.userId, t.fileId] })]
+);

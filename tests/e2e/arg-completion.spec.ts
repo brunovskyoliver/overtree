@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
-import { openEditor, resetProject, setDoc, text } from './helpers.ts';
+import { api, openEditor, projectPath, resetProject, setDoc, test, text } from './helpers.ts';
 
 // US6: argument completion from the project (labels, cite keys, packages, file paths)
 
@@ -12,7 +12,7 @@ const row = (page: Page, name: string) =>
 const tab = (page: Page, name: string) => page.getByRole('tablist', { name: 'Open files' }).getByRole('tab', { name, exact: true });
 
 async function upload(page: Page, name: string, content: string | Buffer, parentId = ''): Promise<FileEntry> {
-	const res = await page.request.post('/api/files', {
+	const res = await page.request.post(`${api()}/files`, {
 		multipart: { file: { name, mimeType: 'application/octet-stream', buffer: Buffer.from(content) }, parentId },
 		headers: { origin: new URL(page.url()).origin } // SvelteKit's CSRF check wants a browser-like Origin
 	});
@@ -21,7 +21,7 @@ async function upload(page: Page, name: string, content: string | Buffer, parent
 }
 
 async function folder(page: Page, name: string): Promise<FileEntry> {
-	const res = await page.request.post('/api/files', { data: { kind: 'folder', name, parentId: null } });
+	const res = await page.request.post(`${api()}/files`, { data: { kind: 'folder', name, parentId: null } });
 	expect(res.status()).toBe(201);
 	return res.json();
 }
@@ -54,7 +54,7 @@ async function ready(page: Page, label: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/');
+	await page.goto(projectPath());
 	await page.evaluate(() => localStorage.clear());
 	await openEditor(page);
 	const chapters = await folder(page, 'chapters');

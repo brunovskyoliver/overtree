@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
-import { openEditor, resetProject, setDoc, text } from './helpers.ts';
+import { api, openEditor, projectPath, resetProject, setDoc, test, text } from './helpers.ts';
 
 // US2: open files in tabs and previews (contracts/ui.md, Tabs and Preview)
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/');
+	await page.goto(projectPath());
 	await page.evaluate(() => localStorage.clear());
 	await openEditor(page);
 });
@@ -23,7 +23,7 @@ const tab = (page: Page, name: string) => tabs(page).getByRole('tab', { name, ex
 const outline = (page: Page) => page.getByRole('navigation', { name: 'File outline' });
 
 async function create(page: Page, kind: 'folder' | 'text', name: string, parentId: string | null = null): Promise<FileEntry> {
-	const res = await page.request.post('/api/files', { data: { kind, name, parentId } });
+	const res = await page.request.post(`${api()}/files`, { data: { kind, name, parentId } });
 	expect(res.status()).toBe(201);
 	return res.json();
 }
@@ -101,7 +101,7 @@ test('closing a tab activates the neighbour; the last one leaves a hint (US2-3)'
 
 /** Upload a binary file (multipart, T032). Origin like a browser form post. */
 async function upload(page: Page, name: string, bytes: Buffer): Promise<FileEntry> {
-	const res = await page.request.post('/api/files', {
+	const res = await page.request.post(`${api()}/files`, {
 		headers: { origin: new URL(page.url()).origin },
 		multipart: { file: { name, mimeType: 'application/octet-stream', buffer: bytes }, parentId: '' }
 	});
@@ -218,7 +218,7 @@ test('rename and move keep the tab, delete closes it (US2-8)', async ({ page }) 
 
 	// deleting the folder closes the tab of the file inside it
 	const headers = { origin: new URL(page.url()).origin };
-	expect((await page.request.delete(`/api/files/${folder.id}`, { headers })).status()).toBe(204);
+	expect((await page.request.delete(`${api()}/files/${folder.id}`, { headers })).status()).toBe(204);
 	await page.reload();
 	await expect(tab(page, 'intro.tex')).toHaveCount(0);
 	await expect(tab(page, 'main.tex')).toHaveAttribute('aria-selected', 'true');

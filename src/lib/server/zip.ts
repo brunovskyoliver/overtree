@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { strFromU8, Unzip, UnzipInflate, zipSync, type Zippable } from 'fflate';
-import { kindForName, limits, pathOf, validateName, type ProjectInfo } from '../files.ts';
+import { kindForName, limits, pathOf, validateName } from '../files.ts';
 import { collectProject } from './compile.ts';
-import { FileError, getMainFileId, listFiles, putBlob, replaceProject, type Row } from './files.ts';
+import { FileError, listFiles, putBlob, type Row } from './files.ts';
+import { insertProject } from './projects.ts';
 
 // Project zip export and import (research R7).
 
@@ -10,11 +11,11 @@ const NOT_A_ZIP = 'This file is not a valid zip.';
 const CHUNK = 16 * 1024; // pushed to the inflater at a time: deflate expands ~1000×, so at most ~16 MB in one step
 
 /** Every folder (as a `dir/` entry) and file at its path; no compile output. */
-export async function exportZip(): Promise<Uint8Array> {
-	const all = listFiles();
+export async function exportZip(pid: string): Promise<Uint8Array> {
+	const all = listFiles(pid);
 	const entries: Zippable = {};
 	for (const f of all) if (f.kind === 'folder') entries[`${pathOf(f.id, all)}/`] = new Uint8Array();
-	for (const { path, data } of (await collectProject()).files) entries[path] = data;
+	for (const { path, data } of (await collectProject(pid)).files) entries[path] = data;
 	// ponytail: built in memory and blocks the event loop while compressing; the streaming `Zip` once projects grow
 	return zipSync(entries, { level: 6 });
 }
@@ -56,8 +57,11 @@ function cleanPath(name: string): string | null {
 	return parts.join('/');
 }
 
-/** Replaces the whole project with the zip's files. Everything is read and checked before anything is written. */
-export function importZip(bytes: Uint8Array): ProjectInfo {
+type FileRow = Omit<Row, 'projectId'>;
+
+/** A new project owned by `ownerId` with the zip's files; returns its id. Everything is read and checked before
+ *  anything is written. */
+export function importZipAsProject(ownerId: string, title: string, bytes: Uint8Array): string {
 	const maxBytes = limits.importMaxMb * 1024 * 1024;
 	const maxEntries = limits.projectMaxFiles;
 	const tooBig = () => new FileError(413, `A project zip can unpack to at most ${limits.importMaxMb} MB.`);
@@ -97,7 +101,7 @@ export function importZip(bytes: Uint8Array): ProjectInfo {
 
 	// folders from dir entries and file paths; keys lower-case because names are unique case-insensitively
 	const now = Date.now();
-	const rows: Row[] = [];
+	const rows: FileRow[] = [];
 	const folders = new Map<string, string>(); // lower-case path → id
 	const folderId = (path: string): string | null => {
 		if (!path) return null;
@@ -119,7 +123,7 @@ export function importZip(bytes: Uint8Array): ProjectInfo {
 	const texts = new Map<string, string>();
 	const taken = new Set<string>();
 	const tex: { id: string; path: string; text: string }[] = [];
-	const blobs: { row: Row; data: Uint8Array }[] = [];
+	const blobs: { row: FileRow; data: Uint8Array }[] = [];
 	for (const e of entries) {
 		const key = e.path.toLowerCase();
 		// a name used twice (or by a folder too): the first one wins
@@ -134,7 +138,7 @@ export function importZip(bytes: Uint8Array): ProjectInfo {
 				// not UTF-8: stored as binary, like an upload
 			}
 		}
-		const row: Row = {
+		const row: FileRow = {
 			id: randomUUID(),
 			parentId: folders.get(dir(key)) ?? null,
 			name,
@@ -162,6 +166,5 @@ export function importZip(bytes: Uint8Array): ProjectInfo {
 
 	// blob files are content-addressed: writing them first leaves nothing visible if the swap fails
 	for (const { row, data } of blobs) row.hash = putBlob(data);
-	replaceProject(rows, texts, main?.id ?? null);
-	return { files: listFiles(), mainFileId: getMainFileId() };
+	return insertProject({ ownerId, title }, rows, texts, main?.id ?? null);
 }

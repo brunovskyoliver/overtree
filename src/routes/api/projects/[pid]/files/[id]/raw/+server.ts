@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
+import { requireProject } from '#lib/server/access.ts';
 import { api, attrChars } from '#lib/server/api.ts';
-import { getFile, getText, readBlob } from '#lib/server/files.ts';
+import { fileOr404, getText, readBlob } from '#lib/server/files.ts';
 import type { RequestHandler } from './$types';
 
 const MEDIA: Record<string, string> = {
@@ -14,8 +15,9 @@ const MEDIA: Record<string, string> = {
 };
 
 // research R14: nosniff always, SVG sandboxed so scripts inside can't run
-export const GET: RequestHandler = async ({ params, url }) => {
-	const file = api(() => getFile(params.id));
+export const GET: RequestHandler = async ({ locals, params, url }) => {
+	api(() => requireProject(locals, params.pid, 'read'));
+	const file = api(() => fileOr404(params.pid, params.id));
 	if (file.kind === 'folder') error(404, 'File not found.');
 	const type =
 		file.kind === 'text' ? 'text/plain; charset=utf-8' : (MEDIA[file.name.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream');

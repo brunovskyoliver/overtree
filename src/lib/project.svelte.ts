@@ -1,14 +1,28 @@
 import { pathOf, sortEntries, type FileEntry, type FileKind, type ProjectInfo } from './files.ts';
 
-const TABS = 'overtree:tabs';
 
 /** One line of the upload progress list (contracts/ui.md). */
 export type Upload = { id: number; name: string; loaded: number; total: number; error?: string };
 let uploadIds = 0;
 
-// Client view of the project tree and the open tabs. Each operation calls the API and reloads the whole list
-// on success (research R10: no live tree sync until 006); failures return the server's message for the UI.
+/** `GET /api/projects/:pid` (contracts/http-api.md). */
+export type ProjectDetails = {
+	id: string;
+	title: string;
+	owner: { id: string; name: string } | null;
+	role: 'owner' | 'editor' | 'reader';
+	mainFileId: string | null;
+	link: { token: string; role: 'editor' | 'reader' } | null;
+	permissions: { canEdit: boolean };
+};
+
+// Client view of one project's tree and its open tabs. Each operation calls the API and reloads the whole list
+// on success (live tree events come with US4); failures return the server's message for the UI.
 export class Project {
+	readonly id: string;
+	details = $state<ProjectDetails | null>(null);
+	/** status of the last `GET /api/projects/:pid` that failed (404: no access), else null */
+	loadError = $state<number | null>(null);
 	files = $state<FileEntry[]>([]);
 	mainFileId = $state<string | null>(null);
 	/** ids of the files open in tabs, in tab order */
@@ -17,8 +31,37 @@ export class Project {
 	uploads = $state<Upload[]>([]);
 	#restored = false;
 
+	constructor(id: string) {
+		this.id = id;
+	}
+
+	/** URL of a project API route, e.g. `api('/files')`. */
+	api(path = '') {
+		return `/api/projects/${this.id}${path}`;
+	}
+
+	/** Raw content of a file; `updatedAt` busts the cache (a replaced upload keeps the id). */
+	rawUrl(f: FileEntry, download = false) {
+		return this.api(`/files/${f.id}/raw?${download ? 'download=1' : `v=${f.updatedAt}`}`);
+	}
+
+	get #tabsKey() {
+		return `overtree:tabs:${this.id}`;
+	}
+
+	/** Title, role and permissions. */
+	async loadDetails() {
+		const res = await fetch(this.api()).catch(() => undefined);
+		if (!res?.ok) {
+			this.loadError = res?.status ?? 0;
+			return;
+		}
+		this.loadError = null;
+		this.details = await res.json();
+	}
+
 	async load() {
-		const res = await fetch('/api/files').catch(() => undefined);
+		const res = await fetch(this.api('/files')).catch(() => undefined);
 		if (!res?.ok) return;
 		const info: ProjectInfo = await res.json();
 		this.files = info.files;
@@ -32,7 +75,7 @@ export class Project {
 	#restore() {
 		this.#restored = true;
 		try {
-			const saved = JSON.parse(localStorage.getItem(TABS) ?? 'null');
+			const saved = JSON.parse(localStorage.getItem(this.#tabsKey) ?? 'null');
 			if (Array.isArray(saved?.open)) {
 				this.open = saved.open.filter((id: unknown) => typeof id === 'string');
 				this.active = this.open.includes(saved.active) ? saved.active : (this.open[0] ?? null);
@@ -60,7 +103,7 @@ export class Project {
 	}
 
 	#save() {
-		localStorage.setItem(TABS, JSON.stringify({ open: this.open, active: this.active }));
+		localStorage.setItem(this.#tabsKey, JSON.stringify({ open: this.open, active: this.active }));
 	}
 
 	children(parentId: string | null) {
@@ -77,23 +120,23 @@ export class Project {
 	}
 
 	create(kind: Exclude<FileKind, 'binary'>, name: string, parentId: string | null) {
-		return this.#call('/api/files', 'POST', { kind, name, parentId });
+		return this.#call(this.api('/files'), 'POST', { kind, name, parentId });
 	}
 
 	rename(id: string, name: string) {
-		return this.#call(`/api/files/${id}`, 'PATCH', { name });
+		return this.#call(this.api(`/files/${id}`), 'PATCH', { name });
 	}
 
 	move(id: string, parentId: string | null) {
-		return this.#call(`/api/files/${id}`, 'PATCH', { parentId });
+		return this.#call(this.api(`/files/${id}`), 'PATCH', { parentId });
 	}
 
 	remove(id: string) {
-		return this.#call(`/api/files/${id}`, 'DELETE');
+		return this.#call(this.api(`/files/${id}`), 'DELETE');
 	}
 
 	setMain(id: string) {
-		return this.#call('/api/project', 'PUT', { mainFileId: id });
+		return this.#call(this.api('/main'), 'PUT', { fileId: id });
 	}
 
 	/** Adds a waiting line per file to the progress list, in the order they will go. */
@@ -114,7 +157,7 @@ export class Project {
 		if (replace) form.append('replace', '1');
 		return new Promise((resolve) => {
 			const xhr = new XMLHttpRequest();
-			xhr.open('POST', '/api/files');
+			xhr.open('POST', this.api('/files'));
 			xhr.upload.onprogress = (e) => {
 				line.loaded = e.loaded;
 				line.total = e.total;
@@ -139,22 +182,12 @@ export class Project {
 		this.uploads = this.uploads.filter((u) => u.id !== line.id);
 	}
 
-	/** Replace the whole project with a zip (contracts/files-api.md); the old tabs close, the new main opens. */
-	async importZip(file: File) {
-		const form = new FormData();
-		form.append('file', file);
-		const err = await this.#call('/api/project/zip', 'POST', form);
-		if (!err && this.mainFileId) this.openFile(this.mainFileId);
-		return err;
-	}
-
 	/** null on success, otherwise the message to show. */
 	async #call(url: string, method: string, body?: object): Promise<string | null> {
-		const form = body instanceof FormData;
 		const res = await fetch(url, {
 			method,
-			headers: body && !form ? { 'Content-Type': 'application/json' } : undefined,
-			body: form ? body : body && JSON.stringify(body)
+			headers: body ? { 'Content-Type': 'application/json' } : undefined,
+			body: body && JSON.stringify(body)
 		}).catch(() => undefined);
 		if (!res) return 'Network error, try again.';
 		if (!res.ok) return (await res.json().catch(() => null))?.message ?? `Request failed (${res.status}).`;

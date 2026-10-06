@@ -2,7 +2,16 @@
 // Plain erasable TypeScript: server.ts loads this through src/lib/server/files.ts without a build step.
 
 export type FileKind = 'folder' | 'text' | 'binary';
-export type FileEntry = { id: string; parentId: string | null; name: string; kind: FileKind; size?: number; updatedAt: number };
+export type FileEntry = {
+	id: string;
+	parentId: string | null;
+	name: string;
+	kind: FileKind;
+	size?: number;
+	updatedAt: number;
+	/** from `GET /api/projects/:pid/files`: the caller may edit this entry (005 research R10) */
+	canEdit?: boolean;
+};
 export type ProjectInfo = { files: FileEntry[]; mainFileId: string | null };
 
 // spec FR-006

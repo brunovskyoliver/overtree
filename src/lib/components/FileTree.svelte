@@ -34,7 +34,6 @@
 	let tree: HTMLUListElement;
 	let confirm: ConfirmDialog;
 	let picker: HTMLInputElement;
-	let zipPicker: HTMLInputElement;
 	let uploadTo: string | null = null;
 
 	const m = new Menu();
@@ -195,7 +194,7 @@
 		if (err) flash(err);
 	}
 
-	// --- upload and zip (research R6, R7) ----------------------------------------------------------
+	// --- upload (research R6) -------------------------------------------------------------------
 
 	function pick(parentId: string | null) {
 		uploadTo = parentId;
@@ -216,19 +215,6 @@
 			}
 			await project.load();
 		}
-	}
-
-	async function importZip(file: File) {
-		const n = project.files.filter((f) => f.kind !== 'folder').length;
-		const ok = await confirm.ask({
-			title: `Replace the project with "${file.name}"?`,
-			body: `This removes all ${n} current ${n === 1 ? 'file' : 'files'}.`,
-			confirmLabel: 'Replace project',
-			danger: true
-		});
-		if (!ok) return;
-		const err = await project.importZip(file);
-		if (err) flash(err);
 	}
 
 	// --- keyboard (contracts/ui.md) ----------------------------------------------------------------
@@ -443,12 +429,9 @@
 		<button type="button" class="tool" aria-label="Upload" title="Upload" onclick={() => pick(folderOf(sel))}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" /></svg>
 		</button>
-		<a class="tool" href="/api/project/zip" download="project.zip" aria-label="Download project as zip" title="Download project as zip">
+		<a class="tool" href={project.api('/zip')} download aria-label="Download project as zip" title="Download project as zip">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16" /></svg>
 		</a>
-		<button type="button" class="tool" aria-label="New project from zip" title="New project from zip" onclick={() => zipPicker.click()}>
-			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h10l6 6v10H4zM14 4v6h6M10 9v2M10 13v2M10 17v2" /></svg>
-		</button>
 		<input
 			type="file"
 			multiple
@@ -457,17 +440,6 @@
 			onchange={() => {
 				upload([...picker.files!], uploadTo);
 				picker.value = '';
-			}}
-		/>
-		<input
-			type="file"
-			accept=".zip,application/zip"
-			hidden
-			bind:this={zipPicker}
-			onchange={() => {
-				const file = zipPicker.files![0];
-				zipPicker.value = '';
-				if (file) importZip(file);
 			}}
 		/>
 	</div>
@@ -523,7 +495,7 @@
 		{/if}
 		<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startRename(f))}>Rename</button>
 		{#if f.kind !== 'folder'}
-			<a role="menuitem" tabindex="-1" href="/api/files/{f.id}/raw?download=1" download={f.name}
+			<a role="menuitem" tabindex="-1" href={project.rawUrl(f, true)} download={f.name}
 				onclick={() => setTimeout(m.close)}>Download</a
 			>
 		{/if}

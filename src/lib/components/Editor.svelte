@@ -21,6 +21,7 @@
 	import { HocuspocusProvider } from '@hocuspocus/provider';
 	import { onMount } from 'svelte';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
+	import { getToken } from '#lib/auth.svelte.ts';
 	import { yCollab, ySyncAnnotation, ySyncFacet, yUndoManagerKeymap } from 'y-codemirror.next';
 	import * as Y from 'yjs';
 	import { environments } from '#lib/completion/environments.ts';
@@ -71,7 +72,8 @@
 		return true;
 	};
 
-	const symbols = new Symbols();
+	// svelte-ignore state_referenced_locally (the page is keyed on the project: `project` never changes here)
+	const symbols = new Symbols(project.id);
 	// LaTeX tabs get the stex mode plus \begin/\end support; completion checks the language itself
 	const latexExtensions: Extension = [StreamLanguage.define(stex), environments];
 	const plainText: Extension = [];
@@ -129,7 +131,8 @@
 		const provider = new HocuspocusProvider({
 			url: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/collab`,
 			name: id,
-			document: doc
+			document: doc,
+			token: getToken // a fresh session token on every (re)connect (research R3)
 		});
 		statuses[id] = STATUS_TEXT.connecting;
 		provider.on('status', ({ status }: { status: keyof typeof STATUS_TEXT }) => (statuses[id] = STATUS_TEXT[status]));
@@ -221,7 +224,7 @@
 	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} />{/if}
 	<div class="host" bind:this={host} hidden={activeFile?.kind !== 'text'}></div>
 	{#if activeFile && activeFile.kind !== 'text'}
-		{#key activeFile.id}<FilePreview file={activeFile} />{/key}
+		{#key activeFile.id}<FilePreview file={activeFile} url={project.rawUrl(activeFile)} />{/key}
 	{:else if !activeFile}
 		<p class="hint">Open a file from the file tree.</p>
 	{/if}

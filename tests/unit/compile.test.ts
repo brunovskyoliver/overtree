@@ -1,16 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { hostname, tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
-import { HocuspocusProvider } from '@hocuspocus/provider';
 import { describe, expect, it } from 'vitest';
-import * as Y from 'yjs';
 import type { Compiler } from '../../src/lib/compile-types.ts';
-import { attachCollab } from '../../src/lib/server/collab.ts';
 import { getMainFileId } from '../../src/lib/server/files.ts';
 import { compileDir, compileProject, runCompile } from '../../src/lib/server/compile.ts';
+import { connect, project, start } from './helpers.ts';
 
 // Real Docker with texlive/texlive:latest-medium pulled (see quickstart.md).
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/latex/${name}`, import.meta.url), 'utf8');
@@ -99,37 +95,32 @@ describe('runCompile sandbox', { timeout: 60_000 }, () => {
 
 describe('compileProject', { timeout: 60_000 }, () => {
 	it('coalesces concurrent requests and compiles the latest synced text', async () => {
-		const http = createServer();
-		const collab = attachCollab(http, mkdtempSync(join(tmpdir(), 'overtree-test-')));
-		await new Promise<void>((r) => http.listen(0, '127.0.0.1', r));
-		const doc = new Y.Doc();
-		const provider = new HocuspocusProvider({
-			url: `ws://127.0.0.1:${(http.address() as AddressInfo).port}/collab`,
-			name: getMainFileId()!,
-			document: doc
-		});
-		try {
-			await new Promise<void>((r) => provider.on('synced', () => r()));
+		const server = await start();
+		const pid = project();
+		const { provider, text } = await connect(server.url, getMainFileId(pid)!);
 
-			// three calls while idle: the first runs, the other two share one queued run with the latest options
-			const [a, b, c] = await Promise.all([false, false, true].map((stopOnFirstError) => compileProject({ stopOnFirstError })));
-			expect(a.status).toBe('success');
-			expect(b.id).not.toBe(a.id);
-			expect(c).toBe(b);
-			expect(b.stopOnFirstError).toBe(true);
-			expect(b.startedAt).toBeGreaterThanOrEqual(a.startedAt + a.durationMs);
-			expect(b.pdfId).toBe(b.id);
+		// three calls while idle: the first runs, the other two share one queued run with the latest options
+		const [a, b, c] = await Promise.all([false, false, true].map((stopOnFirstError) => compileProject(pid, { stopOnFirstError })));
+		expect(a.status).toBe('success');
+		expect(b.id).not.toBe(a.id);
+		expect(c).toBe(b);
+		expect(b.stopOnFirstError).toBe(true);
+		expect(b.startedAt).toBeGreaterThanOrEqual(a.startedAt + a.durationMs);
+		expect(b.pdfId).toBe(b.id);
 
-			const text = doc.getText('content');
-			text.insert(text.toString().indexOf('\\end{document}'), '\\typeout{MARK-42}\n');
-			while (provider.hasUnsyncedChanges) await new Promise((r) => setTimeout(r, 10));
-			expect((await compileProject({ stopOnFirstError: false })).status).toBe('success');
-			expect(readFileSync(join(compileDir(), 'output.log'), 'utf8')).toContain('MARK-42');
-		} finally {
-			provider.destroy();
-			for (const ws of collab.wss.clients) ws.terminate();
-			http.closeAllConnections();
-			await new Promise((r) => http.close(r));
-		}
+		text.insert(text.toString().indexOf('\\end{document}'), '\\typeout{MARK-42}\n');
+		while (provider.hasUnsyncedChanges) await new Promise((r) => setTimeout(r, 10));
+		expect((await compileProject(pid, { stopOnFirstError: false })).status).toBe('success');
+		expect(readFileSync(join(compileDir(pid), 'output.log'), 'utf8')).toContain('MARK-42');
+	});
+
+	it('keeps compiles of two projects apart: own output dir, no coalescing across projects', async () => {
+		await start();
+		const [p1, p2] = [project(), project('other@test.local')];
+		const [a, b] = await Promise.all([compileProject(p1, { stopOnFirstError: false }), compileProject(p2, { stopOnFirstError: true })]);
+		expect(a.id).not.toBe(b.id);
+		expect([a.stopOnFirstError, b.stopOnFirstError]).toEqual([false, true]);
+		expect(JSON.parse(readFileSync(join(compileDir(p1), 'result.json'), 'utf8')).id).toBe(a.id);
+		expect(JSON.parse(readFileSync(join(compileDir(p2), 'result.json'), 'utf8')).id).toBe(b.id);
 	});
 });

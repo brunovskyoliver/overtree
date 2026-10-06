@@ -1,11 +1,11 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
-import { openEditor, resetProject, setDoc, text } from './helpers.ts';
+import { api, openEditor, projectPath, resetProject, setDoc, test, text } from './helpers.ts';
 
 // US5: command completion while typing (contracts/ui.md, Completion popup)
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/');
+	await page.goto(projectPath());
 	await page.evaluate(() => localStorage.clear());
 	await openEditor(page);
 });
@@ -37,7 +37,7 @@ async function ready(page: Page, label?: string) {
 }
 
 async function upload(page: Page, name: string, content: string): Promise<FileEntry> {
-	const res = await page.request.post('/api/files', {
+	const res = await page.request.post(`${api()}/files`, {
 		multipart: { file: { name, mimeType: 'text/plain', buffer: Buffer.from(content) }, parentId: '' },
 		headers: { origin: new URL(page.url()).origin } // SvelteKit's CSRF check wants a browser-like Origin
 	});

@@ -3,6 +3,7 @@
 import type { Hocuspocus } from '@hocuspocus/server';
 import type { CompileState } from '#lib/compile.svelte.ts';
 import type { EditorHandle } from '#lib/editor/types.ts';
+import type { User } from '#lib/server/auth.ts';
 import type { Db } from '#lib/server/db.ts';
 
 declare global {
@@ -11,8 +12,13 @@ declare global {
 			message: string;
 			/** 409 on upload: the file with the same name (contracts/files-api.md) */
 			existingId?: string;
+			/** 403 from hooks.server.ts: why the signed-in user is blocked */
+			reason?: 'disabled' | 'not-allowed';
 		}
-		// interface Locals {}
+		interface Locals {
+			/** the signed-in, enabled user (hooks.server.ts); null when signed out or blocked */
+			user: User | null;
+		}
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}

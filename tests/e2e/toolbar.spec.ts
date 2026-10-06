@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { openEditor, resetDoc, SEED, text } from './helpers.ts';
+import { expect, type Page } from '@playwright/test';
+import { openEditor, resetDoc, SEED, test, text } from './helpers.ts';
 
 test.afterEach(async ({ page }) => {
 	if (await page.evaluate(() => !!window.__overtree)) await resetDoc(page);

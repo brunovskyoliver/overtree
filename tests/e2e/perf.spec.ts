@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { openEditor, resetDoc } from './helpers.ts';
+import { expect } from '@playwright/test';
+import { openEditor, projectPath, resetDoc, test } from './helpers.ts';
 
 // SC-004 budgets on a 5,000-line document
 const LINES = 5000;
@@ -21,7 +21,7 @@ test('5,000-line document: load < 2 s, keystroke < 50 ms, outline < 1 s (SC-004)
 
 	// navigation -> editor synced with the full document and accepting input
 	const t0 = Date.now();
-	await page.goto('/');
+	await page.goto(projectPath());
 	await page.waitForFunction((n) => {
 		const h = window.__overtree;
 		return h?.provider.isSynced && h.view.state.doc.lines >= n && h.view.hasFocus;

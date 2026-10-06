@@ -7,7 +7,7 @@ import type { Compiler, CompileResult, CompileStatus, LogEntry } from '../compil
 import { pathOf } from '../files.ts';
 import { parseLog } from '../log-parser.ts';
 import { getServer } from './collab.ts';
-import { getFile, getMainFileId, getText, listFiles, readBlob } from './files.ts';
+import { fileOr404, getMainFileId, getText, listFiles, readBlob } from './files.ts';
 import { compileSettings } from './schema.ts';
 
 const ENGINE_FLAG: Record<Compiler, string> = { pdflatex: '-pdf', xelatex: '-xelatex', lualatex: '-lualatex' };
@@ -192,83 +192,90 @@ export function tarProject(files: ProjectFile[]): Buffer {
 
 /** Every file of the project at its path (text from Yjs, binary from its blob), the main document's path and
  *  the ids of the text files by path. */
-export async function collectProject() {
-	const all = listFiles();
+export async function collectProject(pid: string) {
+	const all = listFiles(pid);
 	const files: ProjectFile[] = [];
 	const paths = new Map<string, string>();
 	for (const f of all) {
 		if (f.kind === 'folder') continue;
 		const path = pathOf(f.id, all);
 		if (f.kind === 'text') paths.set(path, f.id);
-		files.push({ path, data: f.kind === 'text' ? Buffer.from(await getText(f.id)) : readBlob(getFile(f.id).hash!) });
+		files.push({ path, data: f.kind === 'text' ? Buffer.from(await getText(f.id)) : readBlob(fileOr404(pid, f.id).hash!) });
 	}
-	const mainId = getMainFileId();
+	const mainId = getMainFileId(pid);
 	return { files, mainPath: mainId ? pathOf(mainId, all) : null, paths };
 }
 
 export const NO_MAIN = 'No main document. Right-click a .tex file and choose Set as main document.';
 
 /** Download name of the PDF: the main document's name with `.pdf`. */
-export function pdfName() {
-	const id = getMainFileId();
-	return `${id ? getFile(id).name.replace(/\.[^.]*$/, '') : 'main'}.pdf`;
+export function pdfName(pid: string) {
+	const id = getMainFileId(pid);
+	return `${id ? fileOr404(pid, id).name.replace(/\.[^.]*$/, '') : 'main'}.pdf`;
 }
 
-// ponytail: one project ('main') until feature 005; per-project maps then
-export const compileDir = () => join(getServer().dataDir, 'compile', 'main');
+export const compileDir = (pid: string) => join(getServer().dataDir, 'compile', pid);
 
-export function getCompiler(): Compiler {
-	const row = getServer().db.select().from(compileSettings).where(eq(compileSettings.project, 'main')).get();
+export function getCompiler(pid: string): Compiler {
+	const row = getServer().db.select().from(compileSettings).where(eq(compileSettings.project, pid)).get();
 	return row?.compiler ?? 'pdflatex';
 }
 
-export function setCompiler(compiler: Compiler) {
+export function setCompiler(pid: string, compiler: Compiler) {
 	getServer()
 		.db.insert(compileSettings)
-		.values({ project: 'main', compiler })
+		.values({ project: pid, compiler })
 		.onConflictDoUpdate({ target: compileSettings.project, set: { compiler } })
 		.run();
 }
 
-export function getLastResult(): CompileResult | null {
+export function getLastResult(pid: string): CompileResult | null {
 	try {
-		return JSON.parse(readFileSync(join(compileDir(), 'result.json'), 'utf8'));
+		return JSON.parse(readFileSync(join(compileDir(pid), 'result.json'), 'utf8'));
 	} catch {
 		return null;
 	}
 }
 
-// Coalescing (research R6): one compile runs, at most one is queued behind it; later callers join the queued one.
-let running: Promise<CompileResult> | undefined;
-let queued: Promise<CompileResult> | undefined;
-let queuedOpts = { stopOnFirstError: false }; // the latest joiner's
+type Opts = { stopOnFirstError: boolean };
+// Coalescing per project (research R6): one compile runs, at most one is queued behind it; later callers join the
+// queued one with their options.
+// ponytail: compiles are unbounded across projects (one container per compiling project); feature 011 adds a cap
+const coalesce = new Map<string, { running?: Promise<CompileResult>; queued?: Promise<CompileResult>; queuedOpts: Opts }>();
 
-export function compileProject(opts: { stopOnFirstError: boolean }): Promise<CompileResult> {
-	const start = (o: typeof opts) => (running = compileOnce(o).finally(() => (running = undefined)));
-	if (!running) return start(opts);
-	queuedOpts = opts;
+export function compileProject(pid: string, opts: Opts): Promise<CompileResult> {
+	let state = coalesce.get(pid);
+	if (!state) coalesce.set(pid, (state = { queuedOpts: opts }));
+	const s = state;
+	const start = (o: Opts) =>
+		(s.running = compileOnce(pid, o).finally(() => {
+			s.running = undefined;
+			if (!s.queued) coalesce.delete(pid);
+		}));
+	if (!s.running) return start(opts);
+	s.queuedOpts = opts;
 	const next = () => {
-		queued = undefined;
-		return start(queuedOpts);
+		s.queued = undefined;
+		return start(s.queuedOpts);
 	};
-	return (queued ??= running.then(next, next));
+	return (s.queued ??= s.running.then(next, next));
 }
 
-async function compileOnce({ stopOnFirstError }: { stopOnFirstError: boolean }): Promise<CompileResult> {
+async function compileOnce(pid: string, { stopOnFirstError }: Opts): Promise<CompileResult> {
 	const id = randomUUID();
 	const startedAt = Date.now();
-	const compiler = getCompiler();
-	const { files, mainPath, paths } = await collectProject();
+	const compiler = getCompiler(pid);
+	const { files, mainPath, paths } = await collectProject(pid);
 	const r: RunResult = mainPath ? await runCompile({ files, mainPath, compiler, stopOnFirstError }) : { status: 'failure', message: NO_MAIN };
 
-	const dir = compileDir();
+	const dir = compileDir(pid);
 	mkdirSync(dir, { recursive: true });
 	// temp file + rename: a reader never sees a half-written file
 	const write = (name: string, data: string | Buffer) => {
 		writeFileSync(join(dir, `${name}.tmp`), data);
 		renameSync(join(dir, `${name}.tmp`), join(dir, name));
 	};
-	const previous = getLastResult();
+	const previous = getLastResult(pid);
 	if (r.pdf) {
 		write('output.pdf', r.pdf);
 		if (r.synctex) write('output.synctex.gz', r.synctex);

@@ -4,10 +4,8 @@
 	import PdfViewer from './PdfViewer.svelte';
 
 	// Preview of a binary file per contracts/ui.md and research R14.
-	let { file }: { file: FileEntry } = $props();
-
-	// updatedAt busts the cache: a replaced upload keeps the id (T034)
-	const url = $derived(`/api/files/${file.id}/raw?v=${file.updatedAt}`);
+	// url: the file's raw route; it carries updatedAt so a replaced upload (same id, T034) isn't served from cache
+	let { file, url }: { file: FileEntry; url: string } = $props();
 	const type = $derived(fileType(file));
 
 	let viewer = $state<ReturnType<typeof PdfViewer>>();

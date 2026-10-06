@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { openEditor, resetDoc } from './helpers.ts';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { openEditor, projectPath, resetDoc, test } from './helpers.ts';
 
 const pane = (page: Page, id: string) => page.locator(`[data-pane-id="${id}"]`);
 const width = async (l: Locator) => (await l.boundingBox())!.width;
@@ -23,7 +23,7 @@ async function drag(page: Page, handle: Locator, dx: number, dy: number) {
 
 // every test starts from the default layout
 test.beforeEach(async ({ page }) => {
-	await page.goto('/');
+	await page.goto(projectPath());
 	await page.evaluate(() => localStorage.clear());
 	await openEditor(page);
 });

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
-import { clearCompileOutput, openEditor, resetDoc, setDoc } from './helpers.ts';
+import { expect, type Page } from '@playwright/test';
+import { clearCompileOutput, openEditor, resetDoc, setDoc, test } from './helpers.ts';
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/latex/${name}`, import.meta.url), 'utf8');
 const THREE = fixture('three-pages.tex');
@@ -27,7 +27,7 @@ async function compileDoc(page: Page, content: string, marker: string, pages: nu
 	await setDoc(page, content);
 	// pdf.js replaces the page elements on a new document: tag the old ones to wait for the new
 	await page.evaluate(() => document.querySelectorAll('.page').forEach((p) => p.setAttribute('data-old', '')));
-	await Promise.all([page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/api/compile')), page.getByRole('button', { name: 'Recompile' }).click()]);
+	await Promise.all([page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/compile')), page.getByRole('button', { name: 'Recompile' }).click()]);
 	await expect(viewer(page)).toContainText(marker, { timeout: 10_000 });
 	await expect(page.getByText(`/ ${pages}`, { exact: true })).toBeVisible();
 	await expect(viewer(page).locator('.page:not([data-old]) canvas').first()).toBeVisible({ timeout: 10_000 });

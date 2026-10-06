@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
-import { clearCompileOutput, openEditor, resetDoc, SEED, setDoc } from './helpers.ts';
+import { expect, type Page } from '@playwright/test';
+import { clearCompileOutput, openEditor, resetDoc, SEED, setDoc, test } from './helpers.ts';
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/latex/${name}`, import.meta.url), 'utf8');
 const recompile = (page: Page) => page.getByRole('button', { name: 'Recompile' });
@@ -75,7 +75,7 @@ test('a failed compile request shows in the banner and keeps the PDF (F7)', asyn
 	await recompile(page).click();
 	await expect(firstPage(page).locator('canvas')).toBeVisible({ timeout: 10_000 });
 
-	await page.route('**/api/compile', (route) =>
+	await page.route('**/api/projects/*/compile', (route) =>
 		route.request().method() === 'POST' ? route.fulfill({ status: 500 }) : route.continue()
 	);
 	await recompile(page).click();

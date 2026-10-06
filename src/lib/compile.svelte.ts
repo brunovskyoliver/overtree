@@ -14,12 +14,13 @@ export class CompileState {
 	compiler = $state<Compiler>('pdflatex');
 	autoCompile = $state(false);
 	stopOnFirstError = $state(false);
-	pdfUrl = $derived(this.last?.pdfId ? `/api/compile/output.pdf?id=${this.last.pdfId}` : undefined);
+	readonly #base: string;
 	#pending = false;
 	#provider: () => HocuspocusProvider | undefined;
 	#timer: ReturnType<typeof setTimeout> | undefined;
 
-	constructor(provider: () => HocuspocusProvider | undefined) {
+	constructor(projectId: string, provider: () => HocuspocusProvider | undefined) {
+		this.#base = `/api/projects/${projectId}/compile`;
 		this.#provider = provider;
 		try {
 			const saved: Partial<Options> = JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? '{}');
@@ -28,6 +29,14 @@ export class CompileState {
 		} catch {
 			// unreadable storage: defaults
 		}
+	}
+
+	get pdfUrl() {
+		return this.last?.pdfId ? `${this.#base}/output.pdf?id=${this.last.pdfId}` : undefined;
+	}
+
+	get logUrl() {
+		return `${this.#base}/output.log`;
 	}
 
 	setOption(name: keyof Options, value: boolean) {
@@ -39,7 +48,7 @@ export class CompileState {
 	async setCompiler(compiler: Compiler) {
 		const previous = this.compiler;
 		this.compiler = compiler;
-		const res = await fetch('/api/compile/settings', {
+		const res = await fetch(`${this.#base}/settings`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ compiler })
@@ -54,7 +63,7 @@ export class CompileState {
 	}
 
 	async load() {
-		const res = await fetch('/api/compile');
+		const res = await fetch(this.#base);
 		if (!res.ok) return;
 		({ compiler: this.compiler, last: this.last } = await res.json());
 	}
@@ -74,7 +83,7 @@ export class CompileState {
 				const until = Date.now() + 5000;
 				while (this.#provider()?.hasUnsyncedChanges && Date.now() < until) await new Promise((r) => setTimeout(r, 20));
 				try {
-					const res = await fetch('/api/compile', {
+					const res = await fetch(this.#base, {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ stopOnFirstError: this.stopOnFirstError })

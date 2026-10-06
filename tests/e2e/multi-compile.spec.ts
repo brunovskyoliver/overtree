@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
 import { readTree } from '../fixtures/projects/zips.ts';
-import { openEditor, resetProject } from './helpers.ts';
+import { api, openEditor, projectPath, resetProject, test } from './helpers.ts';
 
 // US3: compile a multi-file project (contracts/files-api.md, research R8)
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/');
+	await page.goto(projectPath());
 	await page.evaluate(() => localStorage.clear());
 	await openEditor(page);
 	await loadMulti(page);
@@ -25,11 +25,11 @@ const row = (page: Page, name: string) => tree(page).getByRole('treeitem', { nam
 const tab = (page: Page, name: string) => page.getByRole('tablist', { name: 'Open files' }).getByRole('tab', { name, exact: true });
 const recompile = (page: Page) => page.getByRole('button', { name: 'Recompile' });
 const viewer = (page: Page) => page.getByTestId('pdf-viewer');
-const files = async (page: Page): Promise<FileEntry[]> => (await (await page.request.get('/api/files')).json()).files;
+const files = async (page: Page): Promise<FileEntry[]> => (await (await page.request.get(`${api()}/files`)).json()).files;
 
 /** Upload one file (multipart, T032); `replace` overwrites the seeded main.tex. Origin like a browser form post. */
 async function upload(page: Page, path: string, bytes: Buffer, parentId: string | null) {
-	const res = await page.request.post('/api/files', {
+	const res = await page.request.post(`${api()}/files`, {
 		headers: { origin: new URL(page.url()).origin },
 		multipart: { file: { name: path.split('/').at(-1)!, mimeType: 'application/octet-stream', buffer: bytes }, parentId: parentId ?? '', replace: '1' }
 	});
@@ -43,7 +43,7 @@ async function loadMulti(page: Page) {
 	for (const [path, bytes] of Object.entries(readTree(fileURLToPath(new URL('../fixtures/projects/multi', import.meta.url))))) {
 		const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
 		if (dir && !folders.has(dir)) {
-			const res = await page.request.post('/api/files', { data: { kind: 'folder', name: dir, parentId: null } });
+			const res = await page.request.post(`${api()}/files`, { data: { kind: 'folder', name: dir, parentId: null } });
 			expect(res.status()).toBe(201);
 			folders.set(dir, (await res.json()).id);
 		}
@@ -53,7 +53,7 @@ async function loadMulti(page: Page) {
 
 async function compile(page: Page) {
 	const [res] = await Promise.all([
-		page.waitForResponse((r) => r.url().endsWith('/api/compile') && r.request().method() === 'POST', { timeout: 15_000 }),
+		page.waitForResponse((r) => r.url().endsWith('/compile') && r.request().method() === 'POST', { timeout: 15_000 }),
 		recompile(page).click()
 	]);
 	await expect(recompile(page)).toBeEnabled({ timeout: 10_000 });
@@ -74,7 +74,7 @@ test('the PDF has the input chapter, the image and the bibliography (US3-1, US3-
 	const last = viewer(page).locator('.page').last();
 	await last.scrollIntoViewIfNeeded();
 	await expect(last).toContainText('The TeXbook', { timeout: 10_000 });
-	const log = await (await page.request.get('/api/compile/output.log')).text();
+	const log = await (await page.request.get(`${api()}/compile/output.log`)).text();
 	expect(log.match(/<figures\/dot\.png/g)).toHaveLength(1);
 });
 
@@ -107,7 +107,7 @@ test('another .tex becomes main from the menu, survives a reload and is compiled
 
 test('without a main document the compile says how to set one (US3-5)', async ({ page }) => {
 	const main = (await files(page)).find((f) => f.name === 'main.tex' && f.parentId === null)!;
-	const res = await page.request.delete(`/api/files/${main.id}`, { headers: { origin: new URL(page.url()).origin } });
+	const res = await page.request.delete(`${api()}/files/${main.id}`, { headers: { origin: new URL(page.url()).origin } });
 	expect(res.status()).toBe(204);
 	await page.reload();
 	expect((await compile(page)).status).toBe('failure');

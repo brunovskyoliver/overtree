@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
-import { openEditor, resetProject, SEED, text } from './helpers.ts';
+import { api, openEditor, projectPath, resetProject, SEED, test, text } from './helpers.ts';
 
 // US1: organize project files in the tree (contracts/ui.md, File tree)
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/');
+	await page.goto(projectPath());
 	await page.evaluate(() => localStorage.clear());
 	await openEditor(page);
 });
@@ -22,12 +22,12 @@ const MAIN = 'main.tex, main document';
 
 /** Create through the API and reload, for specs where creating isn't what's tested. */
 async function create(page: Page, kind: 'folder' | 'text', name: string, parentId: string | null = null): Promise<FileEntry> {
-	const res = await page.request.post('/api/files', { data: { kind, name, parentId } });
+	const res = await page.request.post(`${api()}/files`, { data: { kind, name, parentId } });
 	expect(res.status()).toBe(201);
 	return res.json();
 }
 
-const files = async (page: Page): Promise<FileEntry[]> => (await (await page.request.get('/api/files')).json()).files;
+const files = async (page: Page): Promise<FileEntry[]> => (await (await page.request.get(`${api()}/files`)).json()).files;
 
 /** aria-labels of the items directly under `parent` (the tree root by default), in display order. */
 const names = (page: Page, parent = tree(page)) =>

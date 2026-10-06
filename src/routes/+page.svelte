@@ -1,87 +1,57 @@
 <script lang="ts">
-	import { EditorView } from '@codemirror/view';
-	import { tick } from 'svelte';
-	import Editor from '#lib/components/Editor.svelte';
-	import Outline from '#lib/components/Outline.svelte';
-	import Workspace from '#lib/components/Workspace.svelte';
-	import { CompileState } from '#lib/compile.svelte.ts';
-	import type { EditorHandle } from '#lib/editor/types.ts';
-	import { Project } from '#lib/project.svelte.ts';
-	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
+	import { goto } from '$app/navigation';
 
-	// ponytail: one project, feature 005 adds a projects table
-	const PROJECT_NAME = 'Untitled project';
+	// ponytail: temporary until the dashboard (US2, T030): open the most recent project, or offer a blank one
+	let empty = $state(false);
+	let error = $state('');
 
-	const project = new Project();
-	project.load();
-	const outlined = $derived(!!project.files.find((f) => f.id === project.active)?.name.toLowerCase().endsWith('.tex'));
-
-	let editor = $state<EditorHandle>();
-	const compile = new CompileState(() => editor?.provider);
-	compile.load();
-
-	/** A log entry: open its file in a tab and put the cursor on the line (past the end: the last line). */
-	async function openAt(fileId: string, line: number) {
-		project.openFile(fileId);
-		await tick(); // the editor switches to the tab
-		const h = editor;
-		if (h?.fileId !== fileId) return;
-		// a newly opened tab is empty until its first sync
-		if (!h.provider.isSynced)
-			await new Promise<void>((resolve) => {
-				const done = () => (h.provider.off('synced', done), resolve());
-				h.provider.on('synced', done);
-			});
-		if (editor !== h) return; // switched away meanwhile
-		const { view } = h;
-		const at = view.state.doc.line(Math.min(line, view.state.doc.lines));
-		view.dispatch({ selection: { anchor: at.from }, effects: EditorView.scrollIntoView(at.from, { y: 'center' }) });
-		view.focus();
+	async function start() {
+		const res = await fetch('/api/projects');
+		if (!res.ok) return void (error = `Could not load your projects (${res.status}).`);
+		const { projects }: { projects: { id: string }[] } = await res.json();
+		if (projects.length) goto(`/project/${projects[0].id}`, { replaceState: true });
+		else empty = true;
 	}
 
-	$effect(() => {
-		if (editor && window.__overtree && (import.meta.env.DEV || PUBLIC_TEST_HOOKS)) window.__overtree.compile = compile;
-	});
+	async function create() {
+		const res = await fetch('/api/projects', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ title: 'Untitled project' })
+		});
+		if (!res.ok) return void (error = `Could not create a project (${res.status}).`);
+		goto(`/project/${(await res.json()).id}`);
+	}
+
+	start();
 </script>
 
-<div class="app">
-	<header class="topbar">
-		<span class="brand">Overtree</span>
-		<span class="project">{PROJECT_NAME}</span>
-	</header>
-	<main>
-		<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
-			<Editor {project} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
-			{#snippet outline()}
-				<Outline {editor} enabled={outlined} />
-			{/snippet}
-		</Workspace>
-	</main>
-</div>
+<main>
+	{#if error}<p role="alert">{error}</p>{/if}
+	{#if empty}
+		<h1>No projects yet</h1>
+		<button type="button" onclick={create}>New project</button>
+	{/if}
+</main>
 
 <style>
-	.app {
-		display: flex;
-		flex-direction: column;
-		height: 100vh;
-	}
-	.topbar {
+	main {
 		display: grid;
-		grid-template-columns: 1fr auto 1fr;
-		align-items: center;
-		height: 44px;
-		padding: 0 14px;
-		background: var(--bg);
-		border-bottom: 1px solid var(--border);
+		place-content: center;
+		gap: 12px;
+		height: 100vh;
+		text-align: center;
 	}
-	.brand {
-		font-weight: 600;
-	}
-	.project {
+	h1 {
+		font-size: 18px;
 		font-weight: 500;
 	}
-	main {
-		flex: 1;
-		min-height: 0;
+	button {
+		padding: 6px 14px;
+		color: var(--text);
+		background: var(--accent);
+		border: 0;
+		border-radius: 4px;
+		font: inherit;
 	}
 </style>

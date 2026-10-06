@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { openEditor, resetDoc } from './helpers.ts';
+import { expect, type Page } from '@playwright/test';
+import { openEditor, resetDoc, test } from './helpers.ts';
 
 let a: Page;
 let b: Page;

@@ -64,7 +64,7 @@
 	<div class="body">
 		{#if logsOpen}
 			{#key compile.last?.id}
-				<LogsPanel entries={compile.last?.entries ?? []} {onopenat} onclose={() => (logsOpen = false)} />
+				<LogsPanel entries={compile.last?.entries ?? []} logUrl={compile.logUrl} {onopenat} onclose={() => (logsOpen = false)} />
 			{/key}
 		{/if}
 		<!-- stays mounted (and laid out, so pdf.js can measure) under the logs: closing them shows the PDF at once -->

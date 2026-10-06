@@ -9,11 +9,16 @@ const unique = <T>(items: T[], key: (t: T) => string) => [...new Map(items.map((
 // Project symbols for completion (research R13): the server scans every file; open tabs are scanned here
 // from their live text and replace that file's server entries (the next fetch leaves them out).
 export class Symbols {
+	readonly #url: string;
 	#server: ProjectSymbols = EMPTY;
 	#live = new Map<string, FileSymbols>();
 	#fetchTimer: ReturnType<typeof setTimeout> | undefined;
 	#scanTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	#fetchedAt = 0;
+
+	constructor(projectId: string) {
+		this.#url = `/api/projects/${projectId}/symbols`;
+	}
 
 	/** Refetch from the server, debounced 500 ms (on load, after tree operations and on tab switch). */
 	refresh() {
@@ -21,7 +26,7 @@ export class Symbols {
 		this.#fetchTimer = setTimeout(async () => {
 			this.#fetchedAt = Date.now();
 			const exclude = [...this.#live.keys()].join(',');
-			const res = await fetch(`/api/project/symbols?exclude=${encodeURIComponent(exclude)}`).catch(() => undefined);
+			const res = await fetch(`${this.#url}?exclude=${encodeURIComponent(exclude)}`).catch(() => undefined);
 			if (res?.ok) this.#server = await res.json();
 		}, 500);
 	}

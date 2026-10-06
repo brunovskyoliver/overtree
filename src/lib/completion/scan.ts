@@ -4,7 +4,7 @@ import { stripComment } from '../outline.ts';
 export type ProjectCommand = { name: string; args: number };
 export type BibKey = { key: string; title?: string; author?: string };
 export type TexSymbols = { labels: string[]; commands: ProjectCommand[]; environments: string[] };
-/** `GET /api/project/symbols` (data-model.md `Symbols`). */
+/** `GET /api/projects/:pid/symbols` (data-model.md `Symbols`). */
 export type ProjectSymbols = TexSymbols & { bibKeys: BibKey[]; files: { path: string; kind: 'text' | 'binary' }[] };
 
 const LABEL = /\\label\{([^}]+)\}/g;

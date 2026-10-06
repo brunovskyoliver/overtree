@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
-import { openEditor, resetDoc, SEED, setDoc } from './helpers.ts';
+import { expect, type Page } from '@playwright/test';
+import { api, openEditor, resetDoc, SEED, setDoc, test } from './helpers.ts';
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/latex/${name}`, import.meta.url), 'utf8');
 const recompile = (page: Page) => page.getByRole('button', { name: 'Recompile' });
@@ -9,7 +9,7 @@ const menu = (page: Page) => page.getByRole('menu', { name: 'Compile options' })
 const item = (page: Page, name: string) => menu(page).getByRole(/LaTeX$/.test(name) ? 'menuitemradio' : 'menuitemcheckbox', { name });
 const firstPage = (page: Page) => page.getByTestId('pdf-viewer').locator('.page').first();
 const last = (page: Page) => page.evaluate(() => window.__overtree!.compile!.last);
-const isCompilePost = (r: { method(): string; url(): string }) => r.method() === 'POST' && r.url().endsWith('/api/compile');
+const isCompilePost = (r: { method(): string; url(): string }) => r.method() === 'POST' && r.url().endsWith('/compile');
 
 /** Timestamps (test clock) of every compile POST from now on. */
 function trackPosts(page: Page) {
@@ -21,7 +21,7 @@ function trackPosts(page: Page) {
 /** Open the menu, click an item, wait for the compiler PUT if it is one, close with Escape. */
 async function choose(page: Page, name: string) {
 	await toggle(page).click();
-	const put = /LaTeX$/.test(name) && page.waitForResponse((r) => r.url().endsWith('/api/compile/settings'));
+	const put = /LaTeX$/.test(name) && page.waitForResponse((r) => r.url().endsWith(`${api()}/compile/settings`));
 	await item(page, name).click();
 	if (put) expect((await put).status()).toBe(204);
 	await page.keyboard.press('Escape');
@@ -42,7 +42,7 @@ test.afterEach(async ({ page }) => {
 		window.__overtree?.compile?.setOption('autoCompile', false);
 		localStorage.clear();
 	});
-	expect((await page.request.put('/api/compile/settings', { data: { compiler: 'pdflatex' } })).status()).toBe(204);
+	expect((await page.request.put(`${api()}/compile/settings`, { data: { compiler: 'pdflatex' } })).status()).toBe(204);
 	await expect(recompile(page)).toBeEnabled({ timeout: 15_000 });
 	await resetDoc(page);
 });
@@ -143,7 +143,7 @@ test('stop on first error halts at the first error (US3-6)', async ({ page }) =>
 	const errors = (await last(page))!.entries.filter((e) => e.level === 'error');
 	expect(errors).toHaveLength(1);
 	expect(errors[0]).toMatchObject({ line: 12, message: 'Undefined control sequence.' });
-	expect(await (await page.request.get('/api/compile/output.log')).text()).toMatch(/==> Fatal error occurred|Emergency stop/);
+	expect(await (await page.request.get(`${api()}/compile/output.log`)).text()).toMatch(/==> Fatal error occurred|Emergency stop/);
 });
 
 test('options survive a reload; the compiler is shared with another browser (US3-7)', async ({ page, browser }) => {
@@ -219,7 +219,7 @@ test('the options menu works from the keyboard', async ({ page }) => {
 
 test('a failed compiler change reverts the choice (F7)', async ({ page }) => {
 	await openEditor(page);
-	await page.route('**/api/compile/settings', (route) => route.fulfill({ status: 500 }));
+	await page.route('**/api/projects/*/compile/settings', (route) => route.fulfill({ status: 500 }));
 	await toggle(page).click();
 	await item(page, 'XeLaTeX').click();
 	await expect(item(page, 'pdfLaTeX')).toHaveAttribute('aria-checked', 'true');

@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { openEditor, resetDoc, SEED, setDoc } from './helpers.ts';
+import { expect, type Page } from '@playwright/test';
+import { openEditor, resetDoc, SEED, setDoc, test } from './helpers.ts';
 
 const recompile = (page: Page) => page.getByRole('button', { name: 'Recompile' });
 const logsButton = (page: Page) => page.getByRole('button', { name: 'Logs', exact: true });
@@ -20,7 +20,7 @@ const UNDEFINED_12 = SEED.replace('\\section{Introduction}', '\\foo\n\\section{I
 async function compileDoc(page: Page, content: string) {
 	await setDoc(page, content);
 	await Promise.all([
-		page.waitForResponse((r) => r.url().endsWith('/api/compile') && r.request().method() === 'POST', { timeout: 15_000 }),
+		page.waitForResponse((r) => r.url().endsWith('/compile') && r.request().method() === 'POST', { timeout: 15_000 }),
 		recompile(page).click()
 	]);
 	await expect(recompile(page)).toBeEnabled({ timeout: 10_000 });

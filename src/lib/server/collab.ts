@@ -3,8 +3,10 @@ import { Hocuspocus } from '@hocuspocus/server';
 import { asc, eq, lte, and, max } from 'drizzle-orm';
 import { WebSocketServer } from 'ws';
 import * as Y from 'yjs';
+import { canEdit, fileRole, projectRole, type ConnectionContext } from './access.ts';
+import { authenticateToken } from './auth.ts';
 import { openDb } from './db.ts';
-import { ensureProject } from './files.ts';
+import { touchProject } from './projects.ts';
 import { documents, files, updates } from './schema.ts';
 
 export const SEED = `\\documentclass{article}
@@ -23,27 +25,58 @@ export const SEED = `\\documentclass{article}
 \\end{document}
 `;
 
+const PRESENCE = 'project:';
+
+/** Refusal for onAuthenticate: the provider gets `authenticationFailed` with this reason (contracts/http-api.md). */
+const forbidden = () => Object.assign(new Error('forbidden'), { reason: 'forbidden' });
+
 // Hocuspocus 4 has no built-in server here: we own the ws upgrade on /collab
 // and forward messages/close events to the ClientConnection ourselves.
 export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_DIR ?? './data') {
 	const db = openDb(dataDir);
-	// Document names are text file ids. A deleted file's doc may still get a late (debounced) change or
-	// store: skip it so the row doesn't come back (research R4).
-	const isTextFile = (id: string) =>
-		!!db.select({ id: files.id }).from(files).where(and(eq(files.id, id), eq(files.kind, 'text'))).get();
+	// Document names are text file ids, plus `project:<id>` for presence and server events (research R8, never
+	// persisted). A deleted file's doc may still get a late (debounced) change or store: skip it so the row doesn't
+	// come back (research R4).
+	const textFile = (id: string) =>
+		db.select({ projectId: files.projectId }).from(files).where(and(eq(files.id, id), eq(files.kind, 'text'))).get();
+	const isPresence = (name: string) => name.startsWith(PRESENCE);
 
-	const hocuspocus = new Hocuspocus({
+	// updatedAt from typing, at most every 10 s per project (research R14)
+	// ponytail: an in-memory map; a restart may write once more, which is harmless
+	const touched = new Map<string, number>();
+	const touchThrottled = (pid: string) => {
+		const now = Date.now();
+		if (now - (touched.get(pid) ?? 0) < 10_000) return;
+		touched.set(pid, now);
+		touchProject(pid);
+	};
+
+	const hocuspocus = new Hocuspocus<ConnectionContext>({
 		debounce: 500,
 		maxDebounce: 2000,
 		quiet: true,
 
-		async onConnect({ documentName }) {
-			// ponytail: one project, no auth; feature 005 adds real projects/auth
-			if (!isTextFile(documentName)) throw new Error(`unknown document ${documentName}`);
+		// Every document on the socket is checked (research R3, R7): a valid token of an enabled user with access.
+		// Readers and every presence doc are read-only: Hocuspocus drops their document updates, awareness still flows.
+		async onAuthenticate({ token, documentName, connectionConfig }): Promise<ConnectionContext> {
+			const user = await authenticateToken(token);
+			if (!user || user.disabled) throw forbidden();
+			if (isPresence(documentName)) {
+				const projectId = documentName.slice(PRESENCE.length);
+				if (!projectRole(projectId, user.id)) throw forbidden();
+				connectionConfig.readOnly = true;
+				return { userId: user.id, projectId };
+			}
+			const file = textFile(documentName);
+			const role = file && fileRole(file.projectId, user.id, documentName);
+			if (!file || !role) throw forbidden();
+			connectionConfig.readOnly = !canEdit(role);
+			return { userId: user.id, projectId: file.projectId };
 		},
 
 		// Runs before Hocuspocus attaches its own update listener, so nothing here reaches onChange.
 		async onLoadDocument({ document, documentName }) {
+			if (isPresence(documentName)) return;
 			const snapshot = db.select().from(documents).where(eq(documents.name, documentName)).get();
 			const rows = db
 				.select({ update: updates.update })
@@ -53,17 +86,20 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 				.all();
 			if (snapshot) Y.applyUpdate(document, snapshot.state);
 			for (const row of rows) Y.applyUpdate(document, row.update);
-			// no seeding here: ensureProject() stores the starter text of a new project
+			// no seeding here: createProject() stores the starter text of a new project
 		},
 
 		// better-sqlite3 is synchronous: the update is on disk before the next message is handled.
 		async onChange({ documentName, update }) {
-			if (isTextFile(documentName)) appendUpdate(documentName, update);
+			const file = !isPresence(documentName) && textFile(documentName);
+			if (!file) return;
+			appendUpdate(documentName, update);
+			touchThrottled(file.projectId);
 		},
 
 		// Debounced snapshot + log compaction, one transaction.
 		async onStoreDocument({ document, documentName }) {
-			if (!isTextFile(documentName)) return;
+			if (isPresence(documentName) || !textFile(documentName)) return;
 			db.transaction((tx) => {
 				const last = tx
 					.select({ id: max(updates.id) })
@@ -102,7 +138,6 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 
 	// SvelteKit routes are bundled apart from server.ts/the Vite plugin, so they reach this instance via globalThis.
 	globalThis.__overtreeServer = { hocuspocus, db, dataDir };
-	ensureProject();
 
 	return { hocuspocus, wss, db };
 }

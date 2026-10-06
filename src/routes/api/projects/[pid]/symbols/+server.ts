@@ -1,14 +1,17 @@
 import { json } from '@sveltejs/kit';
 import { scanBib, scanTex, type ProjectSymbols } from '#lib/completion/scan.ts';
 import { pathOf } from '#lib/files.ts';
+import { requireProject } from '#lib/server/access.ts';
+import { api } from '#lib/server/api.ts';
 import { getText, listFiles } from '#lib/server/files.ts';
 import type { RequestHandler } from './$types';
 
 // Symbols of every text file (research R13). `exclude` lists files the browser scans itself (its open tabs).
 // ponytail: reads and scans every text file per request; cache per file version if projects get large
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ locals, params, url }) => {
+	api(() => requireProject(locals, params.pid, 'read'));
 	const exclude = new Set(url.searchParams.get('exclude')?.split(','));
-	const all = listFiles();
+	const all = listFiles(params.pid);
 	const out: ProjectSymbols = { labels: [], commands: [], environments: [], bibKeys: [], files: [] };
 	for (const f of all) {
 		if (f.kind === 'folder') continue;

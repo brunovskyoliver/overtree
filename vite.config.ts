@@ -30,6 +30,8 @@ export default defineConfig({
 		}
 	],
 	test: {
-		include: ['tests/unit/**/*.test.ts']
+		include: ['tests/unit/**/*.test.ts'],
+		// unit tests sign in through the test bypass (research R4)
+		env: { OVERTREE_TEST_AUTH: '1' }
 	}
 });

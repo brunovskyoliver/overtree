@@ -301,7 +301,7 @@ describe('argument completion (US6)', () => {
 		const fetch = vi.fn();
 		vi.stubGlobal('fetch', fetch);
 		try {
-			const symbols = new Symbols();
+			const symbols = new Symbols('p1');
 			symbols.scan('a', false, EditorState.create({ doc: '\\section{A}\\label{sec:new}' }));
 			symbols.scan('b', true, EditorState.create({ doc: '@book{newkey, title={New}}' }));
 			vi.advanceTimersByTime(300);
@@ -325,7 +325,7 @@ describe('argument completion (US6)', () => {
 		}));
 		vi.stubGlobal('fetch', fetch);
 		try {
-			const symbols = new Symbols();
+			const symbols = new Symbols('p1');
 			symbols.refresh();
 			await vi.advanceTimersByTimeAsync(500);
 			expect(symbols.labels).toEqual(['sec:old']);
