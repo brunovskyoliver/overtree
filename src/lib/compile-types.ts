@@ -12,7 +12,8 @@ export type CompileStatus =
 export type LogEntry = {
 	level: 'error' | 'warning' | 'typesetting';
 	message: string;
-	file?: string; // as in the log, './' stripped, e.g. 'main.tex'
+	file?: string; // project path for project files (e.g. 'chapters/intro.tex'), else as in the log, './' stripped
+	fileId?: string; // set when `file` is a text file of the project
 	line?: number;
 	raw: string; // the source log line(s)
 };

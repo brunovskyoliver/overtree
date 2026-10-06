@@ -7,7 +7,11 @@ import type { Db } from '#lib/server/db.ts';
 
 declare global {
 	namespace App {
-		// interface Error {}
+		interface Error {
+			message: string;
+			/** 409 on upload: the file with the same name (contracts/files-api.md) */
+			existingId?: string;
+		}
 		// interface Locals {}
 		// interface PageData {}
 		// interface PageState {}

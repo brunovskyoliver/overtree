@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { api } from '#lib/server/api.ts';
+import { api, attrChars } from '#lib/server/api.ts';
 import { getFile, getText, readBlob } from '#lib/server/files.ts';
 import type { RequestHandler } from './$types';
 
@@ -12,9 +12,6 @@ const MEDIA: Record<string, string> = {
 	webp: 'image/webp',
 	pdf: 'application/pdf'
 };
-
-// RFC 5987: encodeURIComponent leaves ' ( ) * as they are
-const attrChars = (s: string) => encodeURIComponent(s).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 
 // research R14: nosniff always, SVG sandboxed so scripts inside can't run
 export const GET: RequestHandler = async ({ params, url }) => {

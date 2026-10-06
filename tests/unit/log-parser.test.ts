@@ -13,7 +13,8 @@ describe('parseLog on real logs', { timeout: 120_000 }, () => {
 	beforeAll(async () => {
 		await Promise.all(
 			fixtures.map(async (f) => {
-				const r = await runCompile({ source: readFileSync(new URL(f, dir), 'utf8'), compiler: 'pdflatex', stopOnFirstError: false });
+				const files = [{ path: 'main.tex', data: readFileSync(new URL(f, dir)) }];
+				const r = await runCompile({ files, mainPath: 'main.tex', compiler: 'pdflatex', stopOnFirstError: false });
 				logs.set(f, r.log ?? '');
 			})
 		);

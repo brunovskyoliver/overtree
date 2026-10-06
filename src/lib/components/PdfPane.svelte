@@ -1,12 +1,15 @@
 <script lang="ts">
 	import type { CompileState } from '#lib/compile.svelte.ts';
-	import type { EditorHandle } from '#lib/editor/types.ts';
 	import LogsPanel from './LogsPanel.svelte';
 	import PdfToolbar from './PdfToolbar.svelte';
 	import PdfViewer from './PdfViewer.svelte';
 	import RecompileButton from './RecompileButton.svelte';
 
-	let { compile, editor, inert = false }: { compile: CompileState; editor?: EditorHandle; inert?: boolean } = $props();
+	let {
+		compile,
+		onopenat,
+		inert = false
+	}: { compile: CompileState; onopenat?: (fileId: string, line: number) => void; inert?: boolean } = $props();
 
 	const PDF_KEY = 'overtree:pdf';
 
@@ -43,7 +46,7 @@
 		<a
 			class="download"
 			href={compile.pdfUrl && `${compile.pdfUrl}&download=1`}
-			download="main.pdf"
+			download
 			aria-label="Download PDF"
 			aria-disabled={!compile.pdfUrl}
 		>
@@ -61,7 +64,7 @@
 	<div class="body">
 		{#if logsOpen}
 			{#key compile.last?.id}
-				<LogsPanel entries={compile.last?.entries ?? []} {editor} onclose={() => (logsOpen = false)} />
+				<LogsPanel entries={compile.last?.entries ?? []} {onopenat} onclose={() => (logsOpen = false)} />
 			{/key}
 		{/if}
 		<!-- stays mounted (and laid out, so pdf.js can measure) under the logs: closing them shows the PDF at once -->

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import { and, count, eq, inArray, isNull, ne } from 'drizzle-orm';
 import * as Y from 'yjs';
-import { kindForName, limits, validateName, type FileEntry } from '../files.ts';
+import { kindForName, limits, validateName, type FileEntry, type FileKind } from '../files.ts';
 import { getServer, SEED } from './collab.ts';
 import type { Db } from './db.ts';
 import { documents, files, project, updates } from './schema.ts';
@@ -14,9 +14,11 @@ import { documents, files, project, updates } from './schema.ts';
  *  from the prod image, which has no devDependencies; routes convert it with `api()` from ./api.ts. */
 export class FileError extends Error {
 	status: number;
-	constructor(status: number, message: string) {
+	existingId?: string; // upload name clash: the file that would be replaced
+	constructor(status: number, message: string, existingId?: string) {
 		super(message);
 		this.status = status;
+		this.existingId = existingId;
 	}
 }
 
@@ -131,6 +133,56 @@ export function deleteEntry(id: string) {
 	});
 	// open editors get kicked; onConnect refuses the reconnect and onStoreDocument skips the late store
 	for (const t of textIds) getServer().hocuspocus.closeConnections(t);
+}
+
+/** Upload one file (research R6): text when the extension is a text one and the bytes are UTF-8, else a blob.
+ *  A name clash is a 409 with `existingId` unless `replace`; replacing keeps the id and refuses a kind change. */
+export async function uploadFile(
+	parentId: string | null,
+	name: string,
+	bytes: Uint8Array,
+	replace: boolean
+): Promise<{ entry: FileEntry; replaced: boolean }> {
+	if (bytes.length > limits.uploadMaxFileMb * 1024 * 1024) fail(413, `A file can be at most ${limits.uploadMaxFileMb} MB.`);
+	let text: string | null = null;
+	if (kindForName(name) === 'text') {
+		try {
+			text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		} catch {
+			// not UTF-8: stored as binary
+		}
+	}
+	const kind: FileKind = text === null ? 'binary' : 'text';
+	// before the transaction (file I/O); a refused upload leaves an unreferenced blob, like any old blob (R1)
+	const hash = kind === 'binary' ? putBlob(bytes) : null;
+	const size = kind === 'binary' ? bytes.length : null;
+	const result = db().transaction((tx) => {
+		checkParent(tx, parentId);
+		const bad = validateName(name, []);
+		if (bad) fail(400, bad);
+		const lower = name.toLowerCase();
+		const siblings = tx
+			.select()
+			.from(files)
+			.where(parentId === null ? isNull(files.parentId) : eq(files.parentId, parentId))
+			.all();
+		const existing = siblings.find((f) => f.name.toLowerCase() === lower);
+		const now = Date.now();
+		if (existing) {
+			if (!replace) throw new FileError(409, `"${name}" already exists here.`, existing.id);
+			if (existing.kind !== kind) fail(409, 'Replacing can’t turn a text file into a binary file or back.');
+			const row = { ...existing, hash, size, updatedAt: now };
+			tx.update(files).set({ hash, size, updatedAt: now }).where(eq(files.id, existing.id)).run();
+			return { entry: toEntry(row), replaced: true };
+		}
+		const total = tx.select({ n: count() }).from(files).get()!.n;
+		if (total >= limits.projectMaxFiles) fail(413, `A project can have at most ${limits.projectMaxFiles} files.`);
+		const row = { id: randomUUID(), parentId, name, kind, hash, size, createdAt: now, updatedAt: now };
+		tx.insert(files).values(row).run();
+		return { entry: toEntry(row), replaced: false };
+	});
+	if (text !== null) await setText(result.entry.id, text); // through Yjs: open editors see a replaced text at once
+	return result;
 }
 
 // ponytail: blobs are never garbage-collected (research R1); history (008) needs old ones, cleanup comes with backups (011)

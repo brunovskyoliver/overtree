@@ -432,7 +432,12 @@
 			>
 		{/if}
 		{#if f.kind === 'text' && f.name.toLowerCase().endsWith('.tex')}
-			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => setMain(f), true)}>Set as main document</button>
+			{#if f.id === project.mainFileId}
+				<!-- aria-disabled, not disabled: stays reachable with the arrow keys (ARIA menu pattern) -->
+				<button type="button" role="menuitem" tabindex="-1" aria-disabled="true">Set as main document (current)</button>
+			{:else}
+				<button type="button" role="menuitem" tabindex="-1" onclick={item(() => setMain(f), true)}>Set as main document</button>
+			{/if}
 		{/if}
 		<button type="button" role="menuitem" tabindex="-1" class="danger" onclick={item(() => remove(f))}>Delete</button>
 	</div>
@@ -633,5 +638,9 @@
 	}
 	.menu .danger {
 		color: #f08a8a;
+	}
+	.menu [aria-disabled='true'] {
+		color: var(--text-muted);
+		cursor: default;
 	}
 </style>

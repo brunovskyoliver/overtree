@@ -8,18 +8,20 @@ const WARNING = /^(?:LaTeX|Package (\S+)|Class (\S+)) Warning: (.+)$/;
 const BOX = /^(?:Overfull|Underfull) \\[hv]box .*?(?:at lines? (\d+)(?:--\d+)?)?$/;
 const INPUT_LINE = /^(.*?)(?: on input line (\d+))?\.?$/;
 
-export function parseLog(log: string): LogEntry[] {
+/** `main`: the main document's file name, e.g. 'thesis.tex' (paths in the log are relative to its folder). */
+export function parseLog(log: string, main = 'main.tex'): LogEntry[] {
+	const aux = `${main.replace(/\.[^.]*$/, '')}.aux`;
 	const lines = log.split(/\r?\n/);
 	const entries: LogEntry[] = [];
 	let lineless: LogEntry | undefined; // a `!` error still waiting for its `l.<n>`
 	// ponytail: no file-stack tracking; warnings and boxes after the .aux is read (document body) are
-	// attributed to main.tex, earlier ones (package loading) get no file. Track `(file` / `)` for multi-file projects.
+	// attributed to the main document, earlier ones (package loading) get no file. Track `(file` / `)` for multi-file projects.
 	let inBody = false;
 
 	for (let i = 0; i < lines.length; i++) {
 		const raw = lines[i];
 		let m: RegExpMatchArray | null;
-		if (!inBody && raw.includes('main.aux')) inBody = true;
+		if (!inBody && raw.includes(aux)) inBody = true;
 
 		if ((m = raw.match(FILE_LINE))) {
 			lineless = undefined;
@@ -46,7 +48,7 @@ export function parseLog(log: string): LogEntry[] {
 			entries.push({
 				level: 'warning',
 				message,
-				...(inBody && { file: 'main.tex' }),
+				...(inBody && { file: main }),
 				...(line && { line: Number(line) }),
 				raw: rawText
 			});
@@ -54,7 +56,7 @@ export function parseLog(log: string): LogEntry[] {
 			entries.push({
 				level: 'typesetting',
 				message: raw,
-				...(inBody && { file: 'main.tex' }),
+				...(inBody && { file: main }),
 				...(m[1] && { line: Number(m[1]) }),
 				raw
 			});

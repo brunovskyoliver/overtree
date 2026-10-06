@@ -1,9 +1,12 @@
 <script lang="ts">
-	import { EditorView } from '@codemirror/view';
 	import type { LogEntry } from '#lib/compile-types.ts';
-	import type { EditorHandle } from '#lib/editor/types.ts';
 
-	let { entries, editor, onclose }: { entries: LogEntry[]; editor?: EditorHandle; onclose: () => void } = $props();
+	// onopenat: open a project file in a tab with the cursor on that line
+	let {
+		entries,
+		onopenat,
+		onclose
+	}: { entries: LogEntry[]; onopenat?: (fileId: string, line: number) => void; onclose: () => void } = $props();
 
 	const sections = $derived(
 		(
@@ -17,13 +20,8 @@
 
 	let raw = $state<string>();
 
-	// same as the outline's jump(): a line past the end goes to the last line
-	function jump(n: number) {
-		const view = editor?.view;
-		if (!view) return;
-		const line = view.state.doc.line(Math.min(n, view.state.doc.lines));
-		view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) });
-		view.focus();
+	function jump(entry: LogEntry) {
+		onopenat?.(entry.fileId!, entry.line!);
 		onclose();
 	}
 
@@ -45,8 +43,8 @@
 				<ul>
 					{#each s.items as entry, i (i)}
 						<li class={entry.level}>
-							{#if entry.file === 'main.tex' && entry.line}
-								<button type="button" onclick={() => jump(entry.line!)}>
+							{#if entry.fileId && entry.line}
+								<button type="button" onclick={() => jump(entry)}>
 									<span class="where">{entry.file}:{entry.line}</span>
 									<span class="msg">{entry.message}</span>
 								</button>

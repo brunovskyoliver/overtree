@@ -2,7 +2,6 @@
 	import { Pane, PaneGroup, PaneResizer } from 'paneforge';
 	import type { Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
-	import type { EditorHandle } from '#lib/editor/types.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import FileTree from './FileTree.svelte';
 	import PdfPane from './PdfPane.svelte';
@@ -12,7 +11,7 @@
 		children,
 		outline,
 		compile,
-		editor,
+		onopenat,
 		project,
 		activeId,
 		onopen
@@ -20,7 +19,7 @@
 		children: Snippet;
 		outline: Snippet;
 		compile: CompileState;
-		editor?: EditorHandle;
+		onopenat?: (fileId: string, line: number) => void;
 		project: Project;
 		activeId?: string | null;
 		onopen?: (id: string) => void;
@@ -94,7 +93,7 @@
 		onExpand={() => (pdfOpen = true)}
 	>
 		<!-- inert while collapsed, like the sidebar -->
-		<PdfPane {compile} {editor} inert={!pdfOpen} />
+		<PdfPane {compile} {onopenat} inert={!pdfOpen} />
 	</Pane>
 </PaneGroup>
 

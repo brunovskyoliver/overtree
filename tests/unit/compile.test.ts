@@ -14,8 +14,9 @@ import { compileDir, compileProject, runCompile } from '../../src/lib/server/com
 
 // Real Docker with texlive/texlive:latest-medium pulled (see quickstart.md).
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/latex/${name}`, import.meta.url), 'utf8');
+const single = (source: string) => ({ files: [{ path: 'main.tex', data: Buffer.from(source) }], mainPath: 'main.tex' });
 const run = (name: string, compiler: Compiler = 'pdflatex', extra = {}) =>
-	runCompile({ source: fixture(name), compiler, stopOnFirstError: false, ...extra });
+	runCompile({ ...single(fixture(name)), compiler, stopOnFirstError: false, ...extra });
 const leftovers = () =>
 	execFileSync('docker', ['ps', '-aq', '--filter', 'name=overtree-compile-'], { encoding: 'utf8' }).trim();
 
@@ -54,7 +55,7 @@ describe('runCompile sandbox', { timeout: 60_000 }, () => {
 
 	it.each(['/usr/local/pwned.tex', '/etc/pwned.tex'])('cannot write %s', async (target) => {
 		const r = await runCompile({
-			source: `\\def\\target{${target}}\n${fixture('escape-write.tex')}`,
+			...single(`\\def\\target{${target}}\n${fixture('escape-write.tex')}`),
 			compiler: 'pdflatex',
 			stopOnFirstError: false
 		});

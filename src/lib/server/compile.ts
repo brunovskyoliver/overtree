@@ -1,12 +1,13 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { eq } from 'drizzle-orm';
-import type { Compiler, CompileResult, CompileStatus } from '../compile-types.ts';
+import type { Compiler, CompileResult, CompileStatus, LogEntry } from '../compile-types.ts';
+import { pathOf } from '../files.ts';
 import { parseLog } from '../log-parser.ts';
 import { getServer } from './collab.ts';
-import { getMainFileId, getText } from './files.ts';
+import { getFile, getMainFileId, getText, listFiles, readBlob } from './files.ts';
 import { compileSettings } from './schema.ts';
 
 const ENGINE_FLAG: Record<Compiler, string> = { pdflatex: '-pdf', xelatex: '-xelatex', lualatex: '-lualatex' };
@@ -20,8 +21,11 @@ execFile('docker', ['ps', '-aq', '--filter', 'name=overtree-compile-'], (err, ou
 	if (!err && ids.length) execFile('docker', ['rm', '-f', ...ids], () => {});
 });
 
+export type ProjectFile = { path: string; data: Buffer };
+
 export type RunOptions = {
-	source: string;
+	files: ProjectFile[];
+	mainPath: string; // e.g. 'src/thesis.tex'
 	compiler: Compiler;
 	stopOnFirstError: boolean;
 	image?: string;
@@ -39,10 +43,11 @@ export type RunResult = {
 	synctex?: Buffer;
 };
 
-// One throwaway container per compile (research R1): main.tex in on stdin, a tar of
-// main.pdf/main.log/main.synctex.gz out on stdout. No network, read-only root, non-root user.
+// One throwaway container per compile (research R1, R8): a tar of the project in on stdin, a tar of
+// output.pdf/output.log/output.synctex.gz out on stdout. No network, read-only root, non-root user.
 export function runCompile({
-	source,
+	files,
+	mainPath,
 	compiler,
 	stopOnFirstError,
 	image = process.env.TEXLIVE_IMAGE ?? 'texlive/texlive:latest-medium',
@@ -51,13 +56,24 @@ export function runCompile({
 	cpus = process.env.COMPILE_CPUS ?? '1',
 	env
 }: RunOptions): Promise<RunResult> {
+	let input: Buffer;
+	try {
+		input = tarProject(files);
+	} catch (e) {
+		return Promise.resolve({ status: 'failure', message: (e as Error).message });
+	}
 	const name = `overtree-compile-${randomUUID()}`;
 	const halt = stopOnFirstError ? ' -halt-on-error' : '';
 	// the container ends itself even if the app dies before its `docker kill`
 	const limit = Math.ceil(timeoutMs / 1000) + 2;
+	// MAIN_DIR/MAIN_FILE come in as env and are only used quoted; `./` keeps a name starting with `-` from being an option.
+	// The outputs get fixed names, so the reader below needs no long-name tar support.
+	// ponytail: project + outputs share the 256 MB /tmp tmpfs (bigger ones end as "no PDF"); raise it with COMPILE_TMPFS in 011
 	const script =
-		`cat > main.tex; timeout -s KILL ${limit} latexmk ${ENGINE_FLAG[compiler]} -f -interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape${halt} main.tex >&2; ` +
-		'tar -c main.pdf main.log main.synctex.gz 2>/dev/null; ' +
+		'mkdir p && tar -x --no-same-owner -C p && cd "p/$MAIN_DIR" || exit 1; ' +
+		`timeout -s KILL ${limit} latexmk ${ENGINE_FLAG[compiler]} -f -interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape${halt} "./$MAIN_FILE" >&2; ` +
+		'base="${MAIN_FILE%.*}"; for x in pdf log synctex.gz; do mv -f "$base.$x" "/tmp/output.$x" 2>/dev/null; done; ' +
+		'cd /tmp && tar -c output.pdf output.log output.synctex.gz 2>/dev/null; ' +
 		// The OOM killer only takes the engine, so the job would exit 0; turn a recorded oom_kill into 137.
 		// ponytail: cgroup v2 path only; on a cgroup v1 host OOM shows up as `failure`
 		"grep -qs '^oom_kill [1-9]' /sys/fs/cgroup/memory.events && exit 137; true";
@@ -67,6 +83,7 @@ export function runCompile({
 		'--pids-limit', '128', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 		'--read-only', '--tmpfs', '/tmp:rw,exec,size=256m', '--user', '1000:1000',
 		'-e', 'HOME=/tmp', '-e', 'TEXMFVAR=/tmp/texmf-var', '-e', 'max_print_line=10000', '-w', '/tmp',
+		'-e', `MAIN_DIR=${posix.dirname(mainPath)}`, '-e', `MAIN_FILE=${posix.basename(mainPath)}`,
 		image, 'sh', '-c', script
 	];
 
@@ -103,7 +120,7 @@ export function runCompile({
 			resolve({ status: 'unavailable', message: err.code === 'ENOENT' ? 'Docker CLI not found.' : err.message });
 		});
 		child.stdin.on('error', () => {}); // EPIPE when the container dies before reading stdin
-		child.stdin.end(source);
+		child.stdin.end(input);
 
 		child.on('close', (code) => {
 			clearTimeout(timer);
@@ -115,14 +132,14 @@ export function runCompile({
 				const line = lines.find((l) => l.startsWith('docker:') || l.includes('Error response')) ?? lines.at(-1);
 				return resolve({ status: 'unavailable', message: `Compiler unavailable: ${line ?? 'Docker failed to start the compile.'}` });
 			}
-			const files = untar(Buffer.concat(chunks));
-			const pdf = files.get('main.pdf');
+			const out = untar(Buffer.concat(chunks));
+			const pdf = out.get('output.pdf');
 			resolve({
 				status: pdf ? 'success' : 'failure',
 				message: pdf ? undefined : 'Compile failed, no PDF was produced.',
 				pdf,
-				log: files.get('main.log')?.toString('utf8'),
-				synctex: files.get('main.synctex.gz')
+				log: out.get('output.log')?.toString('utf8'),
+				synctex: out.get('output.synctex.gz')
 			});
 		});
 	});
@@ -139,6 +156,62 @@ function untar(buf: Buffer) {
 		off += 512 + Math.ceil(size / 512) * 512;
 	}
 	return files;
+}
+
+/** A ustar stream of regular files (mode 0644) at their paths. The paths are names checked by validateName
+ *  joined with `/`: never absolute, never `..`. */
+// ponytail: paths up to 255 bytes (name 100 + prefix 155, split at a `/`), longer ones fail the compile; upgrade: pax headers
+export function tarProject(files: ProjectFile[]): Buffer {
+	const blocks: Buffer[] = [];
+	for (const { path, data } of files) {
+		const h = Buffer.alloc(512);
+		let [prefix, name] = ['', path];
+		if (Buffer.byteLength(path) > 100) {
+			// the shortest prefix whose rest fits in `name`
+			const cut = [...path.matchAll(/\//g)].map((m) => m.index).find((i) => Buffer.byteLength(path.slice(i + 1)) <= 100);
+			if (cut === undefined || Buffer.byteLength(path.slice(0, cut)) > 155) throw new Error(`Path too long to compile: ${path}`);
+			[prefix, name] = [path.slice(0, cut), path.slice(cut + 1)];
+		}
+		const octal = (n: number, width: number) => n.toString(8).padStart(width - 1, '0') + '\0';
+		h.write(name, 0, 100);
+		h.write('0000644\0', 100);
+		h.write(octal(0, 8), 108); // uid
+		h.write(octal(0, 8), 116); // gid
+		h.write(octal(data.length, 12), 124);
+		h.write(octal(Math.floor(Date.now() / 1000), 12), 136);
+		h.write('0', 156); // regular file
+		h.write('ustar\u000000', 257);
+		h.write(prefix, 345, 155);
+		h.write(' '.repeat(8), 148); // the checksum sums the header with its own field as spaces
+		h.write(octal(h.reduce((a, b) => a + b, 0), 7) + ' ', 148);
+		blocks.push(h, data, Buffer.alloc((512 - (data.length % 512)) % 512));
+	}
+	blocks.push(Buffer.alloc(1024));
+	return Buffer.concat(blocks);
+}
+
+/** Every file of the project at its path (text from Yjs, binary from its blob), the main document's path and
+ *  the ids of the text files by path. */
+export async function collectProject() {
+	const all = listFiles();
+	const files: ProjectFile[] = [];
+	const paths = new Map<string, string>();
+	for (const f of all) {
+		if (f.kind === 'folder') continue;
+		const path = pathOf(f.id, all);
+		if (f.kind === 'text') paths.set(path, f.id);
+		files.push({ path, data: f.kind === 'text' ? Buffer.from(await getText(f.id)) : readBlob(getFile(f.id).hash!) });
+	}
+	const mainId = getMainFileId();
+	return { files, mainPath: mainId ? pathOf(mainId, all) : null, paths };
+}
+
+export const NO_MAIN = 'No main document. Right-click a .tex file and choose Set as main document.';
+
+/** Download name of the PDF: the main document's name with `.pdf`. */
+export function pdfName() {
+	const id = getMainFileId();
+	return `${id ? getFile(id).name.replace(/\.[^.]*$/, '') : 'main'}.pdf`;
 }
 
 // ponytail: one project ('main') until feature 005; per-project maps then
@@ -184,12 +257,9 @@ export function compileProject(opts: { stopOnFirstError: boolean }): Promise<Com
 async function compileOnce({ stopOnFirstError }: { stopOnFirstError: boolean }): Promise<CompileResult> {
 	const id = randomUUID();
 	const startedAt = Date.now();
-	// still single-file input; US3 (T026–T028) sends the whole tree and reports a missing main document
-	const mainId = getMainFileId();
-	const source = mainId ? await getText(mainId) : '';
-
 	const compiler = getCompiler();
-	const r = await runCompile({ source, compiler, stopOnFirstError });
+	const { files, mainPath, paths } = await collectProject();
+	const r: RunResult = mainPath ? await runCompile({ files, mainPath, compiler, stopOnFirstError }) : { status: 'failure', message: NO_MAIN };
 
 	const dir = compileDir();
 	mkdirSync(dir, { recursive: true });
@@ -216,9 +286,17 @@ async function compileOnce({ stopOnFirstError }: { stopOnFirstError: boolean }):
 		startedAt,
 		durationMs: Date.now() - startedAt,
 		pdfId: r.pdf ? id : previous?.pdfId,
-		entries: r.log ? parseLog(r.log) : [],
+		entries: r.log && mainPath ? parseLog(r.log, posix.basename(mainPath)).map((e) => resolveEntry(e, mainPath, paths)) : [],
 		message: r.message
 	};
 	write('result.json', JSON.stringify(result));
 	return result;
+}
+
+/** Log paths are relative to the main's folder: make them project paths and link project text files. */
+function resolveEntry(e: LogEntry, mainPath: string, paths: Map<string, string>): LogEntry {
+	if (!e.file || e.file.startsWith('/')) return e;
+	const file = posix.normalize(posix.join(posix.dirname(mainPath), e.file));
+	const fileId = paths.get(file);
+	return fileId ? { ...e, file, fileId } : e;
 }
