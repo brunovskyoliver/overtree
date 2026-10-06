@@ -8,22 +8,51 @@
 
 	GlobalWorkerOptions.workerSrc = workerSrc;
 
-	let { url }: { url: string } = $props();
+	const FITS = ['page-width', 'page-fit'];
+
+	let {
+		url,
+		dark = false,
+		page = $bindable(0),
+		pages = $bindable(0),
+		scale = $bindable('page-width'),
+		percent = $bindable(100)
+	}: { url: string; dark?: boolean; page?: number; pages?: number; scale?: string; percent?: number } = $props();
 
 	let container: HTMLDivElement;
 	let viewer = $state<PDFViewer>();
 	let shown: PDFDocumentLoadingTask | undefined; // destroy() lives on the loading task in pdf.js 6
+	let keep = { page: 1, scale: 'page-width' }; // position to restore when the next PDF is laid out
 
 	onMount(() => {
 		const eventBus = new EventBus();
 		const v = new PDFViewer({ container, eventBus });
-		eventBus.on('pagesinit', () => (v.currentScaleValue = 'page-width'));
+		// a new PDF keeps the zoom and the page, clamped to its length (FR-019)
+		eventBus.on('pagesinit', () => {
+			v.currentScaleValue = keep.scale;
+			v.currentPageNumber = Math.min(Math.max(keep.page, 1), v.pagesCount);
+			pages = v.pagesCount;
+			page = v.currentPageNumber; // no pagechanging when the clamped page is the reset one
+		});
+		eventBus.on('pagechanging', (e: { pageNumber: number }) => (page = e.pageNumber));
+		eventBus.on('scalechanging', (e: { scale: number }) => {
+			scale = v.currentScaleValue;
+			percent = Math.round(e.scale * 100);
+		});
+		// fit modes follow the pane size
+		const resize = new ResizeObserver(() => FITS.includes(v.currentScaleValue) && (v.currentScaleValue = v.currentScaleValue));
+		resize.observe(container);
 		viewer = v;
 		return () => {
+			resize.disconnect();
 			viewer = undefined;
 			void shown?.destroy();
 		};
 	});
+
+	export const goTo = (n: number) => viewer && (viewer.currentPageNumber = n);
+	export const zoom = (step: 1 | -1) => (step > 0 ? viewer?.increaseScale() : viewer?.decreaseScale());
+	export const setScale = (value: string) => viewer && (viewer.currentScaleValue = value);
 
 	// Parse the new PDF before swapping, so the old pages stay visible until then (SC-007).
 	$effect(() => {
@@ -36,6 +65,7 @@
 				if (stale) return void task.destroy();
 				const old = shown;
 				shown = task;
+				keep = { page, scale };
 				v.setDocument(doc);
 				void old?.destroy();
 			},
@@ -48,7 +78,7 @@
 	});
 </script>
 
-<div class="viewer">
+<div class="viewer" class:dark>
 	<div class="container" bind:this={container} data-testid="pdf-viewer">
 		<div class="pdfViewer"></div>
 	</div>
@@ -65,5 +95,8 @@
 		position: absolute;
 		inset: 0;
 		overflow: auto;
+	}
+	.dark :global(.page canvas) {
+		filter: invert(1) hue-rotate(180deg);
 	}
 </style>

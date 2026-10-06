@@ -2,12 +2,27 @@
 	import type { CompileState } from '#lib/compile.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import LogsPanel from './LogsPanel.svelte';
+	import PdfToolbar from './PdfToolbar.svelte';
 	import PdfViewer from './PdfViewer.svelte';
 	import RecompileButton from './RecompileButton.svelte';
 
 	let { compile, editor, inert = false }: { compile: CompileState; editor?: EditorHandle; inert?: boolean } = $props();
 
+	const PDF_KEY = 'overtree:pdf';
+
 	let logsOpen = $state(false);
+	let viewer = $state<ReturnType<typeof PdfViewer>>();
+	let page = $state(0);
+	let pages = $state(0);
+	let scale = $state('page-width');
+	let percent = $state(100);
+	let dark = $state(false);
+	try {
+		dark = JSON.parse(localStorage.getItem(PDF_KEY) ?? '{}').dark === true;
+	} catch {
+		// unreadable storage: default
+	}
+	$effect(() => localStorage.setItem(PDF_KEY, JSON.stringify({ dark })));
 
 	const failed = $derived(compile.last && compile.last.status !== 'success' ? compile.last : undefined);
 </script>
@@ -16,6 +31,16 @@
 	<div class="bar">
 		<RecompileButton {compile} />
 		<button type="button" class="logs-toggle" aria-pressed={logsOpen} onclick={() => (logsOpen = !logsOpen)}>Logs</button>
+		<a
+			class="download"
+			href={compile.pdfUrl && `${compile.pdfUrl}&download=1`}
+			download="main.pdf"
+			aria-label="Download PDF"
+			aria-disabled={!compile.pdfUrl}
+		>
+			<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m-4-4 4 4 4-4M3 13h10" /></svg>
+		</a>
+		<PdfToolbar {viewer} {page} {pages} {scale} {percent} bind:dark />
 	</div>
 	{#if failed}
 		<p class="banner" role="alert">
@@ -33,7 +58,7 @@
 		<!-- stays mounted (and laid out, so pdf.js can measure) under the logs: closing them shows the PDF at once -->
 		<div class="view" class:covered={logsOpen} inert={logsOpen}>
 			{#if compile.pdfUrl}
-				<PdfViewer url={compile.pdfUrl} />
+				<PdfViewer url={compile.pdfUrl} {dark} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
 			{:else}
 				<p class="empty">Click Recompile or press Ctrl/⌘+Enter to see your PDF.</p>
 			{/if}
@@ -77,6 +102,28 @@
 	.logs-toggle:hover,
 	.logs-toggle[aria-pressed='true'] {
 		background: var(--panel-raised);
+	}
+	.download {
+		display: flex;
+		align-items: center;
+		height: 26px;
+		padding: 0 6px;
+		border-radius: 4px;
+		color: var(--text);
+	}
+	.download:hover {
+		background: var(--panel-raised);
+	}
+	.download[aria-disabled='true'] {
+		opacity: 0.4;
+		pointer-events: none;
+	}
+	.download svg {
+		width: 16px;
+		height: 16px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.5;
 	}
 	.banner button {
 		margin-left: 6px;

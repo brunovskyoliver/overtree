@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { tick } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
 	import type { Compiler } from '#lib/compile-types.ts';
+	import { Menu } from '#lib/menu.svelte.ts';
 
 	let { compile }: { compile: CompileState } = $props();
 
@@ -13,49 +13,12 @@
 
 	const errors = $derived(compile.last?.entries.filter((e) => e.level === 'error').length ?? 0);
 
-	let open = $state(false);
-	let root: HTMLDivElement;
-	let toggle: HTMLButtonElement;
-	let menu = $state<HTMLDivElement>();
-
-	const items = () => [...menu!.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
-
-	async function show(focus: 'first' | 'last' = 'first') {
-		open = true;
-		await tick();
-		items().at(focus === 'first' ? 0 : -1)!.focus();
-	}
-
-	function close() {
-		open = false;
-		toggle.focus();
-	}
-
-	// menu keyboard per research R12; Enter/Space are the buttons' own click
-	function onmenukey(e: KeyboardEvent) {
-		const list = items();
-		const i = list.indexOf(document.activeElement as HTMLElement);
-		const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: list.length - 1 }[e.key];
-		if (to !== undefined) {
-			e.preventDefault();
-			list[(to + list.length) % list.length].focus();
-		} else if (e.key === 'Escape') {
-			e.preventDefault();
-			close();
-		} else if (e.key === 'Tab') open = false;
-	}
-
-	function ontogglekey(e: KeyboardEvent) {
-		if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-		e.preventDefault();
-		show(e.key === 'ArrowDown' ? 'first' : 'last');
-	}
+	const m = new Menu();
 </script>
 
-<!-- ponytail: an outside click closes without moving focus, the click puts it where the user clicked -->
-<svelte:window onpointerdown={(e) => open && !root.contains(e.target as Node) && (open = false)} />
+<svelte:window onpointerdown={m.onwindowpointerdown} />
 
-<div class="split" bind:this={root}>
+<div class="split" bind:this={m.root}>
 	<button type="button" class="recompile" disabled={compile.compiling} aria-busy={compile.compiling} onclick={() => compile.compile()}>
 		{compile.compiling ? 'Compiling…' : 'Recompile'}
 		{#if errors}<span class="badge" role="img" aria-label="{errors} {errors === 1 ? 'error' : 'errors'}">{errors}</span>{/if}
@@ -65,15 +28,15 @@
 		class="toggle"
 		aria-label="Compile options"
 		aria-haspopup="menu"
-		aria-expanded={open}
-		bind:this={toggle}
-		onclick={() => (open ? (open = false) : show())}
-		onkeydown={ontogglekey}
+		aria-expanded={m.open}
+		bind:this={m.toggle}
+		onclick={m.ontoggle}
+		onkeydown={m.ontogglekey}
 	>
 		<svg viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
 	</button>
-	{#if open}
-		<div class="menu" role="menu" aria-label="Compile options" tabindex="-1" bind:this={menu} onkeydown={onmenukey}>
+	{#if m.open}
+		<div class="menu" role="menu" aria-label="Compile options" tabindex="-1" bind:this={m.menu} onkeydown={m.onmenukey}>
 			<button
 				type="button"
 				role="menuitemcheckbox"
