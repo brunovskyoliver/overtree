@@ -3,7 +3,7 @@ export type OutlineEntry = { level: 1 | 2 | 3; title: string; line: number };
 const HEADING = /\\((?:sub){0,2})section\*?\s*(?:\[[^\]]*\])?\s*\{/g;
 
 /** Cut a line at its first unescaped `%` (`\%` is a literal percent, `\\%` starts a comment). */
-function stripComment(line: string) {
+export function stripComment(line: string) {
 	for (let i = 0; i < line.length; i++) {
 		if (line[i] === '\\') i++;
 		else if (line[i] === '%') return line.slice(0, i);

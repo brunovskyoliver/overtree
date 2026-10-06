@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+	import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
 	import { defaultKeymap } from '@codemirror/commands';
 	import { bracketMatching, foldGutter, foldKeymap, indentOnInput, StreamLanguage } from '@codemirror/language';
 	import { stex } from '@codemirror/legacy-modes/mode/stex';
 	import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-	import { Compartment, EditorState, type Extension, type StateEffect } from '@codemirror/state';
+	import { Compartment, EditorState, Prec, type Extension, type StateEffect } from '@codemirror/state';
 	import {
 		crosshairCursor,
 		drawSelection,
@@ -23,6 +23,9 @@
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
 	import { yCollab, ySyncAnnotation, ySyncFacet, yUndoManagerKeymap } from 'y-codemirror.next';
 	import * as Y from 'yjs';
+	import { environments } from '#lib/completion/environments.ts';
+	import { kindLabel, latexSource } from '#lib/completion/source.ts';
+	import { Symbols } from '#lib/completion/symbols.svelte.ts';
 	import { editorTheme } from '#lib/editor/theme.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { isLatexName } from '#lib/files.ts';
@@ -68,7 +71,9 @@
 		return true;
 	};
 
-	const stexLanguage = StreamLanguage.define(stex);
+	const symbols = new Symbols();
+	// LaTeX tabs get the stex mode plus \begin/\end support; completion checks the language itself
+	const latexExtensions: Extension = [StreamLanguage.define(stex), environments];
 	const plainText: Extension = [];
 	const language = new Compartment();
 
@@ -85,7 +90,15 @@
 		indentOnInput(),
 		bracketMatching(),
 		closeBrackets(),
-		autocompletion(),
+		autocompletion({
+			override: [latexSource(() => symbols.commands)],
+			icons: false,
+			addToOptions: [{ position: 90, render: kindLabel }],
+			activateOnTyping: true,
+			activateOnTypingDelay: 0 // the source is synchronous; the default 100 ms would miss SC-005
+		}),
+		// above the snippet keymap's Tab: with the popup open, Tab accepts
+		Prec.highest(keymap.of([{ key: 'Tab', run: acceptCompletion }])),
 		rectangularSelection(),
 		crosshairCursor(),
 		highlightActiveLine(),
@@ -101,6 +114,7 @@
 		EditorView.updateListener.of((u) => {
 			// remote Yjs changes carry ySyncAnnotation and don't count as the user's typing
 			if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ySyncAnnotation))) onLocalEdit?.();
+			if (u.docChanged && shown) symbols.scan(shown, !!project.files.find((f) => f.id === shown)?.name.toLowerCase().endsWith('.bib'), u.state);
 			for (const fn of listeners) fn(u);
 		})
 	];
@@ -120,7 +134,7 @@
 		provider.on('status', ({ status }: { status: keyof typeof STATUS_TEXT }) => (statuses[id] = STATUS_TEXT[status]));
 		const state = EditorState.create({
 			doc: ytext.toString(),
-			extensions: [shared, language.of(isLatexName(name) ? stexLanguage : plainText), yCollab(ytext, provider.awareness, { undoManager })]
+			extensions: [shared, language.of(isLatexName(name) ? latexExtensions : plainText), yCollab(ytext, provider.awareness, { undoManager })]
 		});
 		return { ytext, provider, undoManager, state };
 	}
@@ -129,6 +143,7 @@
 		const tab = tabs.get(id)!;
 		tabs.delete(id);
 		delete statuses[id];
+		symbols.forget(id);
 		// unbind yCollab from the doc we're about to destroy
 		if (shown === id) {
 			view?.setState(EditorState.create());
@@ -177,13 +192,19 @@
 		if (shown !== id) show(id, tab);
 		const v = view!;
 		// a rename can change the language
-		const wanted = latex ? stexLanguage : plainText;
+		const wanted = latex ? latexExtensions : plainText;
 		if (language.get(v.state) !== wanted) v.dispatch({ effects: language.reconfigure(wanted) });
 		if (handleFor !== id) {
 			handleFor = id;
 			editor = { view: v, undoManager: tab.undoManager, provider: tab.provider, fileId: id, listen };
 			if (testHooks) window.__overtree = editor;
 		}
+	});
+
+	// project symbols follow tree operations and tab switches
+	$effect(() => {
+		void [project.files, project.active];
+		symbols.refresh();
 	});
 
 	onMount(() => () => {

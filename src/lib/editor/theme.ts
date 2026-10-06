@@ -57,6 +57,33 @@ const theme = EditorView.theme(
 		'.cm-searchMatch': { backgroundColor: '#5c4a1e', outline: '1px solid #a8862f' },
 		'.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#2f6a31', outline: '1px solid var(--accent-bright)' },
 		'.cm-selectionMatch': { backgroundColor: '#33405a' },
+		// completion popup (reference-autocomplete.png): 8 rows of 23 px, label left, kind right
+		'.cm-tooltip.cm-tooltip-autocomplete': {
+			backgroundColor: '#23262e',
+			border: '1px solid var(--border)',
+			borderRadius: '2px',
+			boxShadow: '0 4px 12px rgb(0 0 0 / 0.4)'
+		},
+		'.cm-tooltip.cm-tooltip-autocomplete > ul': {
+			fontFamily: 'var(--font-mono)',
+			fontSize: '13px',
+			width: '500px',
+			maxWidth: 'min(500px, 90vw)',
+			maxHeight: `${8 * 23}px`
+		},
+		'.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
+			display: 'flex',
+			alignItems: 'center',
+			height: '23px',
+			padding: '0 8px',
+			color: '#d7dae0'
+		},
+		'.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: 'var(--accent)', color: '#fff' },
+		'.cm-completionLabel': { whiteSpace: 'pre', overflow: 'hidden', textOverflow: 'ellipsis' },
+		'.cm-completionMatchedText': { textDecoration: 'none', fontWeight: '700', color: '#fff' },
+		'.cm-completionDetail': { marginLeft: '12px', color: 'var(--text-muted)', fontStyle: 'normal', overflow: 'hidden', textOverflow: 'ellipsis' },
+		'.cm-completionKind': { marginLeft: 'auto', paddingLeft: '16px', color: 'var(--text-muted)' },
+		'li[aria-selected] .cm-completionKind': { color: '#c9d6c9' },
 		'.tok-command': { color: '#d27fb3' },
 		'.tok-argument': { color: '#e5a85c', fontStyle: 'italic' },
 		'.tok-math': { color: '#7fc8a9' },
