@@ -12,8 +12,8 @@ Status: `todo` · `in progress` · `done`
 |---|---------|--------|------------|
 | 001 | Editor workspace shell | done | — |
 | 002 | Live compilation & PDF preview | done | 001 |
-| 003 | Multi-file projects & file tree | todo | 001 |
-| 004 | LaTeX autocomplete | todo | 003 |
+| 003 | Multi-file projects, file tree & LaTeX autocomplete | in progress | 002 |
+| 004 | *(merged into 003)* | — | — |
 
 ### 001 Editor workspace shell
 SvelteKit app with the three-pane layout from the reference screenshot: left sidebar (file tree on top, file outline below, resizable split), CodeMirror 6 editor in the middle with LaTeX syntax highlighting, line numbers, bracket matching, search, and a formatting toolbar (bold, italic, section, link, figure, table), PDF pane on the right. Dark theme. One project with a single `main.tex`, already stored as a Yjs document synced over WebSocket and persisted to SQLite, so a page reload keeps the text and undo/redo works through `Y.UndoManager`. File outline lists `\section`/`\subsection`/`\subsubsection` and jumps to the line on click. Panes collapse with the arrow handles. Docker Compose file runs the app.
@@ -21,11 +21,12 @@ SvelteKit app with the three-pane layout from the reference screenshot: left sid
 ### 002 Live compilation & PDF preview
 Recompile button with dropdown (auto-compile on/off, compiler: pdfLaTeX / XeLaTeX / LuaLaTeX, stop on first error). Compilation runs `latexmk` inside a TeX Live container per job, with no network, no shell-escape, and time/memory limits. Auto-compile triggers a few seconds after typing stops. PDF pane renders with pdf.js: page navigation, zoom in/out/fit, dark-mode toggle for the page, download PDF. Logs panel lists errors and warnings parsed from the `.log`, each clickable to jump to file and line, with an error badge on the Recompile button. Last good PDF stays visible while a new compile runs or fails.
 
-### 003 Multi-file projects & file tree
-File tree with nested folders: create file, create folder, upload (drag-and-drop too), rename, move by drag, delete with confirmation, download. Text files (`.tex`, `.bib`, `.cls`, `.sty`, `.md`, `.txt`) open in the editor as Yjs docs; images and PDFs open in a preview. Editor tabs for open files. Choose the main document from the file's context menu. `\input`/`\include`/`\includegraphics`/`\bibliography` paths resolve against the project tree in compiles. Outline covers the open file. Download the whole project as a zip and create a project by uploading a zip.
+### 003 Multi-file projects, file tree & LaTeX autocomplete
+One feature covering both parts below (bundled to reach multi-user sooner).
 
-### 004 LaTeX autocomplete
-Completion popup like Overleaf's (screenshot 2): typing `\` lists commands with a kind label (`cmd`, `env`, `pkg`), fuzzy matching, keyboard navigation, and snippets with tab stops (`\begin{}` inserts the matching `\end{}`; `\usepackage[]{}` puts the cursor in the braces). Sources: a bundled list of common commands and environments, package names for `\usepackage`, commands defined in the project (`\newcommand`, `\newenvironment`), `\label` keys for `\ref`/`\eqref`/`\autoref`, BibTeX keys from project `.bib` files for `\cite`, and project file paths for `\input`/`\includegraphics`. Auto-closing of `\begin{env}` on Enter. Spell-check underline is out of scope here.
+**Files and tree.** File tree with nested folders: create file, create folder, upload (drag-and-drop too), rename, move by drag, delete with confirmation, download. Text files (`.tex`, `.bib`, `.cls`, `.sty`, `.md`, `.txt`) open in the editor as Yjs docs; images and PDFs open in a preview. Editor tabs for open files. Choose the main document from the file's context menu. `\input`/`\include`/`\includegraphics`/`\bibliography` paths resolve against the project tree in compiles. Outline covers the open file. Download the whole project as a zip and create a project by uploading a zip.
+
+**Autocomplete.** Completion popup like Overleaf's (screenshot 2): typing `\` lists commands with a kind label (`cmd`, `env`, `pkg`), fuzzy matching, keyboard navigation, and snippets with tab stops (`\begin{}` inserts the matching `\end{}`; `\usepackage[]{}` puts the cursor in the braces). Sources: a bundled list of common commands and environments, package names for `\usepackage`, commands defined in the project (`\newcommand`, `\newenvironment`), `\label` keys for `\ref`/`\eqref`/`\autoref`, BibTeX keys from project `.bib` files for `\cite`, and project file paths for `\input`/`\includegraphics`. Auto-closing of `\begin{env}` on Enter. Spell-check underline is out of scope here.
 
 ## Phase 2: Multi-user
 
