@@ -21,7 +21,7 @@
 	import { HocuspocusProvider } from '@hocuspocus/provider';
 	import { onMount } from 'svelte';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
-	import { getToken } from '#lib/auth.svelte.ts';
+	import { getToken, onSignOut } from '#lib/auth.svelte.ts';
 	import { yCollab, ySyncAnnotation, ySyncFacet, yUndoManagerKeymap } from 'y-codemirror.next';
 	import * as Y from 'yjs';
 	import { environments } from '#lib/completion/environments.ts';
@@ -210,6 +210,9 @@
 		void [project.files, project.active];
 		symbols.refresh();
 	});
+
+	// signing out closes every provider of this tab right away, not only when the page unloads (US1 scenario 4)
+	onMount(() => onSignOut(() => (editor = undefined, [...tabs.keys()].forEach(destroyTab))));
 
 	onMount(() => () => {
 		editor = undefined;

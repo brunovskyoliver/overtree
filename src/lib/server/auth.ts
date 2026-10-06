@@ -14,7 +14,8 @@ export type Identity = { id: string; email: string; name?: string | null; avatar
 /** The sign-up policy refuses this email (research R5). */
 export class NotAllowed extends Error {}
 
-export type AuthResult = { user: User } | { redirect: Response } | { refused: 'not-allowed' } | null;
+/** `headers`: cookies Clerk's handshake asks to set on the response (session refresh, dev browser). */
+export type AuthResult = (({ user: User } | { refused: 'not-allowed' } | { signedOut: true }) & { headers?: Headers }) | { redirect: Response } | null;
 
 const REFRESH_MS = 10 * 60 * 1000;
 export const TEST_COOKIE = 'overtree-test-user';
@@ -73,10 +74,14 @@ export async function authenticateRequest(request: Request): Promise<AuthResult>
 		authorizedParties: [process.env.ORIGIN || new URL(request.url).origin],
 		jwtKey: process.env.CLERK_JWT_KEY || undefined
 	});
-	if (state.status === 'handshake') return { redirect: new Response(null, { status: 307, headers: state.headers }) };
-	if (!state.isAuthenticated) return null;
+	// a handshake to run, or (dev instances) the handshake result to apply: back to the URL without its params
+	if (state.status === 'handshake' || state.headers.has('location'))
+		return { redirect: new Response(null, { status: 307, headers: state.headers }) };
+	const headers = state.headers.has('set-cookie') ? state.headers : undefined;
+	if (!state.isAuthenticated) return headers ? { signedOut: true, headers } : null;
 	const { userId } = state.toAuth();
-	return resolve(userId, () => clerkIdentity(userId));
+	const r = await resolve(userId, () => clerkIdentity(userId));
+	return r && headers ? { ...r, headers } : r;
 }
 
 /** The user behind a WebSocket token (research R3): a Clerk session JWT, or `test:<email>` with the test bypass. */

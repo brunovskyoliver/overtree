@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getServer } from './collab.ts';
 import { fail, textUpdate, type Row } from './files.ts';
 import { projectRole, type Role } from './access.ts';
@@ -72,4 +72,23 @@ export function listProjects(userId: string): ProjectListItem[] {
 		if (role) out.push({ id: p.id, title: p.title, owner: p.ownerId ? { id: p.ownerId, name: ownerName ?? '' } : null, role, updatedAt: p.updatedAt });
 	}
 	return out;
+}
+
+/** The project behind a share link, or null when the token is unknown or link sharing is off. */
+export const projectByLink = (token: string): Project | null =>
+	(token && db().select().from(projects).where(eq(projects.linkToken, token)).get()) || null;
+
+/** Join through a share link (data-model "Effective role"): sets `viaLink` on the user's membership, inserting one
+ *  with no named role if absent; the effective role is then the higher of the named and the link role. The owner
+ *  joins nothing. Returns the project id, or null for an unknown or disabled link. */
+export function joinByLink(token: string, userId: string): string | null {
+	return db().transaction((tx) => {
+		const p = token ? tx.select().from(projects).where(eq(projects.linkToken, token)).get() : undefined;
+		if (!p) return null;
+		if (p.ownerId === userId) return p.id;
+		const where = and(eq(memberships.projectId, p.id), eq(memberships.userId, userId));
+		if (tx.select().from(memberships).where(where).get()) tx.update(memberships).set({ viaLink: true }).where(where).run();
+		else tx.insert(memberships).values({ projectId: p.id, userId, role: null, viaLink: true, createdAt: Date.now() }).run();
+		return p.id;
+	});
 }

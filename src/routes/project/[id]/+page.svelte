@@ -5,6 +5,7 @@
 	import { watchSession } from '#lib/auth.svelte.ts';
 	import Editor from '#lib/components/Editor.svelte';
 	import Outline from '#lib/components/Outline.svelte';
+	import TopBar from '#lib/components/TopBar.svelte';
 	import Workspace from '#lib/components/Workspace.svelte';
 	import { CompileState } from '#lib/compile.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
@@ -49,10 +50,9 @@
 </script>
 
 <div class="app">
-	<header class="topbar">
-		<span class="brand">Overtree</span>
-		<span class="project">{project.details?.title ?? ''}</span>
-	</header>
+	<TopBar>
+		{#snippet title()}{project.details?.title ?? ''}{/snippet}
+	</TopBar>
 	<main>
 		<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
 			<Editor {project} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
@@ -68,21 +68,6 @@
 		display: flex;
 		flex-direction: column;
 		height: 100vh;
-	}
-	.topbar {
-		display: grid;
-		grid-template-columns: 1fr auto 1fr;
-		align-items: center;
-		height: 44px;
-		padding: 0 14px;
-		background: var(--bg);
-		border-bottom: 1px solid var(--border);
-	}
-	.brand {
-		font-weight: 600;
-	}
-	.project {
-		font-weight: 500;
 	}
 	main {
 		flex: 1;

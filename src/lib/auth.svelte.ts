@@ -23,8 +23,20 @@ export function loadClerk(): Promise<Clerk> {
 		const [{ Clerk }, { ui }] = await Promise.all([import('@clerk/clerk-js'), import('@clerk/ui')]);
 		const c = new Clerk(PUBLIC_CLERK_PUBLISHABLE_KEY ?? '');
 		await c.load({ ui });
+		// @clerk/testing's helpers (clerk.signIn, clerk.signOut) drive the instance through window.Clerk
+		(window as unknown as { Clerk: Clerk }).Clerk = c;
 		return c;
 	})());
+}
+
+/** `redirect` from the query when it is a same-origin path, else `/` (no open redirects to other sites). */
+export function safeRedirect(redirect: string | null | undefined): string {
+	return redirect && redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.startsWith('/\\') ? redirect : '/';
+}
+
+/** Sign in through the test bypass (PUBLIC_TEST_HOOKS only; the server checks OVERTREE_TEST_AUTH itself). */
+export function testSignIn(email: string) {
+	document.cookie = `${TEST_COOKIE}=${encodeURIComponent(email.trim().toLowerCase())}; path=/; samesite=lax`;
 }
 
 class Auth {
@@ -49,8 +61,21 @@ export async function getToken(): Promise<string> {
 	return (await c.session?.getToken()) ?? '';
 }
 
-/** Sign out (Clerk, or clear the test cookie) and go to the sign-in page. */
+const endHooks = new Set<() => void>();
+
+/** Run `fn` when this tab signs out (before the session ends), e.g. to close live connections. Returns the
+ *  unsubscribe function. */
+export function onSignOut(fn: () => void): () => void {
+	endHooks.add(fn);
+	return () => endHooks.delete(fn);
+}
+
+/** Sign out (Clerk, or clear the test cookie) and go to the sign-in page. Live connections close first. */
+let signingOut = false;
+
 export async function signOut() {
+	signingOut = true; // our own sign-out, not one from another tab (watchSession)
+	for (const fn of [...endHooks]) fn();
 	if (testEmail()) document.cookie = `${TEST_COOKIE}=; path=/; max-age=0`;
 	else if (PUBLIC_CLERK_PUBLISHABLE_KEY) await (await loadClerk()).signOut();
 	location.assign('/sign-in');
@@ -66,7 +91,7 @@ export function watchSession(onEnd: () => void): () => void {
 		if (stopped) return;
 		let had = !!c.session;
 		stop = c.addListener(({ session }) => {
-			if (had && !session) {
+			if (had && !session && !signingOut) {
 				stop();
 				onEnd();
 			}
