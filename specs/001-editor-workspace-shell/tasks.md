@@ -103,14 +103,14 @@ description: "Task list for feature 001 Editor workspace shell"
 
 ### Tests for User Story 3
 
-- [ ] T026 [P] [US3] Vitest `tests/unit/outline.test.ts` for `parseOutline`: three levels in order with correct `level`/`line` (US3-1); `% \section{Old}` skipped and `\%` not treated as a comment (US3-4); `\section*{Preface}` and `\section[Short]{Long title}` → "Preface", "Long title"; `\section{The \emph{best} way}` → "The best way"; empty text → `[]`; 5,000-line input parses in < 16 ms
-- [ ] T027 [P] [US3] Playwright `tests/e2e/outline.spec.ts`: click an entry far down a long document, cursor on that line, editor focused, line in view (US3-2, SC-005); type `\section{Methods}`, entry appears within 1 s (US3-3); entry containing the cursor has `aria-current="location"` (US3-5); empty document shows "No sections yet"
+- [X] T026 [P] [US3] Vitest `tests/unit/outline.test.ts` for `parseOutline`: three levels in order with correct `level`/`line` (US3-1); `% \section{Old}` skipped and `\%` not treated as a comment (US3-4); `\section*{Preface}` and `\section[Short]{Long title}` → "Preface", "Long title"; `\section{The \emph{best} way}` → "The best way"; empty text → `[]`; 5,000-line input parses in < 16 ms
+- [X] T027 [P] [US3] Playwright `tests/e2e/outline.spec.ts`: click an entry far down a long document, cursor on that line, editor focused, line in view (US3-2, SC-005); type `\section{Methods}`, entry appears within 1 s (US3-3); entry containing the cursor has `aria-current="location"` (US3-5); empty document shows "No sections yet"
 
 ### Implementation for User Story 3
 
-- [ ] T028 [P] [US3] Implement `parseOutline(text): { level: 1 | 2 | 3; title: string; line: number }[]` in `src/lib/outline.ts` per contracts/ui.md outline rules (1-based lines, level 1 = section)
-- [ ] T029 [US3] `src/lib/components/Outline.svelte`: `<nav aria-label="File outline">` with header "File outline", a list of buttons indented by level, the current entry marked by `aria-current="location"` and the green highlight, and "No sections yet" when empty; re-parse on Y.Text changes debounced 200 ms; track the cursor line via an `EditorView.updateListener`; click → `view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) })` then `view.focus()`
-- [ ] T030 [US3] Put `Outline` into the Workspace outline slot in `src/routes/+page.svelte`, sharing the editor's `view`
+- [X] T028 [P] [US3] Implement `parseOutline(text): { level: 1 | 2 | 3; title: string; line: number }[]` in `src/lib/outline.ts` per contracts/ui.md outline rules (1-based lines, level 1 = section)
+- [X] T029 [US3] `src/lib/components/Outline.svelte`: `<nav aria-label="File outline">` with header "File outline", a list of buttons indented by level, the current entry marked by `aria-current="location"` and the green highlight, and "No sections yet" when empty; re-parse on Y.Text changes debounced 200 ms; track the cursor line via an `EditorView.updateListener`; click → `view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) })` then `view.focus()`
+- [X] T030 [US3] Put `Outline` into the Workspace outline slot in `src/routes/+page.svelte`, sharing the editor's `view`
 
 **Checkpoint**: US1–US3 tests pass.
 

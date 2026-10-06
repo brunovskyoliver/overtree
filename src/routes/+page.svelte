@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Editor from '#lib/components/Editor.svelte';
+	import Outline from '#lib/components/Outline.svelte';
 	import Workspace from '#lib/components/Workspace.svelte';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 
@@ -18,8 +19,7 @@
 		<Workspace>
 			<Editor bind:editor />
 			{#snippet outline()}
-				<!-- phase 5: <Outline {editor} /> -->
-				<p class="placeholder">No sections yet</p>
+				<Outline {editor} />
 			{/snippet}
 		</Workspace>
 	</main>
@@ -49,9 +49,5 @@
 	main {
 		flex: 1;
 		min-height: 0;
-	}
-	.placeholder {
-		margin: 4px 16px;
-		color: var(--text-muted);
 	}
 </style>

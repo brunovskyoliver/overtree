@@ -119,9 +119,11 @@ test('collapse and expand restore the previous width; reload keeps the layout (U
 test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', async ({ page, browserName }) => {
 	// Safari only tabs to buttons with Option+Tab
 	const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+	// the outline parses 200 ms after the document syncs
+	await expect(page.getByRole('navigation', { name: 'File outline' }).getByRole('button')).toHaveText(['Introduction']);
 	await page.locator('header').click();
 	const seen = new Set<string>();
-	for (let i = 0; i < 20; i++) {
+	for (let i = 0; i < 30; i++) {
 		await page.keyboard.press(tab);
 		const info = await page.evaluate(() => {
 			const el = document.activeElement as HTMLElement;
@@ -135,6 +137,7 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 	}
 	for (const name of [
 		'treeitem:main.tex',
+		'button:Introduction',
 		'separator:Resize file tree and outline',
 		'separator:Resize sidebar',
 		'separator:Resize PDF',
