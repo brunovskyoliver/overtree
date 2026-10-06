@@ -46,8 +46,22 @@
 		// Trackpad pinch zooms around the fingers. Chromium and Firefox send it as a wheel event with ctrlKey,
 		// Safari as gesture* events (scale relative to the gesture start). drawingDelay keeps re-rendering off
 		// the hot path while the fingers move.
-		const pinch = (factor: number, x: number, y: number) =>
-			v.pagesCount && v.updateScale({ scaleFactor: factor, origin: [x, y], drawingDelay: 200 });
+		// pdf.js rounds every step to 1 %: keep our own unrounded target so many tiny trackpad deltas still add up.
+		// Its own `origin` anchoring drifts vertically (it re-scrolls to the page top first), so pin the spot
+		// under the cursor ourselves: same fraction of the same page before and after the zoom.
+		let wanted = 0;
+		const pinch = (factor: number, x: number, y: number) => {
+			if (!v.pagesCount) return;
+			if (Math.abs(wanted - v.currentScale) > 0.01) wanted = v.currentScale; // zoomed some other way meanwhile
+			wanted = Math.min(Math.max(wanted * factor, 0.1), 25);
+			const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('.page') ?? v.getPageView(v.currentPageNumber - 1)?.div;
+			const before = el?.getBoundingClientRect();
+			v.updateScale({ scaleFactor: wanted / v.currentScale, drawingDelay: 200 });
+			if (!el || !before) return;
+			const after = el.getBoundingClientRect();
+			container.scrollLeft += after.left + ((x - before.left) / before.width) * after.width - x;
+			container.scrollTop += after.top + ((y - before.top) / before.height) * after.height - y;
+		};
 		const onWheel = (e: WheelEvent) => {
 			if (!e.ctrlKey) return;
 			e.preventDefault(); // otherwise the browser zooms the whole page
