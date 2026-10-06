@@ -11,7 +11,14 @@ const viewer = (page: Page) => page.getByTestId('pdf-viewer');
 const pdfPage = (page: Page, n: number) => viewer(page).locator(`.page[data-page-number="${n}"]`);
 const download = (page: Page) => page.locator('a[download]');
 const percent = async (page: Page) => Number((await zoomLevel(page).textContent())!.replace(/\D/g, ''));
-const pageWidth = async (page: Page) => (await pdfPage(page, 1).boundingBox())!.width;
+/** Page 1's box; null while pdf.js re-renders it after a zoom, so ask again. */
+const pageBox = async (page: Page) => {
+	for (;;) {
+		const box = await pdfPage(page, 1).boundingBox();
+		if (box) return box;
+	}
+};
+const pageWidth = async (page: Page) => (await pageBox(page)).width;
 const pane = (page: Page) => viewer(page).evaluate((el) => ({ w: el.clientWidth, h: el.clientHeight }));
 
 /** Compile `content` and wait until the new PDF shows `marker` and has `pages` pages. */
@@ -107,7 +114,7 @@ test('fit width and fit page size against the pane and follow a resize (US4-4)',
 	await zoomTo(page, 'Fit page');
 	await expect
 		.poll(async () => {
-			const box = (await pdfPage(page, 1).boundingBox())!;
+			const box = await pageBox(page);
 			const { w, h } = await pane(page);
 			return box.width <= w && box.height <= h && (h - box.height < 30 || w - box.width < 60);
 		})

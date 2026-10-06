@@ -7,7 +7,22 @@ services:
       - "${OVERTREE_BIND:-127.0.0.1}:${PORT:-3000}:3000"
     volumes:
       - overtree-data:/data
+      # compiles start sibling containers on the host's Docker (research R4)
+      - /var/run/docker.sock:/var/run/docker.sock
+    # group owning the socket; root on Docker Desktop, `stat -c %g /var/run/docker.sock` on Linux
+    group_add: ["${DOCKER_GID:-0}"]
+    environment:
+      TEXLIVE_IMAGE: ${TEXLIVE_IMAGE:-texlive/texlive:latest-medium}
+      COMPILE_TIMEOUT_MS: ${COMPILE_TIMEOUT_MS:-20000}
+      COMPILE_MEMORY: ${COMPILE_MEMORY:-512m}
+      COMPILE_CPUS: ${COMPILE_CPUS:-1}
     restart: unless-stopped
+
+  # pulls the TeX image on `up` so the first compile doesn't pull inside its timeout; exits at once
+  texlive:
+    image: ${TEXLIVE_IMAGE:-texlive/texlive:latest-medium}
+    command: ["true"]
+    restart: "no"
 
 volumes:
   overtree-data:

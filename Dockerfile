@@ -24,6 +24,8 @@ COPY package.json server.ts ./
 COPY --from=build /app/build ./build
 COPY src/lib/server ./src/lib/server
 COPY drizzle ./drizzle
+# static docker CLI: compiles run as sibling containers through the mounted host socket (research R4)
+COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data
