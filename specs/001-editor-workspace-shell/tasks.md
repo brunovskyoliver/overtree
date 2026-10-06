@@ -124,13 +124,13 @@ description: "Task list for feature 001 Editor workspace shell"
 
 ### Tests for User Story 4
 
-- [ ] T031 [P] [US4] Vitest `tests/unit/commands.test.ts`: each command on an `EditorState` with and without a selection gives the exact text, selection and cursor from contracts/ui.md (US4-1 … US4-5), including Figure/Table on a non-empty line starting a new line
-- [ ] T032 [P] [US4] Playwright `tests/e2e/toolbar.spec.ts`: select a word → Bold/Italic/Section/Link via buttons; Figure and Table on an empty line; one Ctrl/Cmd+Z reverts a whole insertion (US4-7); the search button and Ctrl/Cmd+F open the find panel, find highlights matches, and replace-one / replace-all work (US4-6)
+- [X] T031 [P] [US4] Vitest `tests/unit/commands.test.ts`: each command on an `EditorState` with and without a selection gives the exact text, selection and cursor from contracts/ui.md (US4-1 … US4-5), including Figure/Table on a non-empty line starting a new line
+- [X] T032 [P] [US4] Playwright `tests/e2e/toolbar.spec.ts`: select a word → Bold/Italic/Section/Link via buttons; Figure and Table on an empty line; one Ctrl/Cmd+Z reverts a whole insertion (US4-7); the search button and Ctrl/Cmd+F open the find panel, find highlights matches, and replace-one / replace-all work (US4-6)
 
 ### Implementation for User Story 4
 
-- [ ] T033 [P] [US4] Implement `wrap(before, after)`, `bold`, `italic`, `section`, `link`, `figure`, `table` as `(view: EditorView) => boolean` commands in `src/lib/editor/commands.ts`, each a single `view.dispatch`, per contracts/ui.md
-- [ ] T034 [US4] Add Bold, Italic, Section, Link, Figure, Table and Search buttons to `src/lib/components/Toolbar.svelte` (icons, `aria-label`, `title`); before each insertion call `undoManager.stopCapturing()` so it is its own undo step; Search calls `openSearchPanel(view)`; style the CodeMirror search panel for the dark theme in `src/lib/editor/theme.ts`
+- [X] T033 [P] [US4] Implement `wrap(before, after)`, `bold`, `italic`, `section`, `link`, `figure`, `table` as `(view: EditorView) => boolean` commands in `src/lib/editor/commands.ts`, each a single `view.dispatch`, per contracts/ui.md
+- [X] T034 [US4] Add Bold, Italic, Section, Link, Figure, Table and Search buttons to `src/lib/components/Toolbar.svelte` (icons, `aria-label`, `title`); before each insertion call `undoManager.stopCapturing()` so it is its own undo step; Search calls `openSearchPanel(view)`; style the CodeMirror search panel for the dark theme in `src/lib/editor/theme.ts`
 
 **Checkpoint**: US1–US4 tests pass.
 

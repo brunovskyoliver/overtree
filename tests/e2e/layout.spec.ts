@@ -143,6 +143,13 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 		'separator:Resize PDF',
 		'button:Undo',
 		'button:Redo',
+		'button:Bold',
+		'button:Italic',
+		'button:Section',
+		'button:Link',
+		'button:Figure',
+		'button:Table',
+		'button:Search',
 		'button:Collapse sidebar',
 		'button:Collapse PDF'
 	])
