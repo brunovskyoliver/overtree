@@ -6,7 +6,8 @@
 	// Preview of a binary file per contracts/ui.md and research R14.
 	let { file }: { file: FileEntry } = $props();
 
-	const url = $derived(`/api/files/${file.id}/raw`);
+	// updatedAt busts the cache: a replaced upload keeps the id (T034)
+	const url = $derived(`/api/files/${file.id}/raw?v=${file.updatedAt}`);
 	const type = $derived(fileType(file));
 
 	let viewer = $state<ReturnType<typeof PdfViewer>>();
@@ -21,7 +22,7 @@
 	<div class="bar">
 		<span class="name">{file.name}</span>
 		{#if type === 'pdf'}<PdfToolbar {viewer} {page} {pages} {scale} {percent} bind:dark />{/if}
-		<a class="download" href="{url}?download" download={file.name}>Download</a>
+		<a class="download" href="{url}&download" download={file.name}>Download</a>
 	</div>
 	{#if type === 'image'}
 		<div class="image"><img src={url} alt={file.name} /></div>

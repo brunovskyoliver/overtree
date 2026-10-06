@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
 import { openEditor, resetProject, setDoc, text } from './helpers.ts';
@@ -97,9 +99,54 @@ test('closing a tab activates the neighbour; the last one leaves a hint (US2-3)'
 	await expect(outline(page).getByText('No outline for this file.')).toBeVisible();
 });
 
-// Previews need binary files; the multipart upload route arrives with T032 (T040 enables these).
-test.fixme('a PNG and a PDF open previews with Download (US2-4)', async () => {});
-test.fixme('an unknown binary says there is no preview, with Download (US2-5)', async () => {});
+/** Upload a binary file (multipart, T032). Origin like a browser form post. */
+async function upload(page: Page, name: string, bytes: Buffer): Promise<FileEntry> {
+	const res = await page.request.post('/api/files', {
+		headers: { origin: new URL(page.url()).origin },
+		multipart: { file: { name, mimeType: 'application/octet-stream', buffer: bytes }, parentId: '' }
+	});
+	expect(res.status()).toBe(201);
+	return res.json();
+}
+
+// one empty page; pdf.js rebuilds the missing xref table
+const PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n';
+const preview = (page: Page, name: string) => page.getByRole('region', { name: `Preview of ${name}` });
+
+async function downloads(page: Page, name: string, bytes: Buffer) {
+	const [download] = await Promise.all([page.waitForEvent('download'), preview(page, name).getByRole('link', { name: 'Download' }).click()]);
+	expect(download.suggestedFilename()).toBe(name);
+	expect(readFileSync(await download.path())).toEqual(bytes);
+}
+
+test('a PNG and a PDF open previews with Download (US2-4)', async ({ page }) => {
+	const png = readFileSync(fileURLToPath(new URL('../fixtures/projects/multi/figures/dot.png', import.meta.url)));
+	await upload(page, 'dot.png', png);
+	await upload(page, 'doc.pdf', Buffer.from(PDF));
+	await page.reload();
+
+	await row(page, 'dot.png').click();
+	await expect(tab(page, 'dot.png')).toHaveAttribute('aria-selected', 'true');
+	const img = preview(page, 'dot.png').getByRole('img', { name: 'dot.png' });
+	await expect(img).toBeVisible();
+	expect(await img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
+	await expect(page.locator('.cm-editor')).toBeHidden();
+	await expect(page.getByRole('toolbar', { name: 'Formatting' })).toHaveCount(0);
+	await downloads(page, 'dot.png', png);
+
+	await row(page, 'doc.pdf').click();
+	await expect(preview(page, 'doc.pdf').locator('.page[data-page-number="1"] canvas')).toBeVisible({ timeout: 10_000 });
+	await downloads(page, 'doc.pdf', Buffer.from(PDF));
+});
+
+test('an unknown binary says there is no preview, with Download (US2-5)', async ({ page }) => {
+	const bytes = Buffer.from([0, 1, 2, 3, 255]);
+	await upload(page, 'data.bin', bytes);
+	await page.reload();
+	await row(page, 'data.bin').click();
+	await expect(preview(page, 'data.bin').getByText('No preview for this file type.')).toBeVisible();
+	await downloads(page, 'data.bin', bytes);
+});
 
 test('outline follows the active tab; non-.tex files have none (US2-6)', async ({ page }) => {
 	const a = await create(page, 'text', 'a.tex');

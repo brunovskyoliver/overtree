@@ -33,6 +33,9 @@
 	let dropTarget = $state<string | null | undefined>(); // null = root, undefined = no valid target
 	let tree: HTMLUListElement;
 	let confirm: ConfirmDialog;
+	let picker: HTMLInputElement;
+	let zipPicker: HTMLInputElement;
+	let uploadTo: string | null = null;
 
 	const m = new Menu();
 	let menuFor = $state<FileEntry>();
@@ -80,9 +83,12 @@
 		else onopen?.(f.id);
 	}
 
+	/** The folder a file over `f` goes into: the folder itself, a file's folder, or the root (null). */
+	const folderOf = (f: FileEntry | null | undefined) => (!f ? null : f.kind === 'folder' ? f.id : f.parentId);
+
 	// --- inline name input -------------------------------------------------------------------------
 
-	function startNew(kind: 'folder' | 'text', parentId = sel ? (sel.kind === 'folder' ? sel.id : sel.parentId) : null) {
+	function startNew(kind: 'folder' | 'text', parentId = folderOf(sel)) {
 		if (parentId) setExpanded(parentId, true);
 		editing = { id: null, kind, parentId };
 		draft = '';
@@ -189,6 +195,42 @@
 		if (err) flash(err);
 	}
 
+	// --- upload and zip (research R6, R7) ----------------------------------------------------------
+
+	function pick(parentId: string | null) {
+		uploadTo = parentId;
+		picker.click();
+	}
+
+	/** One file after the other, so a name clash asks Replace/Cancel for that file alone. */
+	async function upload(list: File[], parentId: string | null) {
+		if (!list.length) return;
+		if (parentId) setExpanded(parentId, true);
+		const lines = project.queueUploads(list);
+		for (const [i, file] of list.entries()) {
+			const r = await project.send(lines[i], file, parentId);
+			if (r.body.existingId) {
+				const replace = await confirm.ask({ title: `Replace existing file "${file.name}"?`, confirmLabel: 'Replace' });
+				if (replace) await project.send(lines[i], file, parentId, true);
+				else project.dismiss(lines[i]);
+			}
+			await project.load();
+		}
+	}
+
+	async function importZip(file: File) {
+		const n = project.files.filter((f) => f.kind !== 'folder').length;
+		const ok = await confirm.ask({
+			title: `Replace the project with "${file.name}"?`,
+			body: `This removes all ${n} current ${n === 1 ? 'file' : 'files'}.`,
+			confirmLabel: 'Replace project',
+			danger: true
+		});
+		if (!ok) return;
+		const err = await project.importZip(file);
+		if (err) flash(err);
+	}
+
 	// --- keyboard (contracts/ui.md) ----------------------------------------------------------------
 
 	function onkeydown(e: KeyboardEvent) {
@@ -250,14 +292,15 @@
 	/** Where a drop over `f` (null = empty area) would put the dragged entry; undefined when it can't go there. */
 	function targetFor(f: FileEntry | null): string | null | undefined {
 		const d = byId(dragging);
-		const t = f === null ? null : f.kind === 'folder' ? f.id : f.parentId;
+		const t = folderOf(f);
 		if (!d || d.parentId === t || (t !== null && within(t, d.id))) return undefined;
 		return t;
 	}
 
 	function ondragover(e: DragEvent, f: FileEntry | null) {
 		e.stopPropagation();
-		dropTarget = targetFor(f);
+		// files from the desktop can go into any folder
+		dropTarget = !dragging && e.dataTransfer?.types.includes('Files') ? folderOf(f) : targetFor(f);
 		if (dropTarget !== undefined) e.preventDefault();
 	}
 
@@ -267,7 +310,14 @@
 		const target = dropTarget;
 		dragging = null;
 		dropTarget = undefined;
-		if (!id || target === undefined) return;
+		if (target === undefined) return;
+		if (!id) {
+			// from the desktop; a dropped folder is an entry that is a directory, skipped (read before any await)
+			const files = [...e.dataTransfer!.items]
+				.filter((i) => i.kind === 'file' && !i.webkitGetAsEntry()?.isDirectory)
+				.flatMap((i) => i.getAsFile() ?? []);
+			return upload(files, target);
+		}
 		const err = await project.move(id, target);
 		if (err) return flash(err);
 		if (target) setExpanded(target, true);
@@ -390,8 +440,53 @@
 		<button type="button" class="tool" aria-label="New folder" title="New folder" onclick={() => startNew('folder')}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3zM12 11v6M9 14h6" /></svg>
 		</button>
+		<button type="button" class="tool" aria-label="Upload" title="Upload" onclick={() => pick(folderOf(sel))}>
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" /></svg>
+		</button>
+		<a class="tool" href="/api/project/zip" download="project.zip" aria-label="Download project as zip" title="Download project as zip">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16" /></svg>
+		</a>
+		<button type="button" class="tool" aria-label="New project from zip" title="New project from zip" onclick={() => zipPicker.click()}>
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h10l6 6v10H4zM14 4v6h6M10 9v2M10 13v2M10 17v2" /></svg>
+		</button>
+		<input
+			type="file"
+			multiple
+			hidden
+			bind:this={picker}
+			onchange={() => {
+				upload([...picker.files!], uploadTo);
+				picker.value = '';
+			}}
+		/>
+		<input
+			type="file"
+			accept=".zip,application/zip"
+			hidden
+			bind:this={zipPicker}
+			onchange={() => {
+				const file = zipPicker.files![0];
+				zipPicker.value = '';
+				if (file) importZip(file);
+			}}
+		/>
 	</div>
 	{#if notice}<p class="error notice" role="alert">{notice}</p>{/if}
+	{#if project.uploads.length}
+		<ul class="uploads" aria-label="Uploads">
+			{#each project.uploads as u (u.id)}
+				<li>
+					<span class="name">{u.name}</span>
+					{#if u.error}
+						<button type="button" class="dismiss" aria-label="Dismiss {u.name}" onclick={() => project.dismiss(u)}>×</button>
+						<span class="error" role="alert">{u.error}</span>
+					{:else}
+						<progress max={u.total || 1} value={u.loaded} aria-label="Uploading {u.name}"></progress>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+	{/if}
 	<ul
 		role="tree"
 		aria-labelledby="file-tree-title"
@@ -424,6 +519,7 @@
 		{#if f.kind === 'folder'}
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('text', f.id))}>New file here</button>
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('folder', f.id))}>New folder here</button>
+			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => pick(f.id), true)}>Upload here</button>
 		{/if}
 		<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startRename(f))}>Rename</button>
 		{#if f.kind !== 'folder'}
@@ -559,6 +655,34 @@
 	}
 	.notice {
 		margin: 0 8px 6px;
+	}
+	.uploads {
+		padding: 0 10px 6px;
+	}
+	.uploads li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 2px 8px;
+		font-size: 12px;
+	}
+	.uploads progress {
+		flex: 1 0 100%;
+		height: 6px;
+		accent-color: var(--accent-bright);
+	}
+	.uploads .error {
+		flex: 1 0 100%;
+		margin: 0 0 4px;
+	}
+	.dismiss {
+		margin-left: auto;
+		padding: 0 4px;
+		border: 0;
+		background: none;
+		color: var(--text-muted);
+		font-size: 14px;
+		cursor: pointer;
 	}
 	svg {
 		flex: none;

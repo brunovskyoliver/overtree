@@ -28,7 +28,7 @@ const fail = (status: number, message: string): never => {
 
 // the db or a transaction: both query the same way
 type Tx = Pick<Db, 'select' | 'insert' | 'update' | 'delete'>;
-type Row = typeof files.$inferSelect;
+export type Row = typeof files.$inferSelect;
 
 const db = () => getServer().db;
 
@@ -224,6 +224,32 @@ export async function setText(id: string, text: string) {
 	}
 }
 
+/** A whole text as one Yjs update, for a document no one has open yet. */
+function textUpdate(text: string) {
+	const doc = new Y.Doc();
+	doc.getText('content').insert(0, text);
+	return Buffer.from(Y.encodeStateAsUpdate(doc));
+}
+
+/** Zip import (research R7): every file and Yjs doc swapped for `rows` in one transaction, so a failure changes
+ *  nothing. `texts` holds the content of the new text files (fresh ids: stored updates, nobody has them open).
+ *  Parents must come before their children in `rows`. */
+export function replaceProject(rows: Row[], texts: Map<string, string>, mainFileId: string | null) {
+	const old = db().transaction((tx) => {
+		const text = tx.select({ id: files.id }).from(files).where(eq(files.kind, 'text')).all().map((r) => r.id);
+		tx.delete(files).run(); // one statement: the parent FK is checked at its end
+		tx.delete(documents).run();
+		tx.delete(updates).run();
+		const now = Date.now();
+		for (const row of rows) tx.insert(files).values(row).run();
+		for (const [docName, t] of texts) tx.insert(updates).values({ docName, update: textUpdate(t), createdAt: now }).run();
+		writeMain(tx, mainFileId);
+		return text;
+	});
+	// like deleteEntry: open editors of the old files get kicked
+	for (const t of old) getServer().hocuspocus.closeConnections(t);
+}
+
 /** First start, or a 001/002 data dir: create `main.tex` as the main document (research R2). Runs once: the
  *  `project` row marks it done, so a project the user emptied stays empty. */
 export function ensureProject() {
@@ -236,12 +262,8 @@ export function ensureProject() {
 		const moved =
 			tx.update(documents).set({ name: id }).where(eq(documents.name, 'main.tex')).run().changes +
 			tx.update(updates).set({ docName: id }).where(eq(updates.docName, 'main.tex')).run().changes;
-		if (!moved) {
-			// the seed as one stored update, like 001 did in onLoadDocument; synchronous, so no client sees an empty doc
-			const doc = new Y.Doc();
-			doc.getText('content').insert(0, SEED);
-			tx.insert(updates).values({ docName: id, update: Buffer.from(Y.encodeStateAsUpdate(doc)), createdAt: now }).run();
-		}
+		// the seed as one stored update, like 001 did in onLoadDocument; synchronous, so no client sees an empty doc
+		if (!moved) tx.insert(updates).values({ docName: id, update: textUpdate(SEED), createdAt: now }).run();
 		writeMain(tx, id);
 	});
 }

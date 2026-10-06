@@ -16,7 +16,8 @@ import {
 	listFiles,
 	renameOrMove,
 	setMainFile,
-	setText
+	setText,
+	uploadFile
 } from '../../src/lib/server/files.ts';
 import { documents, updates } from '../../src/lib/server/schema.ts';
 
@@ -205,5 +206,32 @@ describe('file service', () => {
 		await start(dir);
 		expect(listFiles()).toEqual([]);
 		expect(getMainFileId()).toBeNull();
+	});
+
+	it('uploads: 409 with existingId, replace keeps the id, kind change refused, size limit', async () => {
+		await start();
+		const bytes = (s: string) => new TextEncoder().encode(s);
+		/** The FileError an async call rejects with. */
+		const rejected = (p: Promise<unknown>) => p.then(() => expect.fail('expected a FileError'), (e) => e as { status: number; existingId?: string });
+
+		const bib = await uploadFile(null, 'refs.bib', bytes('@book{a}'), false);
+		expect(bib).toMatchObject({ replaced: false, entry: { kind: 'text', name: 'refs.bib' } });
+		expect(await rejected(uploadFile(null, 'REFS.bib', bytes('x'), false))).toMatchObject({ status: 409, existingId: bib.entry.id });
+		const again = await uploadFile(null, 'refs.bib', bytes('@book{b}'), true);
+		expect(again).toMatchObject({ replaced: true, entry: { id: bib.entry.id } });
+		expect(await getText(bib.entry.id)).toBe('@book{b}');
+
+		const png = await uploadFile(null, 'dot.png', new Uint8Array([1, 2, 3]), false);
+		const png2 = await uploadFile(null, 'dot.png', new Uint8Array([4, 5, 6, 7]), true);
+		expect(png2.entry).toMatchObject({ id: png.entry.id, kind: 'binary', size: 4 });
+
+		// a non-UTF-8 .bib is binary, so it can't replace the text one
+		expect((await rejected(uploadFile(null, 'refs.bib', new Uint8Array([0xff, 0xfe]), true))).status).toBe(409);
+		expect(await getText(bib.entry.id)).toBe('@book{b}');
+
+		process.env.UPLOAD_MAX_FILE_MB = '1';
+		cleanup.push(() => delete process.env.UPLOAD_MAX_FILE_MB);
+		expect((await rejected(uploadFile(null, 'big.png', new Uint8Array(1024 * 1024 + 1), false))).status).toBe(413);
+		expect(names()).toEqual(['dot.png', 'main.tex', 'refs.bib']);
 	});
 });

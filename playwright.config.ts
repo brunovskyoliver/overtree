@@ -28,7 +28,9 @@ export default defineConfig({
 			PORT: String(PORT),
 			DATA_DIR,
 			PUBLIC_TEST_HOOKS: '1',
-			COMPILE_TIMEOUT_MS: '5000'
+			COMPILE_TIMEOUT_MS: '5000',
+			// upload.spec refuses a file just over this; no other spec uploads more than a few KB
+			UPLOAD_MAX_FILE_MB: '1'
 		}
 	}
 });

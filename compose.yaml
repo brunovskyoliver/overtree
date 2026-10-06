@@ -16,6 +16,9 @@ services:
       COMPILE_TIMEOUT_MS: ${COMPILE_TIMEOUT_MS:-20000}
       COMPILE_MEMORY: ${COMPILE_MEMORY:-512m}
       COMPILE_CPUS: ${COMPILE_CPUS:-1}
+      UPLOAD_MAX_FILE_MB: ${UPLOAD_MAX_FILE_MB:-50}
+      IMPORT_MAX_MB: ${IMPORT_MAX_MB:-200}
+      PROJECT_MAX_FILES: ${PROJECT_MAX_FILES:-2000}
     restart: unless-stopped
 
   # pulls the TeX image on `up` so the first compile doesn't pull inside its timeout; exits at once

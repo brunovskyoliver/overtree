@@ -9,7 +9,8 @@ const pageInput = (page: Page) => page.getByRole('textbox', { name: 'Page number
 const zoomLevel = (page: Page) => page.getByRole('button', { name: /^Zoom level/ });
 const viewer = (page: Page) => page.getByTestId('pdf-viewer');
 const pdfPage = (page: Page, n: number) => viewer(page).locator(`.page[data-page-number="${n}"]`);
-const download = (page: Page) => page.locator('a[download]');
+// by label: without an href the PDF's download anchor has no link role
+const download = (page: Page) => page.getByLabel('Download PDF');
 const percent = async (page: Page) => Number((await zoomLevel(page).textContent())!.replace(/\D/g, ''));
 /** Page 1's box; null while pdf.js re-renders it after a zoom, so ask again. */
 const pageBox = async (page: Page) => {

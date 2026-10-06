@@ -2,6 +2,10 @@ import { pathOf, sortEntries, type FileEntry, type FileKind, type ProjectInfo } 
 
 const TABS = 'overtree:tabs';
 
+/** One line of the upload progress list (contracts/ui.md). */
+export type Upload = { id: number; name: string; loaded: number; total: number; error?: string };
+let uploadIds = 0;
+
 // Client view of the project tree and the open tabs. Each operation calls the API and reloads the whole list
 // on success (research R10: no live tree sync until 006); failures return the server's message for the UI.
 export class Project {
@@ -10,6 +14,7 @@ export class Project {
 	/** ids of the files open in tabs, in tab order */
 	open = $state<string[]>([]);
 	active = $state<string | null>(null);
+	uploads = $state<Upload[]>([]);
 	#restored = false;
 
 	async load() {
@@ -91,12 +96,65 @@ export class Project {
 		return this.#call('/api/project', 'PUT', { mainFileId: id });
 	}
 
+	/** Adds a waiting line per file to the progress list, in the order they will go. */
+	queueUploads(files: File[]) {
+		return files.map((f) => {
+			this.uploads.push({ id: ++uploadIds, name: f.name, loaded: 0, total: f.size });
+			return this.uploads.at(-1)!; // the reactive proxy: progress set on it shows
+		});
+	}
+
+	/** Upload one file (research R6) as one XMLHttpRequest, because fetch has no upload progress. Resolves with the
+	 *  status and the JSON body; the line is removed on success and keeps the error otherwise, except for a name
+	 *  clash (409 with `existingId`: the caller asks Replace/Cancel and calls again or `dismiss`es). */
+	send(line: Upload, file: File, parentId: string | null, replace = false): Promise<{ status: number; body: { message?: string; existingId?: string } }> {
+		const form = new FormData();
+		form.append('file', file);
+		form.append('parentId', parentId ?? '');
+		if (replace) form.append('replace', '1');
+		return new Promise((resolve) => {
+			const xhr = new XMLHttpRequest();
+			xhr.open('POST', '/api/files');
+			xhr.upload.onprogress = (e) => {
+				line.loaded = e.loaded;
+				line.total = e.total;
+			};
+			xhr.onloadend = () => {
+				let body: { message?: string; existingId?: string } = {};
+				try {
+					body = JSON.parse(xhr.responseText);
+				} catch {
+					// not JSON: an error page from the proxy or adapter
+				}
+				const status = xhr.status;
+				if (status >= 200 && status < 300) this.dismiss(line);
+				else if (!body.existingId) line.error = body.message ?? (status ? `Upload failed (${status}).` : 'Network error, try again.');
+				resolve({ status, body });
+			};
+			xhr.send(form);
+		});
+	}
+
+	dismiss(line: Upload) {
+		this.uploads = this.uploads.filter((u) => u.id !== line.id);
+	}
+
+	/** Replace the whole project with a zip (contracts/files-api.md); the old tabs close, the new main opens. */
+	async importZip(file: File) {
+		const form = new FormData();
+		form.append('file', file);
+		const err = await this.#call('/api/project/zip', 'POST', form);
+		if (!err && this.mainFileId) this.openFile(this.mainFileId);
+		return err;
+	}
+
 	/** null on success, otherwise the message to show. */
 	async #call(url: string, method: string, body?: object): Promise<string | null> {
+		const form = body instanceof FormData;
 		const res = await fetch(url, {
 			method,
-			headers: body && { 'Content-Type': 'application/json' },
-			body: body && JSON.stringify(body)
+			headers: body && !form ? { 'Content-Type': 'application/json' } : undefined,
+			body: form ? body : body && JSON.stringify(body)
 		}).catch(() => undefined);
 		if (!res) return 'Network error, try again.';
 		if (!res.ok) return (await res.json().catch(() => null))?.message ?? `Request failed (${res.status}).`;
