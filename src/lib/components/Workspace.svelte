@@ -3,6 +3,7 @@
 	import type { Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
+	import type { Project } from '#lib/project.svelte.ts';
 	import FileTree from './FileTree.svelte';
 	import PdfPane from './PdfPane.svelte';
 
@@ -11,8 +12,19 @@
 		children,
 		outline,
 		compile,
-		editor
-	}: { children: Snippet; outline: Snippet; compile: CompileState; editor?: EditorHandle } = $props();
+		editor,
+		project,
+		activeId,
+		onopen
+	}: {
+		children: Snippet;
+		outline: Snippet;
+		compile: CompileState;
+		editor?: EditorHandle;
+		project: Project;
+		activeId?: string | null;
+		onopen?: (id: string) => void;
+	} = $props();
 
 	let sidebar = $state<Pane>();
 	let pdf = $state<Pane>();
@@ -37,7 +49,7 @@
 		<!-- inert while collapsed so Tab skips the zero-width tree, divider and outline (FR-016) -->
 		<PaneGroup direction="vertical" autoSaveId="overtree:layout:sidebar" class="sidebar" inert={!sidebarOpen}>
 			<Pane id="tree" defaultSize={50} minSize={15}>
-				<FileTree />
+				<FileTree {project} {activeId} {onopen} />
 			</Pane>
 			<PaneResizer class="handle handle-h" aria-label="Resize file tree and outline" />
 			<Pane id="outline" minSize={15}>

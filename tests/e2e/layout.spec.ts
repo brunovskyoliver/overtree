@@ -150,7 +150,9 @@ async function tabThrough(page: Page, browserName: string) {
 		const info = await page.evaluate(() => {
 			const el = document.activeElement as HTMLElement;
 			const name = el.getAttribute('aria-label') ?? el.textContent!.trim();
-			return { name: `${el.getAttribute('role') ?? el.tagName.toLowerCase()}:${name}`, outline: getComputedStyle(el).outlineStyle };
+			// a tree item rings its row, not the whole item with an open folder's children
+			const ringed = el.getAttribute('role') === 'treeitem' ? el.querySelector('.row')! : el;
+			return { name: `${el.getAttribute('role') ?? el.tagName.toLowerCase()}:${name}`, outline: getComputedStyle(ringed).outlineStyle };
 		});
 		if (info.name.startsWith('body:')) continue; // focus left the page
 		if (info.name.startsWith('textbox:')) continue; // CodeMirror content, ringed by its own theme
@@ -165,7 +167,9 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 	await expect(page.getByRole('navigation', { name: 'File outline' }).getByRole('button')).toHaveText(['Introduction']);
 	const seen = await tabThrough(page, browserName);
 	for (const name of [
-		'treeitem:main.tex',
+		'button:New file',
+		'button:New folder',
+		'treeitem:main.tex, main document',
 		'button:Introduction',
 		'separator:Resize file tree and outline',
 		'separator:Resize sidebar',
@@ -191,7 +195,7 @@ test('Tab skips a collapsed sidebar (US2-8, FR-016)', async ({ page, browserName
 	await expect.poll(() => width(pane(page, 'sidebar'))).toBe(0);
 	const seen = await tabThrough(page, browserName);
 	expect(seen).toContain('button:Expand sidebar');
-	for (const name of ['treeitem:main.tex', 'button:Introduction', 'separator:Resize file tree and outline'])
+	for (const name of ['treeitem:main.tex, main document', 'button:Introduction', 'separator:Resize file tree and outline'])
 		expect(seen).not.toContain(name);
 });
 

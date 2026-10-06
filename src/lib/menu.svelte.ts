@@ -4,7 +4,7 @@ import { tick } from 'svelte';
 export class Menu {
 	open = $state(false);
 	root?: HTMLElement;
-	toggle?: HTMLButtonElement;
+	toggle?: HTMLElement; // gets focus back on close
 	menu?: HTMLElement;
 
 	#items = () => [...this.menu!.querySelectorAll<HTMLElement>('[role^="menuitem"]')];

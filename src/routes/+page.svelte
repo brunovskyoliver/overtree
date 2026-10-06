@@ -12,7 +12,11 @@
 
 	const project = new Project();
 	project.load();
-	const mainFile = $derived(project.files.find((f) => f.id === project.mainFileId));
+	// the file in the editor: the one opened from the tree, else the main document (tabs come with US2)
+	let openId = $state<string | null>(null);
+	const shown = $derived(
+		project.files.find((f) => f.id === openId && f.kind === 'text') ?? project.files.find((f) => f.id === project.mainFileId)
+	);
 
 	let editor = $state<EditorHandle>();
 	const compile = new CompileState(() => editor?.provider);
@@ -29,11 +33,11 @@
 		<span class="project">{PROJECT_NAME}</span>
 	</header>
 	<main>
-		<Workspace {compile} {editor}>
-			{#if mainFile}
-				{#key mainFile.id}
+		<Workspace {compile} {editor} {project} activeId={shown?.id} onopen={(id) => (openId = id)}>
+			{#if shown}
+				{#key shown.id}
 					<Editor
-						file={mainFile}
+						file={shown}
 						bind:editor
 						onLocalEdit={() => compile.onLocalEdit()}
 						onCompile={() => compile.compile()}
