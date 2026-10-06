@@ -5,7 +5,7 @@ const recompile = (page: Page) => page.getByRole('button', { name: 'Recompile' }
 const logsButton = (page: Page) => page.getByRole('button', { name: 'Logs', exact: true });
 const logs = (page: Page) => page.getByRole('region', { name: 'Logs' });
 const section = (page: Page, name: string) => logs(page).getByRole('region', { name });
-const badge = (page: Page) => recompile(page).getByRole('img', { name: /errors$/ });
+const badge = (page: Page) => recompile(page).getByRole('img', { name: /errors?$/ });
 const firstPage = (page: Page) => page.getByTestId('pdf-viewer').locator('.page').first();
 const cursorLine = (page: Page) =>
 	page.evaluate(() => {
@@ -33,7 +33,7 @@ test.afterEach(async ({ page }) => {
 test('an undefined command shows a badge and an entry that jumps to its line (US2-1, US2-2)', async ({ page }) => {
 	await openEditor(page);
 	await compileDoc(page, UNDEFINED_12);
-	await expect(badge(page)).toHaveAccessibleName('1 errors');
+	await expect(badge(page)).toHaveAccessibleName('1 error');
 	await expect(badge(page)).toHaveText('1');
 
 	await logsButton(page).click();

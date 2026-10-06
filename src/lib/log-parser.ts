@@ -23,6 +23,8 @@ export function parseLog(log: string): LogEntry[] {
 
 		if ((m = raw.match(FILE_LINE))) {
 			lineless = undefined;
+			// -halt-on-error's closing line, not an error of its own
+			if (m[3].trim().startsWith('==> Fatal error occurred')) continue;
 			entries.push({ level: 'error', file: m[1].replace(/^\.\//, ''), line: Number(m[2]), message: m[3].trim(), raw });
 		} else if ((m = raw.match(BANG))) {
 			const message = m[1].trim();

@@ -25,7 +25,7 @@
 	</header>
 	<main>
 		<Workspace {compile} {editor}>
-			<Editor bind:editor />
+			<Editor bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
 			{#snippet outline()}
 				<Outline {editor} />
 			{/snippet}

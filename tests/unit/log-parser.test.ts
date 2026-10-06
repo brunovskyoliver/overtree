@@ -34,6 +34,12 @@ describe('parseLog', () => {
 		expect(entries).toEqual([{ level: 'error', message: 'LaTeX Error: Something.', line: 12, raw: '! LaTeX Error: Something.' }]);
 	});
 
+	it('skips the -halt-on-error closing line', () => {
+		const entries = parseLog('./main.tex:12: Undefined control sequence.\n./main.tex:12:  ==> Fatal error occurred, no output PDF file produced!\n');
+		expect(entries).toHaveLength(1);
+		expect(entries[0].message).toBe('Undefined control sequence.');
+	});
+
 	it('drops a `!` error already reported in file:line form', () => {
 		const entries = parseLog('./main.tex:3: Undefined control sequence.\nl.3 \\foo\n! Undefined control sequence.\nl.3 \\foo\n');
 		expect(entries).toHaveLength(1);

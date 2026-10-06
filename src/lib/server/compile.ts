@@ -128,6 +128,14 @@ export function getCompiler(): Compiler {
 	return row?.compiler ?? 'pdflatex';
 }
 
+export function setCompiler(compiler: Compiler) {
+	getServer()
+		.db.insert(compileSettings)
+		.values({ project: 'main', compiler })
+		.onConflictDoUpdate({ target: compileSettings.project, set: { compiler } })
+		.run();
+}
+
 export function getLastResult(): CompileResult | null {
 	try {
 		return JSON.parse(readFileSync(join(compileDir(), 'result.json'), 'utf8'));

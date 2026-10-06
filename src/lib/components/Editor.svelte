@@ -20,13 +20,23 @@
 	import { HocuspocusProvider } from '@hocuspocus/provider';
 	import { onMount } from 'svelte';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
-	import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
+	import { yCollab, ySyncAnnotation, yUndoManagerKeymap } from 'y-codemirror.next';
 	import * as Y from 'yjs';
 	import { editorTheme } from '#lib/editor/theme.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import Toolbar from './Toolbar.svelte';
 
-	let { editor = $bindable() }: { editor?: EditorHandle } = $props();
+	let {
+		editor = $bindable(),
+		onLocalEdit,
+		onCompile
+	}: { editor?: EditorHandle; onLocalEdit?: () => void; onCompile?: () => void } = $props();
+
+	// returning true makes CodeMirror preventDefault, so Mod-s doesn't open the browser's save dialog
+	const compileKey = () => {
+		onCompile?.();
+		return true;
+	};
 
 	const STATUS_TEXT = { connecting: 'Connecting…', connected: 'Saved', disconnected: 'Offline' };
 	let status = $state(STATUS_TEXT.connecting);
@@ -63,6 +73,11 @@
 				crosshairCursor(),
 				highlightActiveLine(),
 				highlightSelectionMatches(),
+				// before defaultKeymap, which binds Mod-Enter to insertBlankLine
+				keymap.of([
+					{ key: 'Mod-Enter', run: compileKey },
+					{ key: 'Mod-s', run: compileKey }
+				]),
 				keymap.of([
 					...yUndoManagerKeymap,
 					...closeBracketsKeymap,
@@ -74,7 +89,11 @@
 				StreamLanguage.define(stex),
 				editorTheme,
 				EditorView.lineWrapping,
-				yCollab(ytext, provider.awareness, { undoManager })
+				yCollab(ytext, provider.awareness, { undoManager }),
+				// remote Yjs changes carry ySyncAnnotation and don't count as the user's typing
+				EditorView.updateListener.of((u) => {
+					if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ySyncAnnotation))) onLocalEdit?.();
+				})
 			]
 		});
 		view.focus();
