@@ -22,5 +22,6 @@ Updated: 2026-10-06T12:45:00+02:00
 - 2026-10-06 implement phase 3 US1 (08fe91e): T013-T020 [X] (T015 covered by existing collab restart test); verified pnpm check 0 errors, pnpm test 5/5, pnpm test:e2e 18/18 (6 each chromium/firefox/webkit). EditorHandle {view, undoManager, provider} via bindable `editor` prop; test hooks via src/env.ts + $app/env/public.
 - 2026-10-06 implement phase 4 US2: T021-T025 [X]; pnpm check 0 errors, pnpm test 5/5, pnpm test:e2e 33/33 (11 each chromium/firefox/webkit). Notes: paneforge 1.0.2 autoSaveId restores collapsed panes on reload (stored as `paneforge:overtree:layout:main|sidebar`, 100 ms debounced write); collapse buttons live in the editor pane edges (not inside the separator, which would start a drag); outline body is a snippet `outline` on Workspace, placeholder in +page.svelte; the Tab test does not cover outline entries yet (phase 5 adds them).
 - 2026-10-06 implement phase 4 US2 (c51b5eb): T021-T025 [X]; verified check 0 errors, unit 5/5, e2e 33/33 (11 per browser); screenshot matches reference layout. paneforge autoSaveId keys are prefixed `paneforge:`.
+- 2026-10-06 implement phase 5 US3 (7c93411) + phase 6 US4 (737e41e): T026-T034 [X]; verified check 0 errors, unit 16/16, e2e 60/60 (20 per browser). Visual nit: left collapse tab overlaps editor gutter, fix in polish.
 
 ## Report

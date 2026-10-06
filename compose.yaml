@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    image: overtree
+    ports:
+      # loopback only unless OVERTREE_BIND=0.0.0.0 (no login yet)
+      - "${OVERTREE_BIND:-127.0.0.1}:${PORT:-3000}:3000"
+    volumes:
+      - overtree-data:/data
+    restart: unless-stopped
+
+volumes:
+  overtree-data:

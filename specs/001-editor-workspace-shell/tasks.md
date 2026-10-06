@@ -142,9 +142,9 @@ description: "Task list for feature 001 Editor workspace shell"
 
 **Independent Test**: compose up, type, down/up, text kept.
 
-- [ ] T035 [P] [US5] `Dockerfile` (multi-stage `node:24-bookworm-slim`, pnpm via corepack; builder: `pnpm install --frozen-lockfile && pnpm build`; runtime: prod deps, `build/`, `server.ts`, `src/lib/server/`, `drizzle/`; `ENV DATA_DIR=/data PORT=3000 HOST=0.0.0.0`; `CMD ["node","server.ts"]`) and `.dockerignore`
-- [ ] T036 [P] [US5] `compose.yaml`: one `app` service, `ports: ["${OVERTREE_BIND:-127.0.0.1}:${PORT:-3000}:3000"]`, named volume `overtree-data:/data`, `restart: unless-stopped` (FR-017)
-- [ ] T037 [US5] Smoke script `scripts/compose-smoke.sh`: `docker compose up -d --build`, wait for HTTP 200 on `127.0.0.1:${PORT:-3000}`, write text through a Node provider client, `docker compose down` then `up -d`, read the text back, check that the port isn't published on `0.0.0.0`; run it once and record the result (US5-1, US5-2, SC-006)
+- [X] T035 [P] [US5] `Dockerfile` (multi-stage `node:24-bookworm-slim`, pnpm via corepack; builder: `pnpm install --frozen-lockfile && pnpm build`; runtime: prod deps, `build/`, `server.ts`, `src/lib/server/`, `drizzle/`; `ENV DATA_DIR=/data PORT=3000 HOST=0.0.0.0`; `CMD ["node","server.ts"]`) and `.dockerignore`
+- [X] T036 [P] [US5] `compose.yaml`: one `app` service, `ports: ["${OVERTREE_BIND:-127.0.0.1}:${PORT:-3000}:3000"]`, named volume `overtree-data:/data`, `restart: unless-stopped` (FR-017)
+- [X] T037 [US5] Smoke script `scripts/compose-smoke.sh`: `docker compose up -d --build`, wait for HTTP 200 on `127.0.0.1:${PORT:-3000}`, write text through a Node provider client, `docker compose down` then `up -d`, read the text back, check that the port isn't published on `0.0.0.0`; run it once and record the result (US5-1, US5-2, SC-006)
 
 **Checkpoint**: all stories work.
 
