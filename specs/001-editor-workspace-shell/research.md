@@ -20,6 +20,7 @@
 ## R4. Editor
 - **Decision**: `codemirror` meta-package (`basicSetup` gives line numbers, bracket matching, search panel, history keymap) minus `history()`, because `yUndoManagerKeymap` replaces it. LaTeX via `StreamLanguage.define(stex)` from `@codemirror/legacy-modes/mode/stex`. `yCollab(ytext, provider.awareness, { undoManager })`. Toolbar undo/redo call `undoManager.undo()/redo()`. Search button calls `openSearchPanel(view)`.
 - **Rationale**: official packages. stex covers commands, braces, comments and math. `codemirror-lang-latex` is third-party and its extras (autocomplete) belong to feature 004.
+- **Line wrapping**: `EditorView.lineWrapping` is on, as in Overleaf's editor; LaTeX paragraphs are long lines.
 - **Note**: toolbar insertions use one `view.dispatch` each, so `Y.UndoManager` records them as one step (captureTimeout merges fast edits; call `undoManager.stopCapturing()` before the dispatch).
 
 ## R5. Panes

@@ -21,6 +21,14 @@ describe('parseOutline', () => {
 		expect(parseOutline(text).map((e) => e.title)).toEqual(['Preface', 'Long title', 'The best way']);
 	});
 
+	it('skips headings after an escaped backslash and keeps bare commands as text', () => {
+		const text = 'a\\\\section{Not a heading}\n\\section{The \\LaTeX{} and \\TeX way}\nb\\\\\\\\\\section{Real}';
+		expect(parseOutline(text)).toEqual([
+			{ level: 1, title: 'The LaTeX and TeX way', line: 2 },
+			{ level: 1, title: 'Real', line: 3 }
+		]);
+	});
+
 	it('returns [] for empty text', () => {
 		expect(parseOutline('')).toEqual([]);
 	});

@@ -23,9 +23,10 @@ function braced(line: string, start: number) {
 	return line.slice(start);
 }
 
-/** `The \emph{best} way` → `The best way`. */
+/** `The \emph{best} \LaTeX{} way` → `The best LaTeX way`: commands with an argument drop their name, bare ones keep it. */
 const plain = (tex: string) =>
 	tex
+		.replace(/\\([a-zA-Z]+)\*?(?:\{\})?(?![a-zA-Z*{])/g, '$1')
 		.replace(/\\[a-zA-Z]+\*?/g, '')
 		.replace(/\\(.)/g, '$1')
 		.replace(/[{}]/g, '')
@@ -41,6 +42,10 @@ export function parseOutline(text: string): OutlineEntry[] {
 		if (!line.includes('section')) continue;
 		const code = stripComment(line);
 		for (const m of code.matchAll(HEADING)) {
+			// `a\\section{X}` is a line break then text: skip after an odd run of backslashes
+			let slashes = 0;
+			while (code[m.index - 1 - slashes] === '\\') slashes++;
+			if (slashes % 2) continue;
 			const level = (m[1].length / 3 + 1) as 1 | 2 | 3;
 			entries.push({ level, title: plain(braced(code, m.index + m[0].length)), line: n + 1 });
 		}

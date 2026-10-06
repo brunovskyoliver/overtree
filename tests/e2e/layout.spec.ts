@@ -114,13 +114,34 @@ test('collapse and expand restore the previous width; reload keeps the layout (U
 	expect(await width(sidebar)).toBeCloseTo(s0, 0);
 	await page.getByRole('button', { name: 'Expand PDF' }).click();
 	await expect.poll(() => width(pdf)).toBeCloseTo(p0, 0);
+
+	// the tree/outline split and a collapsed sidebar survive a reload too
+	const tree = pane(page, 'tree');
+	const t0 = await height(tree);
+	await drag(page, page.getByRole('separator', { name: 'Resize file tree and outline' }), 0, -100);
+	const t1 = await height(tree);
+	expect(t1).toBeLessThan(t0 - 80);
+	await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+	await expect.poll(() => width(sidebar)).toBe(0);
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem('paneforge:overtree:layout:main')))
+		.toContain('[0,');
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem('paneforge:overtree:layout:sidebar')))
+		.toBeTruthy();
+	await page.reload();
+	await openEditor(page);
+	await expect.poll(() => width(sidebar)).toBe(0);
+	await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveAttribute('aria-expanded', 'false');
+	await page.getByRole('button', { name: 'Expand sidebar' }).click();
+	await expect.poll(() => width(sidebar)).toBeCloseTo(s0, 0);
+	expect(await height(tree)).toBeCloseTo(t1, 0);
 });
 
-test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', async ({ page, browserName }) => {
+/** Tab 30 times from the header; returns `role:name` of every focused control, each checked for a focus ring. */
+async function tabThrough(page: Page, browserName: string) {
 	// Safari only tabs to buttons with Option+Tab
 	const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
-	// the outline parses 200 ms after the document syncs
-	await expect(page.getByRole('navigation', { name: 'File outline' }).getByRole('button')).toHaveText(['Introduction']);
 	await page.locator('header').click();
 	const seen = new Set<string>();
 	for (let i = 0; i < 30; i++) {
@@ -135,6 +156,13 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 		expect(info.outline, info.name).not.toBe('none');
 		seen.add(info.name);
 	}
+	return [...seen];
+}
+
+test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', async ({ page, browserName }) => {
+	// the outline parses 200 ms after the document syncs
+	await expect(page.getByRole('navigation', { name: 'File outline' }).getByRole('button')).toHaveText(['Introduction']);
+	const seen = await tabThrough(page, browserName);
 	for (const name of [
 		'treeitem:main.tex',
 		'button:Introduction',
@@ -153,7 +181,17 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 		'button:Collapse sidebar',
 		'button:Collapse PDF'
 	])
-		expect([...seen]).toContain(name);
+		expect(seen).toContain(name);
+});
+
+test('Tab skips a collapsed sidebar (US2-8, FR-016)', async ({ page, browserName }) => {
+	await expect(page.getByRole('navigation', { name: 'File outline' }).getByRole('button')).toHaveText(['Introduction']);
+	await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+	await expect.poll(() => width(pane(page, 'sidebar'))).toBe(0);
+	const seen = await tabThrough(page, browserName);
+	expect(seen).toContain('button:Expand sidebar');
+	for (const name of ['treeitem:main.tex', 'button:Introduction', 'separator:Resize file tree and outline'])
+		expect(seen).not.toContain(name);
 });
 
 test('a 1024 px window keeps the minimum widths (edge case)', async ({ page }) => {

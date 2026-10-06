@@ -1,4 +1,4 @@
-<!-- ponytail: one file, feature 006 adds real files and folders -->
+<!-- ponytail: one file, feature 003 (file operations) adds real files and folders -->
 <section class="tree-panel" aria-labelledby="file-tree-title">
 	<h2 class="pane-header" id="file-tree-title">File tree</h2>
 	<ul role="tree" aria-labelledby="file-tree-title">

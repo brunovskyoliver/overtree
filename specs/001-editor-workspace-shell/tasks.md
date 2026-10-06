@@ -199,3 +199,12 @@ T028 src/lib/outline.ts
 ### Incremental Delivery
 
 3. US2 layout → US3 outline → US4 toolbar → US5 compose → polish. Each phase ends with its tests green and one commit `feat(001): phase N <name>`.
+
+---
+
+## Phase 9: Convergence
+
+- [X] T042 Make the collapsed sidebar's contents inert (`inert` while collapsed) in `src/lib/components/Workspace.svelte`, so Tab skips the zero-width tree, divider and outline; add an e2e check in `tests/e2e/layout.spec.ts` that Tab skips a collapsed sidebar (and a collapsed PDF pane if it contains focusables) per FR-016, US2/AC8 (partial)
+- [X] T043 Extend the reload test in `tests/e2e/layout.spec.ts`: drag the file tree/outline divider and collapse the sidebar, reload, and assert both are restored per FR-018, US2/AC7 (partial)
+- [X] T044 In `src/lib/outline.ts`, skip heading matches preceded by an odd number of backslashes (`a\\section{X}` is a line break, not a heading) and keep argument-less commands such as `\LaTeX`/`\TeX` as their name text (`\section{The \LaTeX{} way}` → "The LaTeX way"); add both cases to `tests/unit/outline.test.ts` per contracts/ui.md outline rules (partial)
+- [X] T045 Fix the `ponytail:` comment in `src/lib/components/FileTree.svelte` to point at feature 003 (file operations), not 006, per Constitution V, FR-011 (contradicts)

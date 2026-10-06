@@ -27,7 +27,8 @@
 		onCollapse={() => (sidebarOpen = false)}
 		onExpand={() => (sidebarOpen = true)}
 	>
-		<PaneGroup direction="vertical" autoSaveId="overtree:layout:sidebar" class="sidebar">
+		<!-- inert while collapsed so Tab skips the zero-width tree, divider and outline (FR-016) -->
+		<PaneGroup direction="vertical" autoSaveId="overtree:layout:sidebar" class="sidebar" inert={!sidebarOpen}>
 			<Pane id="tree" defaultSize={50} minSize={15}>
 				<FileTree />
 			</Pane>
@@ -73,6 +74,7 @@
 		onCollapse={() => (pdfOpen = false)}
 		onExpand={() => (pdfOpen = true)}
 	>
+		<!-- ponytail: no inert needed, PdfPane has no focusables yet; add it with the Recompile bar -->
 		<PdfPane />
 	</Pane>
 </PaneGroup>

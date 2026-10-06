@@ -1,5 +1,5 @@
 # Feature 001: Editor workspace shell
-Stage: implement
+Stage: converge
 Updated: 2026-10-06T12:45:00+02:00
 
 ## Decisions
@@ -23,5 +23,7 @@ Updated: 2026-10-06T12:45:00+02:00
 - 2026-10-06 implement phase 4 US2: T021-T025 [X]; pnpm check 0 errors, pnpm test 5/5, pnpm test:e2e 33/33 (11 each chromium/firefox/webkit). Notes: paneforge 1.0.2 autoSaveId restores collapsed panes on reload (stored as `paneforge:overtree:layout:main|sidebar`, 100 ms debounced write); collapse buttons live in the editor pane edges (not inside the separator, which would start a drag); outline body is a snippet `outline` on Workspace, placeholder in +page.svelte; the Tab test does not cover outline entries yet (phase 5 adds them).
 - 2026-10-06 implement phase 4 US2 (c51b5eb): T021-T025 [X]; verified check 0 errors, unit 5/5, e2e 33/33 (11 per browser); screenshot matches reference layout. paneforge autoSaveId keys are prefixed `paneforge:`.
 - 2026-10-06 implement phase 5 US3 (7c93411) + phase 6 US4 (737e41e): T026-T034 [X]; verified check 0 errors, unit 16/16, e2e 60/60 (20 per browser). Visual nit: left collapse tab overlaps editor gutter, fix in polish.
+- 2026-10-06 implement phase 7 US5 (439ac1a) + phase 8 polish (9a9c0e5): T035-T040 [X]; verified check 0 errors, unit 16/16, e2e 63/63 (21 per browser incl. perf: load 42-93 ms, keystroke avg 3.5-9.7 ms, outline 211-300 ms), scripts/compose-smoke.sh PASS (HTTP 200, text survives down/up, bound to 127.0.0.1 only). Image 465 MB. Dockerfile pins pnpm 10.33.0. Collapse tabs no longer cover the gutter.
+- 2026-10-06 converge: 0 CRITICAL/HIGH, 2 MEDIUM, 4 LOW. F2 (smoke result unrecorded) resolved by the line above; F6 (lineWrapping) justified in research R4; T042-T045 appended as Phase 9.
 
 ## Report
