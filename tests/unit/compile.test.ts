@@ -13,8 +13,8 @@ const fixture = (name: string) => readFileSync(new URL(`../fixtures/latex/${name
 const single = (source: string) => ({ files: [{ path: 'main.tex', data: Buffer.from(source) }], mainPath: 'main.tex' });
 const run = (name: string, compiler: Compiler = 'pdflatex', extra = {}) =>
 	runCompile({ ...single(fixture(name)), compiler, stopOnFirstError: false, ...extra });
-const leftovers = () =>
-	execFileSync('docker', ['ps', '-aq', '--filter', 'name=overtree-compile-'], { encoding: 'utf8' }).trim();
+const leftovers = (name: string) =>
+	execFileSync('docker', ['ps', '-aq', '--filter', `name=^${name}$`], { encoding: 'utf8' }).trim();
 
 describe('runCompile sandbox', { timeout: 60_000 }, () => {
 	it.each<Compiler>(['pdflatex', 'xelatex', 'lualatex'])('compiles ok.tex with %s', async (compiler) => {
@@ -67,13 +67,14 @@ describe('runCompile sandbox', { timeout: 60_000 }, () => {
 
 	it('times out and leaves no container behind', async () => {
 		const start = Date.now();
-		const r = await run('loop.tex', 'pdflatex', { timeoutMs: 3000 });
+		const name = `overtree-compile-loop-${Date.now()}`;
+		const r = await run('loop.tex', 'pdflatex', { timeoutMs: 3000, name });
 		expect(r.status).toBe('timeout');
 		expect(Date.now() - start).toBeLessThan(5000);
 		// --rm removal finishes asynchronously after the client exits
 		const until = Date.now() + 5000;
-		while (leftovers() && Date.now() < until) await new Promise((res) => setTimeout(res, 200));
-		expect(leftovers()).toBe('');
+		while (leftovers(name) && Date.now() < until) await new Promise((res) => setTimeout(res, 200));
+		expect(leftovers(name)).toBe('');
 	});
 
 	it('reports oom when lualatex exceeds the memory limit', async () => {

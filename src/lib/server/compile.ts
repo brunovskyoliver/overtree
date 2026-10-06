@@ -16,7 +16,10 @@ const MAX_STDERR = 64 * 1024;
 const DOCKER_ERROR = /Cannot connect|failed to connect|permission denied|Error response from daemon|No such image/i;
 
 // Containers left behind by a crashed app: remove them once on load. No Docker, nothing left: ignore.
-execFile('docker', ['ps', '-aq', '--filter', 'name=overtree-compile-'], (err, out) => {
+// Only stopped ones: running jobs may belong to another process (a second server, parallel tests)
+// and end themselves through the in-container `timeout`.
+const STOPPED = ['--filter', 'status=created', '--filter', 'status=exited', '--filter', 'status=dead'];
+execFile('docker', ['ps', '-aq', '--filter', 'name=overtree-compile-', ...STOPPED], (err, out) => {
 	const ids = out.split(/\s+/).filter(Boolean);
 	if (!err && ids.length) execFile('docker', ['rm', '-f', ...ids], () => {});
 });
@@ -33,6 +36,7 @@ export type RunOptions = {
 	memory?: string;
 	cpus?: string;
 	env?: NodeJS.ProcessEnv; // for the docker CLI (tests point DOCKER_HOST at a dead socket)
+	name?: string; // container name, must start with `overtree-compile-`; random by default
 };
 
 export type RunResult = {
@@ -54,7 +58,8 @@ export function runCompile({
 	timeoutMs = Number(process.env.COMPILE_TIMEOUT_MS ?? 20000),
 	memory = process.env.COMPILE_MEMORY ?? '512m',
 	cpus = process.env.COMPILE_CPUS ?? '1',
-	env
+	env,
+	name = `overtree-compile-${randomUUID()}`
 }: RunOptions): Promise<RunResult> {
 	let input: Buffer;
 	try {
@@ -62,7 +67,6 @@ export function runCompile({
 	} catch (e) {
 		return Promise.resolve({ status: 'failure', message: (e as Error).message });
 	}
-	const name = `overtree-compile-${randomUUID()}`;
 	const halt = stopOnFirstError ? ' -halt-on-error' : '';
 	// the container ends itself even if the app dies before its `docker kill`
 	const limit = Math.ceil(timeoutMs / 1000) + 2;
