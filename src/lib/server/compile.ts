@@ -1,6 +1,11 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import type { Compiler, CompileStatus } from '../compile-types.ts';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
+import type { Compiler, CompileResult, CompileStatus } from '../compile-types.ts';
+import { DOC_NAME, getServer } from './collab.ts';
+import { compileSettings } from './schema.ts';
 
 const ENGINE_FLAG: Record<Compiler, string> = { pdflatex: '-pdf', xelatex: '-xelatex', lualatex: '-lualatex' };
 const MAX_STDOUT = 256 * 1024 * 1024; // matches the job's /tmp tmpfs
@@ -112,4 +117,76 @@ function untar(buf: Buffer) {
 		off += 512 + Math.ceil(size / 512) * 512;
 	}
 	return files;
+}
+
+// ponytail: one project ('main') until feature 005; per-project maps then
+export const compileDir = () => join(getServer().dataDir, 'compile', 'main');
+
+export function getCompiler(): Compiler {
+	const row = getServer().db.select().from(compileSettings).where(eq(compileSettings.project, 'main')).get();
+	return row?.compiler ?? 'pdflatex';
+}
+
+export function getLastResult(): CompileResult | null {
+	try {
+		return JSON.parse(readFileSync(join(compileDir(), 'result.json'), 'utf8'));
+	} catch {
+		return null;
+	}
+}
+
+// Coalescing (research R6): one compile runs, at most one is queued behind it; later callers join the queued one.
+let running: Promise<CompileResult> | undefined;
+let queued: Promise<CompileResult> | undefined;
+
+export function compileProject(opts: { stopOnFirstError: boolean }): Promise<CompileResult> {
+	const start = () => (running = compileOnce(opts).finally(() => (running = undefined)));
+	if (!running) return start();
+	const next = () => {
+		queued = undefined;
+		return start();
+	};
+	return (queued ??= running.then(next, next));
+}
+
+async function compileOnce({ stopOnFirstError }: { stopOnFirstError: boolean }): Promise<CompileResult> {
+	const id = randomUUID();
+	const startedAt = Date.now();
+	const conn = await getServer().hocuspocus.openDirectConnection(DOC_NAME);
+	const source = conn.document!.getText('content').toString();
+	await conn.disconnect();
+
+	const compiler = getCompiler();
+	const r = await runCompile({ source, compiler, stopOnFirstError });
+
+	const dir = compileDir();
+	mkdirSync(dir, { recursive: true });
+	// temp file + rename: a reader never sees a half-written file
+	const write = (name: string, data: string | Buffer) => {
+		writeFileSync(join(dir, `${name}.tmp`), data);
+		renameSync(join(dir, `${name}.tmp`), join(dir, name));
+	};
+	const previous = getLastResult();
+	if (r.pdf) {
+		write('output.pdf', r.pdf);
+		if (r.synctex) write('output.synctex.gz', r.synctex);
+		else rmSync(join(dir, 'output.synctex.gz'), { force: true });
+	}
+	// no log (timeout, unavailable): drop the old one so it isn't shown as this compile's
+	if (r.log !== undefined) write('output.log', r.log);
+	else rmSync(join(dir, 'output.log'), { force: true });
+
+	const result: CompileResult = {
+		id,
+		status: r.status,
+		compiler,
+		stopOnFirstError,
+		startedAt,
+		durationMs: Date.now() - startedAt,
+		pdfId: r.pdf ? id : previous?.pdfId,
+		entries: [],
+		message: r.message
+	};
+	write('result.json', JSON.stringify(result));
+	return result;
 }

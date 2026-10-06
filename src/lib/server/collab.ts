@@ -26,7 +26,7 @@ export const SEED = `\\documentclass{article}
 
 // Hocuspocus 4 has no built-in server here: we own the ws upgrade on /collab
 // and forward messages/close events to the ClientConnection ourselves.
-export function attachCollab(httpServer: HttpServer, dataDir?: string) {
+export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_DIR ?? './data') {
 	const db = openDb(dataDir);
 
 	const hocuspocus = new Hocuspocus({
@@ -102,7 +102,7 @@ export function attachCollab(httpServer: HttpServer, dataDir?: string) {
 	});
 
 	// SvelteKit routes are bundled apart from server.ts/the Vite plugin, so they reach this instance via globalThis.
-	globalThis.__overtreeServer = { hocuspocus, db };
+	globalThis.__overtreeServer = { hocuspocus, db, dataDir };
 
 	return { hocuspocus, wss, db };
 }

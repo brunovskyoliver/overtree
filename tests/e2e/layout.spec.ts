@@ -38,7 +38,8 @@ test('sidebar, editor and PDF pane are visible (US2-1, US2-5)', async ({ page })
 	await expect(tree.getByRole('treeitem', { name: 'main.tex', selected: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'File outline' })).toBeVisible();
 	await expect(page.locator('.cm-content')).toBeVisible();
-	await expect(page.getByText('No PDF yet. Compiling arrives in a later version.')).toBeVisible();
+	const pdf = page.getByRole('region', { name: 'PDF preview' });
+	await expect(pdf.getByRole('button', { name: 'Recompile' })).toBeVisible();
 	const vw = page.viewportSize()!.width;
 	expect(await width(pane(page, 'sidebar'))).toBeGreaterThan(vw * 0.15);
 	expect(await width(pane(page, 'pdf'))).toBeGreaterThan(vw * 0.35);

@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { Pane, PaneGroup, PaneResizer } from 'paneforge';
 	import type { Snippet } from 'svelte';
+	import type { CompileState } from '#lib/compile.svelte.ts';
 	import FileTree from './FileTree.svelte';
 	import PdfPane from './PdfPane.svelte';
 
 	// children = editor, outline = body under the "File outline" header
-	let { children, outline }: { children: Snippet; outline: Snippet } = $props();
+	let { children, outline, compile }: { children: Snippet; outline: Snippet; compile: CompileState } = $props();
 
 	let sidebar = $state<Pane>();
 	let pdf = $state<Pane>();
@@ -74,8 +75,8 @@
 		onCollapse={() => (pdfOpen = false)}
 		onExpand={() => (pdfOpen = true)}
 	>
-		<!-- ponytail: no inert needed, PdfPane has no focusables yet; add it with the Recompile bar -->
-		<PdfPane />
+		<!-- inert while collapsed, like the sidebar -->
+		<PdfPane {compile} inert={!pdfOpen} />
 	</Pane>
 </PaneGroup>
 

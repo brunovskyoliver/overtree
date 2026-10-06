@@ -1,9 +1,15 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { hostname } from 'node:os';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { hostname, tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { HocuspocusProvider } from '@hocuspocus/provider';
 import { describe, expect, it } from 'vitest';
+import * as Y from 'yjs';
 import type { Compiler } from '../../src/lib/compile-types.ts';
-import { runCompile } from '../../src/lib/server/compile.ts';
+import { attachCollab } from '../../src/lib/server/collab.ts';
+import { compileDir, compileProject, runCompile } from '../../src/lib/server/compile.ts';
 
 // Real Docker with texlive/texlive:latest-medium pulled (see quickstart.md).
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/latex/${name}`, import.meta.url), 'utf8');
@@ -64,5 +70,41 @@ describe('runCompile sandbox', { timeout: 60_000 }, () => {
 		const r = await run('ok.tex', 'pdflatex', { image: 'overtree/does-not-exist' });
 		expect(r.status).toBe('unavailable');
 		expect(r.message).toBeTruthy();
+	});
+});
+
+describe('compileProject', { timeout: 60_000 }, () => {
+	it('coalesces concurrent requests and compiles the latest synced text', async () => {
+		const http = createServer();
+		const collab = attachCollab(http, mkdtempSync(join(tmpdir(), 'overtree-test-')));
+		await new Promise<void>((r) => http.listen(0, '127.0.0.1', r));
+		const doc = new Y.Doc();
+		const provider = new HocuspocusProvider({
+			url: `ws://127.0.0.1:${(http.address() as AddressInfo).port}/collab`,
+			name: 'main.tex',
+			document: doc
+		});
+		try {
+			await new Promise<void>((r) => provider.on('synced', () => r()));
+
+			// three calls while idle: the first runs, the other two share one queued run
+			const [a, b, c] = await Promise.all([1, 2, 3].map(() => compileProject({ stopOnFirstError: false })));
+			expect(a.status).toBe('success');
+			expect(b.id).not.toBe(a.id);
+			expect(c).toBe(b);
+			expect(b.startedAt).toBeGreaterThanOrEqual(a.startedAt + a.durationMs);
+			expect(b.pdfId).toBe(b.id);
+
+			const text = doc.getText('content');
+			text.insert(text.toString().indexOf('\\end{document}'), '\\typeout{MARK-42}\n');
+			while (provider.hasUnsyncedChanges) await new Promise((r) => setTimeout(r, 10));
+			expect((await compileProject({ stopOnFirstError: false })).status).toBe('success');
+			expect(readFileSync(join(compileDir(), 'output.log'), 'utf8')).toContain('MARK-42');
+		} finally {
+			provider.destroy();
+			for (const ws of collab.wss.clients) ws.terminate();
+			http.closeAllConnections();
+			await new Promise((r) => http.close(r));
+		}
 	});
 });

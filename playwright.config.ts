@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
+// fresh data per run; exported so specs can delete compile output (clearCompileOutput)
+// ponytail: the config is evaluated again in each worker, keep the first dir
+const DATA_DIR = (process.env.OVERTREE_E2E_DATA_DIR ??= mkdtempSync(join(tmpdir(), 'overtree-e2e-')));
 
 export default defineConfig({
 	testDir: 'tests/e2e',
@@ -23,9 +26,9 @@ export default defineConfig({
 		timeout: 120_000,
 		env: {
 			PORT: String(PORT),
-			// fresh database per run
-			DATA_DIR: mkdtempSync(join(tmpdir(), 'overtree-e2e-')),
-			PUBLIC_TEST_HOOKS: '1'
+			DATA_DIR,
+			PUBLIC_TEST_HOOKS: '1',
+			COMPILE_TIMEOUT_MS: '5000'
 		}
 	}
 });
