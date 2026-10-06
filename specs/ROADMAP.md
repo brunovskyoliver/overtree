@@ -32,27 +32,35 @@ One feature covering both parts below (bundled to reach multi-user sooner).
 
 | # | Feature | Status | Depends on |
 |---|---------|--------|------------|
-| 005 | Accounts & project dashboard | todo | 003 |
-| 006 | Real-time collaboration | todo | 005 |
-| 007 | Sharing & permissions | todo | 006 |
+| 005 | Accounts, roles, sharing & live collaboration (Clerk) | todo | 003 |
+| 006 | *(merged into 005)* | — | — |
+| 007 | *(merged into 005)* | — | — |
 
-### 005 Accounts & project dashboard
-Sign up, log in, log out, password reset by email link (SMTP optional; without it an admin can reset from the CLI). First registered user becomes admin; admin can disable open sign-up. Dashboard lists the user's projects with last-modified time and owner: create blank or from template (article, report, beamer, letter), rename, duplicate, archive, delete, search. Project title in the top bar is editable (the "ResQFlow ▾" menu). Users have a display name and an avatar color.
+### 005 Accounts, roles, sharing & live collaboration
+One feature covering sign-in, site roles, per-user project spaces, sharing with project and per-file permissions, and live presence. Former rows 005, 006 and 007 are bundled here.
 
-### 006 Real-time collaboration
-Several users edit the same files at once. Each remote user shows a colored cursor and selection with a name label; avatars of connected users appear in the top bar (the green "S" in the screenshot) and clicking one jumps to their cursor. File tree operations (create, rename, move, delete) propagate live to everyone. Undo/redo only reverts your own changes. Reconnect after network loss merges offline edits without losing text. A compile started by anyone updates the PDF for everyone looking at it, optionally. Tested with two and five concurrent browser sessions.
+**Sign-in (Clerk).** Authentication goes through Clerk: Google sign-in and plain email sign-in (email code or password). Signed-out visitors see only the sign-in page and share-link landing pages. The app keeps its own `users` table mirrored from Clerk (id, email, display name, avatar, site role, disabled flag), created on first sign-in. Clerk keys come from environment variables. Every HTTP route and every WebSocket connection verifies the Clerk session on the server.
 
-### 007 Sharing & permissions
-Share dialog: invite by email with role Editor or Viewer; "anyone with the link" tokens for view or edit, revocable; list and remove collaborators; transfer ownership. Viewers get a read-only editor, can compile and download, but cannot change files. The server enforces roles on every WebSocket message and HTTP route, not only in the UI. Invitations for unknown emails are accepted after sign-up.
+**Site roles: admin and user.** Admins manage the instance: an admin page lists all users with role, last seen and project count; promote/demote admin, disable/re-enable an account (disabled users are signed out and blocked), choose open sign-up or invite-only (allowlist of emails/domains), and see or delete any project. The first user to sign in becomes admin, and `ADMIN_EMAILS` can seed admins. Users have no instance-management rights.
+
+**Own space.** Every user, whatever their role, has a dashboard of their own projects and of projects shared with them, with owner, their role and last-modified time: create blank or from template (article, report, beamer, letter), upload zip, rename, duplicate, delete, search. Project title in the top bar is editable by the owner. The existing single project from 001–003 is migrated to the first admin.
+
+**Project roles: owner, editor, reader.** Each project has one owner with full rights: share, change any permission, rename, delete, transfer ownership. Editors change files and the tree; readers get a read-only editor and can still compile and download. Roles are enforced on the server for every Yjs update, file-tree operation and HTTP route, not only in the UI.
+
+**Sharing.** Share dialog from the top bar "Share" button: invite by email as editor or reader (invites to unknown emails are accepted after sign-up), list collaborators and change or remove them, "anyone with the link" for read or edit, revocable.
+
+**Per-file and per-folder permissions.** The owner can override a collaborator's role on any file or folder (editor or reader) from the file tree context menu or the share dialog. A folder override applies to everything inside it; the most specific rule wins; the owner is never restricted. The tree shows a lock icon on files the current user can only read, and the editor opens them read-only.
+
+**Live collaboration.** Several users edit the same files at once. Each remote user has a colored cursor and selection with a name label; avatars of connected users appear in the top bar (the green "S" in the screenshot) and clicking one jumps to their cursor. File-tree changes propagate live. Undo/redo reverts only your own changes. Reconnecting after a network drop merges offline edits without losing text; revoking access disconnects that user's socket. Tested with two and five concurrent browser sessions.
 
 ## Phase 3: History, polish, operations
 
 | # | Feature | Status | Depends on |
 |---|---------|--------|------------|
-| 008 | Project history & restore | todo | 006 |
+| 008 | Project history & restore | todo | 005 |
 | 009 | SyncTeX & PDF navigation | todo | 002 |
-| 010 | Comments & chat | todo | 006 |
-| 011 | Self-hosting hardening | todo | 007 |
+| 010 | Comments & chat | todo | 005 |
+| 011 | Self-hosting hardening | todo | 005 |
 
 ### 008 Project history & restore
 History panel (the "History" button) with a timeline of versions grouped by time and author, created automatically from Yjs updates plus on every compile. Select a version to see a diff of each changed file against the current state, with additions and deletions colored per author. Name a version (labels). Restore a single file or the whole project to a version; restoring creates a new version instead of rewriting history. Download a zip of any version.
