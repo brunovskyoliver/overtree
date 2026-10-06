@@ -9,7 +9,7 @@ services:
       - overtree-data:/data
       # compiles start sibling containers on the host's Docker (research R4)
       - /var/run/docker.sock:/var/run/docker.sock
-    # group owning the socket; root on Docker Desktop, `stat -c %g /var/run/docker.sock` on Linux
+    # group owning the socket; root on Docker Desktop and OrbStack, `stat -c %g /var/run/docker.sock` on Linux
     group_add: ["${DOCKER_GID:-0}"]
     environment:
       TEXLIVE_IMAGE: ${TEXLIVE_IMAGE:-texlive/texlive:latest-medium}

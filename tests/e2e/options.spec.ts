@@ -216,3 +216,13 @@ test('the options menu works from the keyboard', async ({ page }) => {
 	await page.locator('.cm-content').click();
 	await expect(menu(page)).toHaveCount(0);
 });
+
+test('a failed compiler change reverts the choice (F7)', async ({ page }) => {
+	await openEditor(page);
+	await page.route('**/api/compile/settings', (route) => route.fulfill({ status: 500 }));
+	await toggle(page).click();
+	await item(page, 'XeLaTeX').click();
+	await expect(item(page, 'pdfLaTeX')).toHaveAttribute('aria-checked', 'true');
+	await expect(item(page, 'XeLaTeX')).toHaveAttribute('aria-checked', 'false');
+	await page.keyboard.press('Escape');
+});

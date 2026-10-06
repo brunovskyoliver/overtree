@@ -70,6 +70,21 @@ test('the previous PDF stays during a compile and after a failed one (SC-007)', 
 	await expect(firstPage(page)).toContainText('Untitled project');
 });
 
+test('a failed compile request shows in the banner and keeps the PDF (F7)', async ({ page }) => {
+	await openEditor(page);
+	await recompile(page).click();
+	await expect(firstPage(page).locator('canvas')).toBeVisible({ timeout: 10_000 });
+
+	await page.route('**/api/compile', (route) =>
+		route.request().method() === 'POST' ? route.fulfill({ status: 500 }) : route.continue()
+	);
+	await recompile(page).click();
+	await expect(page.getByRole('alert')).toContainText('Compile request failed (500)');
+	await expect(page.getByRole('alert')).toContainText('showing the previous PDF');
+	await expect(firstPage(page).locator('canvas')).toBeVisible();
+	await expect(recompile(page)).toBeEnabled();
+});
+
 test('an endless loop times out and the app stays responsive (US1-6, SC-004)', async ({ page, browser }) => {
 	await openEditor(page);
 	await setDoc(page, fixture('loop.tex'));

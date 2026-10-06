@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,6 +11,13 @@ import { compileSettings } from './schema.ts';
 const ENGINE_FLAG: Record<Compiler, string> = { pdflatex: '-pdf', xelatex: '-xelatex', lualatex: '-lualatex' };
 const MAX_STDOUT = 256 * 1024 * 1024; // matches the job's /tmp tmpfs
 const MAX_STDERR = 64 * 1024;
+const DOCKER_ERROR = /Cannot connect|failed to connect|permission denied|Error response from daemon|No such image/i;
+
+// Containers left behind by a crashed app: remove them once on load. No Docker, nothing left: ignore.
+execFile('docker', ['ps', '-aq', '--filter', 'name=overtree-compile-'], (err, out) => {
+	const ids = out.split(/\s+/).filter(Boolean);
+	if (!err && ids.length) execFile('docker', ['rm', '-f', ...ids], () => {});
+});
 
 export type RunOptions = {
 	source: string;
@@ -20,6 +27,7 @@ export type RunOptions = {
 	timeoutMs?: number;
 	memory?: string;
 	cpus?: string;
+	env?: NodeJS.ProcessEnv; // for the docker CLI (tests point DOCKER_HOST at a dead socket)
 };
 
 export type RunResult = {
@@ -39,18 +47,21 @@ export function runCompile({
 	image = process.env.TEXLIVE_IMAGE ?? 'texlive/texlive:latest-medium',
 	timeoutMs = Number(process.env.COMPILE_TIMEOUT_MS ?? 20000),
 	memory = process.env.COMPILE_MEMORY ?? '512m',
-	cpus = process.env.COMPILE_CPUS ?? '1'
+	cpus = process.env.COMPILE_CPUS ?? '1',
+	env
 }: RunOptions): Promise<RunResult> {
 	const name = `overtree-compile-${randomUUID()}`;
 	const halt = stopOnFirstError ? ' -halt-on-error' : '';
+	// the container ends itself even if the app dies before its `docker kill`
+	const limit = Math.ceil(timeoutMs / 1000) + 2;
 	const script =
-		`cat > main.tex; latexmk ${ENGINE_FLAG[compiler]} -f -interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape${halt} main.tex >&2; ` +
+		`cat > main.tex; timeout -s KILL ${limit} latexmk ${ENGINE_FLAG[compiler]} -f -interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape${halt} main.tex >&2; ` +
 		'tar -c main.pdf main.log main.synctex.gz 2>/dev/null; ' +
 		// The OOM killer only takes the engine, so the job would exit 0; turn a recorded oom_kill into 137.
 		// ponytail: cgroup v2 path only; on a cgroup v1 host OOM shows up as `failure`
 		"grep -qs '^oom_kill [1-9]' /sys/fs/cgroup/memory.events && exit 137; true";
 	const args = [
-		'run', '-i', '--rm', '--name', name,
+		'run', '-i', '--rm', '--pull', 'never', '--name', name,
 		'--network', 'none', '--memory', memory, '--memory-swap', memory, '--cpus', cpus,
 		'--pids-limit', '128', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 		'--read-only', '--tmpfs', '/tmp:rw,exec,size=256m', '--user', '1000:1000',
@@ -59,7 +70,7 @@ export function runCompile({
 	];
 
 	return new Promise((resolve) => {
-		const child = spawn('docker', args);
+		const child = spawn('docker', args, { env });
 		const chunks: Buffer[] = [];
 		let size = 0;
 		let stderr = '';
@@ -74,10 +85,16 @@ export function runCompile({
 			if (stderr.length < MAX_STDERR) stderr += b.toString();
 		});
 
+		const timeout = () => resolve({ status: 'timeout', message: `Compile timed out after ${timeoutMs / 1000} s.` });
 		// Killing the `docker run` client would leave the container running; `docker kill` stops it and --rm removes it.
+		// The kill misses a container that isn't created yet: then drop the client after 3 s, the in-container `timeout` ends the job.
 		const timer = setTimeout(() => {
 			timedOut = true;
 			spawn('docker', ['kill', name], { stdio: 'ignore' }).on('error', () => {});
+			setTimeout(() => {
+				child.kill('SIGKILL');
+				timeout();
+			}, 3000).unref();
 		}, timeoutMs);
 
 		child.on('error', (err: NodeJS.ErrnoException) => {
@@ -89,10 +106,13 @@ export function runCompile({
 
 		child.on('close', (code) => {
 			clearTimeout(timer);
-			if (timedOut) return resolve({ status: 'timeout', message: `Compile timed out after ${timeoutMs / 1000} s.` });
+			if (timedOut) return timeout();
 			if (code === 137) return resolve({ status: 'oom', message: `Compile ran out of memory (limit ${memory}).` });
-			if (code === 125) {
-				return resolve({ status: 'unavailable', message: stderr.split('\n').find((l) => l.trim()) ?? 'Docker failed to start the compile.' });
+			// 125: docker couldn't start the container; 1 with no output: the client couldn't reach the daemon
+			if (code === 125 || (code !== 0 && !size && DOCKER_ERROR.test(stderr))) {
+				const lines = stderr.split('\n').filter((l) => l.trim());
+				const line = lines.find((l) => l.startsWith('docker:') || l.includes('Error response')) ?? lines.at(-1);
+				return resolve({ status: 'unavailable', message: `Compiler unavailable: ${line ?? 'Docker failed to start the compile.'}` });
 			}
 			const files = untar(Buffer.concat(chunks));
 			const pdf = files.get('main.pdf');
@@ -147,13 +167,15 @@ export function getLastResult(): CompileResult | null {
 // Coalescing (research R6): one compile runs, at most one is queued behind it; later callers join the queued one.
 let running: Promise<CompileResult> | undefined;
 let queued: Promise<CompileResult> | undefined;
+let queuedOpts = { stopOnFirstError: false }; // the latest joiner's
 
 export function compileProject(opts: { stopOnFirstError: boolean }): Promise<CompileResult> {
-	const start = () => (running = compileOnce(opts).finally(() => (running = undefined)));
-	if (!running) return start();
+	const start = (o: typeof opts) => (running = compileOnce(o).finally(() => (running = undefined)));
+	if (!running) return start(opts);
+	queuedOpts = opts;
 	const next = () => {
 		queued = undefined;
-		return start();
+		return start(queuedOpts);
 	};
 	return (queued ??= running.then(next, next));
 }

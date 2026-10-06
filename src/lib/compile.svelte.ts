@@ -37,12 +37,14 @@ export class CompileState {
 	}
 
 	async setCompiler(compiler: Compiler) {
+		const previous = this.compiler;
 		this.compiler = compiler;
-		await fetch('/api/compile/settings', {
+		const res = await fetch('/api/compile/settings', {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ compiler })
-		});
+		}).catch(() => undefined);
+		if (!res?.ok) this.compiler = previous;
 	}
 
 	/** A local edit: (re)start the idle timer (research R11). */
@@ -71,15 +73,35 @@ export class CompileState {
 				// ponytail: gives up after 5 s (offline) and compiles the server's text
 				const until = Date.now() + 5000;
 				while (this.#provider()?.hasUnsyncedChanges && Date.now() < until) await new Promise((r) => setTimeout(r, 20));
-				const res = await fetch('/api/compile', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ stopOnFirstError: this.stopOnFirstError })
-				});
-				if (res.ok) this.last = await res.json();
+				try {
+					const res = await fetch('/api/compile', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ stopOnFirstError: this.stopOnFirstError })
+					});
+					if (res.ok) this.last = await res.json();
+					else this.#requestFailed(res.status);
+				} catch (err) {
+					this.#requestFailed(err instanceof Error ? err.message : String(err));
+				}
 			} while (this.#pending);
 		} finally {
 			this.compiling = false;
 		}
+	}
+
+	/** The request itself failed: show it in the banner, keep the previous PDF and log entries. */
+	#requestFailed(reason: string | number) {
+		this.last = {
+			id: this.last?.id ?? 'request-failed',
+			status: 'failure',
+			compiler: this.compiler,
+			stopOnFirstError: this.stopOnFirstError,
+			startedAt: Date.now(),
+			durationMs: 0,
+			pdfId: this.last?.pdfId,
+			entries: this.last?.entries ?? [],
+			message: `Compile request failed (${reason})`
+		};
 	}
 }

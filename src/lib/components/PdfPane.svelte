@@ -30,7 +30,16 @@
 <section class="pdf" aria-label="PDF preview" {inert}>
 	<div class="bar">
 		<RecompileButton {compile} />
-		<button type="button" class="logs-toggle" aria-pressed={logsOpen} onclick={() => (logsOpen = !logsOpen)}>Logs</button>
+		<button
+			type="button"
+			class="logs-toggle"
+			aria-label="Logs"
+			title="Logs"
+			aria-pressed={logsOpen}
+			onclick={() => (logsOpen = !logsOpen)}
+		>
+			<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.5L12.5 4.5V14.5H4ZM9.5 1.5v3h3M6 8h4.5M6 10.5h4.5" /></svg>
+		</button>
 		<a
 			class="download"
 			href={compile.pdfUrl && `${compile.pdfUrl}&download=1`}
@@ -90,13 +99,14 @@
 		color: var(--text);
 	}
 	.logs-toggle {
+		display: flex;
+		align-items: center;
 		height: 26px;
-		padding: 0 10px;
-		border: 1px solid var(--border);
+		padding: 0 6px;
+		border: 0;
 		border-radius: 4px;
 		background: none;
 		color: var(--text);
-		font: inherit;
 		cursor: pointer;
 	}
 	.logs-toggle:hover,
@@ -118,6 +128,7 @@
 		opacity: 0.4;
 		pointer-events: none;
 	}
+	.logs-toggle svg,
 	.download svg {
 		width: 16px;
 		height: 16px;

@@ -1,0 +1,13 @@
+% writes outside the job's /tmp must fail: kpathsea (openout_any = p) refuses absolute paths
+% and stops the job before the read-back; the read-only root would refuse them next.
+% The test prepends \def\target{...} to try another path.
+\providecommand\target{/usr/local/pwned.tex}
+\documentclass{article}
+\begin{document}
+\newwrite\out
+\immediate\openout\out=\target
+\immediate\write\out{pwned}
+\immediate\closeout\out
+\IfFileExists{\target}{\typeout{WRITE=PWNED}}{\typeout{WRITE=absent}}
+Done.
+\end{document}

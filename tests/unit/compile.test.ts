@@ -51,6 +51,22 @@ describe('runCompile sandbox', { timeout: 60_000 }, () => {
 		expect(r.log).not.toContain('Example Domain');
 	});
 
+	it.each(['/usr/local/pwned.tex', '/etc/pwned.tex'])('cannot write %s', async (target) => {
+		const r = await runCompile({
+			source: `\\def\\target{${target}}\n${fixture('escape-write.tex')}`,
+			compiler: 'pdflatex',
+			stopOnFirstError: false
+		});
+		expect(r.log).toContain(`I can't write on file \`${target}'`);
+		expect(r.log).not.toContain('WRITE=PWNED');
+	});
+
+	it('has no network from lualatex', async () => {
+		const r = await run('escape-network.tex', 'lualatex');
+		expect(r.status).toBe('success');
+		expect(r.log).toMatch(/NETWORK=(NOSOCKET|FAILED)/);
+	});
+
 	it('times out and leaves no container behind', async () => {
 		const start = Date.now();
 		const r = await run('loop.tex', 'pdflatex', { timeoutMs: 3000 });
@@ -66,10 +82,16 @@ describe('runCompile sandbox', { timeout: 60_000 }, () => {
 		expect((await run('oom.tex', 'lualatex', { memory: '256m' })).status).toBe('oom');
 	});
 
-	it('reports unavailable for a missing image', async () => {
+	it('reports unavailable for a missing image without pulling it', async () => {
 		const r = await run('ok.tex', 'pdflatex', { image: 'overtree/does-not-exist' });
 		expect(r.status).toBe('unavailable');
-		expect(r.message).toBeTruthy();
+		expect(r.message).toMatch(/^Compiler unavailable: .*No such image/);
+	});
+
+	it('reports unavailable when the Docker daemon is unreachable', async () => {
+		const r = await run('ok.tex', 'pdflatex', { env: { ...process.env, DOCKER_HOST: 'unix:///nonexistent.sock' } });
+		expect(r.status).toBe('unavailable');
+		expect(r.message).toMatch(/^Compiler unavailable: /);
 	});
 });
 
@@ -87,11 +109,12 @@ describe('compileProject', { timeout: 60_000 }, () => {
 		try {
 			await new Promise<void>((r) => provider.on('synced', () => r()));
 
-			// three calls while idle: the first runs, the other two share one queued run
-			const [a, b, c] = await Promise.all([1, 2, 3].map(() => compileProject({ stopOnFirstError: false })));
+			// three calls while idle: the first runs, the other two share one queued run with the latest options
+			const [a, b, c] = await Promise.all([false, false, true].map((stopOnFirstError) => compileProject({ stopOnFirstError })));
 			expect(a.status).toBe('success');
 			expect(b.id).not.toBe(a.id);
 			expect(c).toBe(b);
+			expect(b.stopOnFirstError).toBe(true);
 			expect(b.startedAt).toBeGreaterThanOrEqual(a.startedAt + a.durationMs);
 			expect(b.pdfId).toBe(b.id);
 

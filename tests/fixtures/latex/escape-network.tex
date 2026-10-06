@@ -1,0 +1,20 @@
+% LuaLaTeX: no network. Without shell escape luasocket isn't loadable (NOSOCKET, what TeX Live 2026 does);
+% with it, --network none still makes the connect fail (FAILED Network is unreachable).
+\documentclass{article}
+\begin{document}
+\directlua{
+  local ok, socket = pcall(require, "socket")
+  local result
+  if not ok then
+    result = "NOSOCKET"
+  else
+    local conn = socket.tcp()
+    conn:settimeout(3)
+    local done, err = conn:connect("1.1.1.1", 53)
+    conn:close()
+    result = done and "CONNECTED" or ("FAILED " .. tostring(err))
+  end
+  texio.write_nl("NETWORK=" .. result)
+}
+Done.
+\end{document}

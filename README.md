@@ -39,7 +39,7 @@ Under compose the `texlive` service pulls it on `up` and exits right away; other
 | `COMPILE_CPUS` | `1` | CPU limit. |
 | `DOCKER_GID` | `0` | Compose only: group the app joins to use the Docker socket. |
 
-The app container ships the Docker CLI and mounts `/var/run/docker.sock`, so compile jobs are sibling containers on the host's Docker. The app runs as `node`; `group_add: ["${DOCKER_GID:-0}"]` gives it access to the socket. On Docker Desktop the socket inside containers is owned by `root:root`, so the default `0` works. On Linux the socket usually belongs to the `docker` group: set `DOCKER_GID=$(stat -c %g /var/run/docker.sock)`.
+The app container ships the Docker CLI and mounts `/var/run/docker.sock`, so compile jobs are sibling containers on the host's Docker. The app runs as `node`; `group_add: ["${DOCKER_GID:-0}"]` gives it access to the socket. On Docker Desktop and OrbStack the socket inside containers is owned by `root:root`, so the default `0` works. On Linux the socket usually belongs to the `docker` group: set `DOCKER_GID=$(stat -c %g /var/run/docker.sock)`.
 
 > **The socket grants control of the host's Docker**, which is root-equivalent on the host. The app code is trusted; the LaTeX is not, and it only ever runs inside the locked-down job containers.
 
