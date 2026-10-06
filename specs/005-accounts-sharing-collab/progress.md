@@ -1,6 +1,6 @@
 # Feature 005: Accounts, roles, sharing & live collaboration
-Stage: implement (phase 8)
-Updated: 2026-10-06
+Stage: done
+Updated: 2026-10-07
 
 ## Decisions
 - Branch `005-accounts-sharing-collab` created from `003-multi-file-autocomplete` (not merged to main).
@@ -9,6 +9,7 @@ Updated: 2026-10-06
 - Orchestrator's uncommitted ROADMAP.md and constitution edits go into the first commit.
 - Gate 2: `go mvp` → fix M1-M3 + lows, implement phases 1-6 only (stop before per-file permissions and live presence).
 - 2026-10-06 user: "continue with the phases" → implementing phases 7-9.
+- 2026-10-07 user: "too much e2e testing, stop it and skip it, I'll do it on my own" → stopped the phase 9 sub-agent mid-run; no further e2e runs; T056 left partial; converge skipped.
 
 ## Log
 - 2026-10-06 specify: spec.md (6 stories: sign-in P1, dashboard P1, sharing P1, live collab P1, admin P2, per-file permissions P3), checklists/requirements.md 16/16.
@@ -28,41 +29,48 @@ Updated: 2026-10-06
 - 2026-10-06 implement phase 6 (T035-T040): sharing service in projects.ts (listMembers/inviteMember/setMemberRole/removeMember/withdrawInvite/setLink/transferOwnership) + routes members, members/[userId], invites/[email], link, transfer; ShareDialog (green Share in TopBar); reader mode (CodeMirror readOnly compartment, toolbar/tree/compiler menu disabled, banner); session.svelte.ts (shared HocuspocusProviderWebsocket, `project:<pid>` events, "Your access was removed"/"This project was deleted", read-only reconnect with unsaved edits rebuilds the tab); sharing unit tests (11) and sharing.spec e2e (6); auth/dashboard specs use the link/members API instead of SQLite. Deviations: compile sweep also skips `created` containers (they are other processes' jobs about to start; removing them gave the remaining 'oom' failures), ConfirmDialog ids made unique, invite role changes reuse POST members, joinByLink broadcasts `access`, sync.spec disconnects the shared socket, "Reset link" asks for confirmation, overrides not shown in the Share dialog yet (US6). pnpm test 170/170 x3, e2e 129/129 per browser.
 - 2026-10-06 implement phase 7 (T041-T045): `setOverride` in projects.ts + PUT /api/projects/:pid/overrides (owner only, named collaborators only, file must be in the project, kicks the user and broadcasts `access`); PermissionsDialog from a "Permissions…" tree menu item (owner, once someone is invited); Share dialog lists each member's overrides ("File permissions (n)") with remove buttons; FileTree locks (`aria-label="Read only"`) and per-entry gating (create/upload need edit on the target folder, rename/move/delete on the entry and all descendants, drops only into editable folders); overrides unit tests (6), permissions.spec e2e (2). Deviations: fileRole resolution, `canEdit` per entry in GET files, override cleanup in deleteEntry and the Editor's per-file read-only compartment already existed from phases 2/6; link-only users are excluded at PUT (422), not in fileRoles (they can never hold one); a move kicks every user with overrides in the project so open connections re-authenticate with the new folder's role (ponytail); Project gains `members`/`loadMembers`/`setOverride` (owner only) and exports the `Members` type ShareDialog now uses; unit `hit`/`ev`/`json` moved from sharing.test.ts to tests/unit/helpers.ts; scenario 6 (moves) is covered by the unit test, not e2e. pnpm check 0 errors, pnpm test 176/176, e2e permissions+sharing+tree 51/51 on chromium, firefox, webkit.
 - 2026-10-06 implement phase 8 (T046-T053): file awareness `user { id, name, color, colorLight }` from `auth.me` (Editor, also for tabs opened before /api/me answers); remote caret label restyled in theme.ts plus a `cursorLabels` view plugin (label shown 2 s after a remote cursor change, then on hover); project-doc presence in session.svelte.ts (`present(me, fileId)` with an `at` stamp, `peers` deduped per user, newest tab wins); TopBar avatars (up to 5, "+N" menu, ring color, title), jump-to-cursor via the file's awareness `cursor.head`; "Offline, reconnecting…" status in TopBar replacing the tab badge; collab-live unit tests (5), presence.spec e2e (6), collab5.spec (Chromium, 5 users × 60 s, ~7,500 markers, latency 3–5 ms). Deviations: T049 already worked from phase 6 except `project` events, which now also refetch files (main-document marker lives there); the session drops the socket on the window `offline` event and reconnects on `online` (a dead socket only times out after 30 s; ponytail: trusts navigator.onLine); the label rule is per line, not per caret (y-codemirror reuses caret DOM, so no CSS animation); sync.spec and sharing.spec expect the new offline text; tree ops in presence.spec go through the API, scenario 7 there checks removal only (sharing.spec covers the rest). SC-003 measured in-page (`performance.timeOrigin + performance.now()` at keydown vs MutationObserver / view update): 1–3 ms caret, no relaxation. pnpm check 0 errors, pnpm test 181/181, e2e presence+collab5+sharing+permissions+tabs+sync 82 passed, 2 skipped (collab5 off Chromium) on chromium, firefox, webkit; tree/dashboard/auth/admin/compile 39/39 on chromium.
+- 2026-10-07 phase 9 (T054, T055, T057; T056 partial): README (Clerk setup, env vars, roles, sharing, per-file permissions, admin, test bypass, refused accounts stay in Clerk); `requireUser` guard on /api/me, /api/projects, /api/projects/import (they relied on hooks only); link route checks owner before parsing the body; tests/unit/routes-guarded.test.ts enumerates every api +server.ts; Dockerfile copies src/lib/presence.ts (projects.ts imports it; the image would have crashed); scripts/compose-smoke.sh (signed-out checks + production refuses test auth) and scripts/collab-client.ts updated to the scoped/authenticated API; zip bomb fixture 2 MB with IMPORT_MAX_MB=1 (201 MB deflate took up to 9 s). Verified by orchestrator: `pnpm check` 0 errors, `pnpm test` 249/249. Full e2e not rerun (user's call).
 
 ## Report
 
-**Scope:** `go mvp`, so Phases 1–6 (T001–T040) are done. Phases 7–9 (T041–T057: per-file permissions, live presence, polish) are not started. Converge was skipped because it would only re-list those phases.
+**Scope:** all 9 phases (T001–T057). Exception: T056's full e2e run, the `clerk` Playwright project and the manual walk-through were left to the user at their request. Converge was skipped.
 
-**What changed (commits on `005-accounts-sharing-collab`):**
-- 7ecf51b docs: spec, plan, tasks, plus the analyze fixes M1–M3.
-- 75fc151 Phase 1 setup: Clerk packages, env vars, startup guard, presence helpers.
-- dc3fddd Phase 2 foundational:
-  - schema and migration (the 003 project becomes `main` with no owner; the first admin gets it);
-  - project-scoped files, compile and routes under `/api/projects/[pid]`;
-  - Clerk auth core with a test bypass that refuses to run in production;
-  - access guards, WebSocket authentication, read-only connections.
-- 3519842 Phase 3 sign-in: `/sign-in` (Clerk widget), `/blocked`, share-link landing page, TopBar, avatar and account menu, Clerk handshake handling, sign-out across tabs.
-- 41effc1 Phase 4 admin: `/admin` with users, projects and settings tabs, the last-admin rule, disabling kicks live sessions.
-- e23d1aa Phase 5 dashboard: templates (blank, article, report, beamer, letter), zip import, rename, duplicate, delete, leave, search, owner-editable title, no-access page.
-- 49e9d4b fix: the compile container sweep on startup killed other processes' running jobs (exit 137, reported as "oom"). It now removes only exited containers.
-- 5994611 Phase 6 sharing:
-  - members, invites, link and transfer APIs;
-  - Share dialog;
-  - reader mode in the editor, toolbar and tree;
-  - `session.svelte.ts` with live `access`, `tree`, `project` and `deleted` events.
+**Commits on `005-accounts-sharing-collab`:**
+- 7ecf51b docs: spec, plan, tasks and analyze fixes.
+- 75fc151 Phase 1 setup.
+- dc3fddd Phase 2 foundational: schema and migration, Clerk auth core, test bypass, access guards, WebSocket auth, project-scoped 003 code.
+- 3519842 Phase 3 sign-in.
+- 41effc1 Phase 4 admin.
+- e23d1aa Phase 5 dashboard.
+- 49e9d4b fix: the compile sweep killed other processes' running jobs.
+- 5994611 Phase 6 sharing and roles.
+- 7560bf6 MVP report.
+- b75b09e Phase 7 per-file and per-folder permissions: overrides route, Permissions dialog, lock icons, tree rules.
+- 93722d6 Phase 8 live collaboration: named and colored cursors, top-bar avatars with jump-to-cursor, live tree and main-document marker, offline indicator, 2- and 5-session tests.
+- (this commit) Phase 9 polish: README, route-guard test, three per-user routes guarded on their own, Dockerfile `presence.ts` fix, scripts updated.
 
 **Verified:**
-- `pnpm check`: 0 errors.
-- `pnpm test`: 170/170.
-- `pnpm test:e2e`: 129/129 on each of Chromium, Firefox and WebKit (sub-agent run). Chromium 129/129 rerun by the orchestrator.
-- `clerk` smoke project: 2/2 against the real Clerk dev instance, keys injected by `agent-secret` (Phase 3).
+- By the orchestrator at the end: `pnpm check` 0 errors, `pnpm test` 249/249.
+- By sub-agents per phase, not rerun after phase 9:
 
-**Left:**
-- Phases 7–9:
-  - T041–T045 per-file permissions;
-  - T046–T053 live cursors, avatars, offline merge, 5-session test;
-  - T054–T057 README, route-guard test, full run with Clerk plus a manual walk-through, ROADMAP `done`.
-- `scripts/compose-smoke.sh` and `scripts/collab-client.ts` still call the old unauthenticated routes (Phase 2 note).
-- Google sign-in has not been tried by hand.
-- The "disabled user cut off within 2 s" e2e test runs about 1.9 s on Firefox, close to the limit.
-- ROADMAP row 005 is set to `in progress`.
+| Phase | E2E result |
+|---|---|
+| 1–6 | 129/129 on each of Chromium, Firefox and WebKit |
+| 7 | 51/51 on the three browsers (permissions, sharing, tree) |
+| 8 | 82 passed, 2 skipped (the five-user test outside Chromium); remote cursor 1–3 ms; five users for 60 s converged |
+| 3 | `clerk` smoke 2/2 against the real dev instance |
+
+**Left for the user:**
+- Full `pnpm test:e2e` on the three browsers.
+- The `clerk` project:
+  `agent-secret run -e PUBLIC_CLERK_PUBLISHABLE_KEY=overtree/clerk-publishable-key -e CLERK_SECRET_KEY=overtree/clerk-secret-key -- pnpm exec playwright test --project=clerk`
+- Google sign-in by hand.
+- `scripts/compose-smoke.sh` against the Docker image (not run).
+
+**Known soft spots:**
+- The "disabled user cut off within 2 s" e2e runs about 1.9 s on Firefox.
+- The offline detection trusts the browser's `online` flag (`ponytail:` comment).
+- Cursor name labels show per line, not per cursor, for 2 s.
+- Moving a file reconnects every user who has overrides in the project (`ponytail:` comment).
+
+ROADMAP row 005 is set to `done`.

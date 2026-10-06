@@ -43,8 +43,9 @@ export const zips = {
 			'link.tex': [strToU8('/etc/passwd'), { os: 3, attrs: (0o120777 << 16) >>> 0 }]
 		}),
 
-	// ~201 MB of zeros, a few hundred KB zipped
-	bomb: () => zip({ 'main.tex': new Uint8Array(201 * 1024 * 1024) }),
+	// 2 MB of zeros, a few KB zipped: over IMPORT_MAX_MB=1, which the unit test sets (deflating 201 MB for the
+	// default limit took up to 9 s under the full suite's load)
+	bomb: () => zip({ 'main.tex': new Uint8Array(2 * 1024 * 1024) }),
 
 	'too-many': () => zip(Object.fromEntries(Array.from({ length: 2001 }, (_, i) => [`f${i}.txt`, strToU8(String(i))]))),
 

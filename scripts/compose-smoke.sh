@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# US5 smoke: compose up, write through the collab endpoint, down/up, read back, check the port is loopback-only.
-# 002: compile through the Docker socket and fetch the PDF.
+# Smoke test of the Docker image: compose up, sign-in page up, everything else refuses a signed-out caller (pages
+# redirect, API 401, /collab refuses), the test sign-in can't start in production, down/up, loopback-only port.
+# 005: everything behind sign-in needs a Clerk session, so compile and the text round trip are covered by the e2e
+# suite now. Needs the Clerk keys in the environment, e.g. through agent-secret (README.md, Clerk setup).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -11,64 +13,56 @@ trap 'docker compose down -v >/dev/null 2>&1' EXIT
 PORT="${PORT:-3000}"
 URL="http://127.0.0.1:$PORT"
 WS="ws://127.0.0.1:$PORT/collab"
-MARK="% smoke $(date +%s)"
+
+if [ -z "${PUBLIC_CLERK_PUBLISHABLE_KEY:-}" ] || [ -z "${CLERK_SECRET_KEY:-}" ]; then
+	echo "FAIL: set PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY (the app exits without them)" >&2
+	exit 1
+fi
 
 wait_up() {
 	for _ in $(seq 60); do
-		[ "$(curl -s -o /dev/null -w '%{http_code}' "$URL/")" = 200 ] && return 0
+		[ "$(curl -s -o /dev/null -w '%{http_code}' "$URL/sign-in")" = 200 ] && return 0
 		sleep 1
 	done
-	echo "FAIL: no HTTP 200 on $URL" >&2
+	echo "FAIL: no HTTP 200 on $URL/sign-in" >&2
 	docker compose logs app >&2
 	exit 1
 }
 
 docker compose up -d --build
 wait_up
-echo "ok: HTTP 200 on $URL"
+echo "ok: /sign-in answers 200 on $URL"
 
-result="$(curl -s -X POST -H 'content-type: application/json' -d '{"stopOnFirstError":false}' "$URL/api/compile")"
-if ! grep -q '"status":"success"' <<<"$result"; then
-	echo "FAIL: compile returned $result" >&2
+code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+expect() { # <what> <expected> <actual>
+	if [ "$3" = "$2" ]; then echo "ok: $1 → $2"; else echo "FAIL: $1 → $3, expected $2" >&2; exit 1; fi
+}
+
+location="$(curl -s -o /dev/null -w '%{redirect_url}' "$URL/")"
+case "$location" in
+	*/sign-in\?redirect=*) echo "ok: / redirects to sign-in" ;;
+	*) echo "FAIL: / redirected to '$location'" >&2; exit 1 ;;
+esac
+expect "GET /api/projects signed out" 401 "$(code "$URL/api/projects")"
+expect "POST /api/projects/x/compile signed out" 401 "$(code -X POST -H 'content-type: application/json' -d '{"stopOnFirstError":false}' "$URL/api/projects/x/compile")"
+expect "GET /api/projects/x/zip signed out" 401 "$(code "$URL/api/projects/x/zip")"
+expect "GET /api/admin/users signed out" 401 "$(code "$URL/api/admin/users")"
+
+node --no-warnings scripts/collab-client.ts "$WS" refused
+echo "ok: /collab refuses a connection without a token"
+
+# research R4: the image is a production build, so the test sign-in must refuse to start
+if out="$(docker compose run --rm --no-deps -e OVERTREE_TEST_AUTH=1 app 2>&1)"; then
+	echo "FAIL: the app started with OVERTREE_TEST_AUTH=1" >&2
 	exit 1
 fi
-echo "ok: compile succeeded"
-
-if [ "$(curl -s "$URL/api/compile/output.pdf" | head -c 4)" = "%PDF" ]; then
-	echo "ok: output.pdf starts with %PDF"
-else
-	echo "FAIL: output.pdf is not a PDF" >&2
-	exit 1
-fi
-
-# 003: the zip and symbols routes load server modules the image copies selectively
-if [ "$(curl -s "$URL/api/project/zip" | head -c 2)" = "PK" ]; then
-	echo "ok: project zip export"
-else
-	echo "FAIL: /api/project/zip is not a zip" >&2
-	exit 1
-fi
-if curl -sf "$URL/api/project/symbols" | grep -q '"labels"'; then
-	echo "ok: completion symbols"
-else
-	echo "FAIL: /api/project/symbols" >&2
-	exit 1
-fi
-
-node --no-warnings scripts/collab-client.ts "$WS" append $'\n'"$MARK"
-echo "ok: wrote '$MARK'"
+grep -q 'refused with NODE_ENV=production' <<<"$out" || { echo "FAIL: unexpected output: $out" >&2; exit 1; }
+echo "ok: OVERTREE_TEST_AUTH=1 is refused in the image"
 
 docker compose down
 docker compose up -d
 wait_up
 echo "ok: back up after down/up"
-
-if node --no-warnings scripts/collab-client.ts "$WS" read | grep -qF "$MARK"; then
-	echo "ok: text survived down/up"
-else
-	echo "FAIL: '$MARK' missing after restart" >&2
-	exit 1
-fi
 
 published="$(docker compose port app 3000)"
 case "$published" in

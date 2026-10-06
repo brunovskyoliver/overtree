@@ -114,10 +114,10 @@
 
 ## Phase 9: Polish & cross-cutting
 
-- [ ] T054 [P] Update README.md (Clerk setup steps, note that accounts refused by the sign-up policy still exist in Clerk and can be removed in the Clerk dashboard, env vars table from quickstart.md, roles, sharing, admin, test bypass and why it can't run in production) and specs/005-accounts-sharing-collab/quickstart.md if anything changed during implementation
-- [ ] T055 Security pass: grep every `+server.ts` under src/routes/api for a `requireProject`/admin guard (add a unit test in tests/unit/routes-guarded.test.ts that imports each route module and asserts unauthenticated calls return 401/404, so new routes can't skip it); confirm `/share/*` leaks only the title
-- [ ] T056 Run `pnpm check`, `pnpm test`, `pnpm test:e2e` (all three browsers) and the `clerk` project with keys from the keychain (`agent-secret run …`, quickstart.md), plus a manual walk-through with the t3-code preview tools signed in through Clerk; fix what fails
-- [ ] T057 Mark row 005 `done` in specs/ROADMAP.md
+- [X] T054 [P] Update README.md (Clerk setup steps, note that accounts refused by the sign-up policy still exist in Clerk and can be removed in the Clerk dashboard, env vars table from quickstart.md, roles, sharing, admin, test bypass and why it can't run in production) and specs/005-accounts-sharing-collab/quickstart.md if anything changed during implementation
+- [X] T055 Security pass: grep every `+server.ts` under src/routes/api for a `requireProject`/admin guard (add a unit test in tests/unit/routes-guarded.test.ts that imports each route module and asserts unauthenticated calls return 401/404, so new routes can't skip it); confirm `/share/*` leaks only the title
+- [ ] T056 (partial: `pnpm check` and `pnpm test` pass; full e2e, `clerk` project and manual walk-through left to the user) Run `pnpm check`, `pnpm test`, `pnpm test:e2e` (all three browsers) and the `clerk` project with keys from the keychain (`agent-secret run …`, quickstart.md), plus a manual walk-through with the t3-code preview tools signed in through Clerk; fix what fails
+- [X] T057 Mark row 005 `done` in specs/ROADMAP.md
 
 ## Dependencies & Execution Order
 

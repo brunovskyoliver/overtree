@@ -28,15 +28,17 @@ Open http://localhost:5173 → redirected to `/sign-in` → sign in → dashboar
 
 ```bash
 pnpm check                      # 0 errors
-pnpm test                       # Vitest: auth, permissions, mirror, collab auth/read-only/kick, migration
+pnpm test                       # Vitest: auth, permissions, mirror, collab auth/read-only/kick, migration, route guards
 pnpm test:e2e                   # Playwright with OVERTREE_TEST_AUTH=1 (offline)
 agent-secret run -e PUBLIC_CLERK_PUBLISHABLE_KEY=overtree/clerk-publishable-key \
-  -e CLERK_SECRET_KEY=overtree/clerk-secret-key -- pnpm test:e2e --project=clerk   # real Clerk smoke set
+  -e CLERK_SECRET_KEY=overtree/clerk-secret-key -- pnpm exec playwright test --project=clerk --reporter=line   # real Clerk smoke set
+agent-secret run -e PUBLIC_CLERK_PUBLISHABLE_KEY=overtree/clerk-publishable-key \
+  -e CLERK_SECRET_KEY=overtree/clerk-secret-key -- scripts/compose-smoke.sh   # Docker image, signed-out checks
 ```
 
 ## Scenarios (map to spec stories)
 
-1. **Sign-in (US1)**: signed out `/project/x` → `/sign-in`; sign in with `e2e+clerk_test@example.com`, code `424242` → back to the requested page. `curl -i localhost:5173/api/projects` → 401. WebSocket without token → `authenticationFailed`.
+1. **Sign-in (US1)**: signed out `/project/x` → `/sign-in`; sign in with `e2e+clerk_test@example.com`, code `424242` → back to the requested page. `curl -i localhost:5173/api/projects` → 401. WebSocket without token → `authenticationFailed` (`node scripts/collab-client.ts ws://localhost:5173/collab refused` exits 0).
 2. **Dashboard (US2)**: create "Thesis" from Report → opens and compiles; rename from top bar; duplicate; search "thes"; delete copy. Upgrade test: start 005 on a 003 data dir → first sign-in sees "Untitled project" with old files.
 3. **Sharing (US3)**: owner invites B as Reader → B's dashboard shows it, editor read-only, Recompile works; owner switches B to Editor → B types within 2 s; link on (Reader) → C opens link and gets read-only; reset link → C disconnected.
 4. **Live (US4)**: two contexts in one file see each other's labelled cursors; avatars in top bar; clicking jumps; tree change appears in the other context without reload; per-user undo; `context.setOffline(true)` 30 s with edits both sides → merged. Five-context test types concurrently for 60 s → identical text.
@@ -45,6 +47,7 @@ agent-secret run -e PUBLIC_CLERK_PUBLISHABLE_KEY=overtree/clerk-publishable-key 
 
 ## Security spot-checks
 
-- Run the app with `NODE_ENV=production OVERTREE_TEST_AUTH=1 node server.ts` → exits with an error.
+- Run the app with `NODE_ENV=production OVERTREE_TEST_AUTH=1 node server.ts` → exits with an error (`scripts/compose-smoke.sh` checks the same in the image).
+- Every `+server.ts` under `src/routes/api` answers 401 signed out and 403/404 to a non-member (`tests/unit/routes-guarded.test.ts` enumerates them, so a new route can't skip its guard). `/share/<token>` shows a signed-out visitor the title only.
 - As a reader, send a Yjs update through a raw `HocuspocusProvider` → server text unchanged (unit test).
 - As a non-member, `GET /api/projects/<id>/files` → 404.

@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { strToU8, unzipSync, zipSync } from 'fflate';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { pathOf } from '../../src/lib/files.ts';
 import { collectProject } from '../../src/lib/server/compile.ts';
 import { createEntry, getMainFileId, listFiles } from '../../src/lib/server/files.ts';
@@ -73,7 +73,12 @@ describe('project zip', () => {
 
 	it('refuses bombs, too many entries and non-zips without creating a project', async () => {
 		const server = await start();
-		expect(status(() => importZip(zips.bomb()))).toBe(413);
+		vi.stubEnv('IMPORT_MAX_MB', '1');
+		try {
+			expect(status(() => importZip(zips.bomb()))).toBe(413);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 		expect(status(() => importZip(zips['too-many']()))).toBe(413);
 		expect(status(() => importZip(zips['not-a-zip']()))).toBe(400);
 		expect(status(() => importZip(new Uint8Array()))).toBe(400);

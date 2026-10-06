@@ -64,10 +64,15 @@ export function canEditFiles(pid: string, userId: string, ids: string[]): boolea
 
 const NEED_OK: Record<Need, (r: Role) => boolean> = { read: () => true, edit: canEdit, owner: (r) => r === 'owner' };
 
+/** Guard for per-user routes: 401 signed out. hooks.server.ts checks /api/* first; this keeps each route safe on its own. */
+export function requireUser(locals: { user?: User | null }): User {
+	if (!locals.user) throw new FileError(401, 'Sign in to continue.');
+	return locals.user;
+}
+
 /** Guard for project routes: 401 signed out, 404 for non-members (ids don't leak), 403 when the role is too low. */
 export function requireProject(locals: { user?: User | null }, pid: string, need: Need): { user: User; role: Role } {
-	const user = locals.user;
-	if (!user) throw new FileError(401, 'Sign in to continue.');
+	const user = requireUser(locals);
 	const role = projectRole(pid, user.id);
 	if (!role) throw new FileError(404, 'Project not found.');
 	if (!NEED_OK[need](role)) throw new FileError(403, need === 'owner' ? 'Only the owner can do this.' : 'You can only view this project.');
@@ -113,8 +118,7 @@ export function broadcast(pid: string, event: ProjectEvent) {
 
 /** Guard for admin routes: 401 signed out, 403 unless a site admin (contracts/http-api.md, Admin). */
 export function requireAdmin(locals: { user?: User | null }): User {
-	const user = locals.user;
-	if (!user) throw new FileError(401, 'Sign in to continue.');
+	const user = requireUser(locals);
 	if (user.role !== 'admin') throw new FileError(403, 'Only admins can do this.');
 	return user;
 }
