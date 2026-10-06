@@ -1,0 +1,58 @@
+{
+	"name": "overtree",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"start": "node server.ts",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo \"\"",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"test": "vitest run",
+		"test:e2e": "playwright test",
+		"db:generate": "drizzle-kit generate"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.63.0",
+		"@sveltejs/adapter-node": "^6.0.0",
+		"@sveltejs/kit": "^3.0.0",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@types/better-sqlite3": "^9.6.0",
+		"@types/node": "^24",
+		"@types/ws": "^8.18.2",
+		"drizzle-kit": "^0.31.11",
+		"svelte": "^5.57.1",
+		"svelte-check": "^4.6.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.0",
+		"vitest": "^5.0.3"
+	},
+	"imports": {
+		"#lib": "./src/lib/index.js",
+		"#lib/*": "./src/lib/*"
+	},
+	"dependencies": {
+		"@codemirror/language": "^6.12.4",
+		"@codemirror/legacy-modes": "^6.5.4",
+		"@codemirror/search": "^6.7.2",
+		"@hocuspocus/provider": "^4.7.0",
+		"@hocuspocus/server": "^4.7.0",
+		"better-sqlite3": "^13.0.3",
+		"codemirror": "^6.0.2",
+		"drizzle-orm": "^0.45.3",
+		"paneforge": "^1.0.2",
+		"ws": "^8.22.0",
+		"y-codemirror.next": "^0.3.6",
+		"y-protocols": "^1.0.7",
+		"yjs": "^13.6.33"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"better-sqlite3",
+			"esbuild"
+		]
+	}
+}

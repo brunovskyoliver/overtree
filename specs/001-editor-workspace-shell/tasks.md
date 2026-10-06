@@ -24,11 +24,11 @@ description: "Task list for feature 001 Editor workspace shell"
 
 **Purpose**: Project initialization
 
-- [ ] T001 Scaffold a SvelteKit project (Svelte 5, TypeScript strict, pnpm, minimal template) at the repo root with `pnpm dlx sv create`, keeping the existing `.specify/`, `.claude/` and `specs/` folders; switch to `@sveltejs/adapter-node` in `svelte.config.js`; add `data/`, `build/`, `test-results/` and `playwright-report/` to `.gitignore`
-- [ ] T002 Add runtime deps `yjs y-protocols @hocuspocus/server @hocuspocus/provider ws codemirror @codemirror/legacy-modes @codemirror/language @codemirror/search y-codemirror.next paneforge drizzle-orm better-sqlite3` and dev deps `drizzle-kit vitest @playwright/test @types/ws @types/better-sqlite3` in `package.json`; check that `yjs` resolves to a single 13.x copy (`pnpm why yjs`)
-- [ ] T003 [P] Configure scripts in `package.json`: `dev`, `build`, `start` (`node server.ts`), `check`, `test` (vitest run), `test:e2e` (playwright test), `db:generate` (drizzle-kit generate)
-- [ ] T004 [P] Configure Vitest (`vite.config.ts` test block, `tests/unit/**`) and Playwright in `playwright.config.ts` (webServer: `pnpm build && node server.ts` with `PORT=4173`, `DATA_DIR` = a fresh temp dir per run, `PUBLIC_TEST_HOOKS=1`; projects chromium, firefox, webkit; tests in `tests/e2e/`)
-- [ ] T005 [P] Set `allowImportingTsExtensions` and `rewriteRelativeImportExtensions` (or `noEmit`) in `tsconfig.json` so `server.ts` and `src/lib/server/*` can import each other with `.ts` extensions under Node type stripping
+- [X] T001 Scaffold a SvelteKit project (Svelte 5, TypeScript strict, pnpm, minimal template) at the repo root with `pnpm dlx sv create`, keeping the existing `.specify/`, `.claude/` and `specs/` folders; switch to `@sveltejs/adapter-node` in `svelte.config.js`; add `data/`, `build/`, `test-results/` and `playwright-report/` to `.gitignore`
+- [X] T002 Add runtime deps `yjs y-protocols @hocuspocus/server @hocuspocus/provider ws codemirror @codemirror/legacy-modes @codemirror/language @codemirror/search y-codemirror.next paneforge drizzle-orm better-sqlite3` and dev deps `drizzle-kit vitest @playwright/test @types/ws @types/better-sqlite3` in `package.json`; check that `yjs` resolves to a single 13.x copy (`pnpm why yjs`)
+- [X] T003 [P] Configure scripts in `package.json`: `dev`, `build`, `start` (`node server.ts`), `check`, `test` (vitest run), `test:e2e` (playwright test), `db:generate` (drizzle-kit generate)
+- [X] T004 [P] Configure Vitest (`vite.config.ts` test block, `tests/unit/**`) and Playwright in `playwright.config.ts` (webServer: `pnpm build && node server.ts` with `PORT=4173`, `DATA_DIR` = a fresh temp dir per run, `PUBLIC_TEST_HOOKS=1`; projects chromium, firefox, webkit; tests in `tests/e2e/`)
+- [X] T005 [P] Set `allowImportingTsExtensions` and `rewriteRelativeImportExtensions` (or `noEmit`) in `tsconfig.json` so `server.ts` and `src/lib/server/*` can import each other with `.ts` extensions under Node type stripping
 
 ---
 

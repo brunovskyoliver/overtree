@@ -1,0 +1,12 @@
+{
+	"extends": "$app/tsconfig",
+	"compilerOptions": {
+		"strict": true,
+		"types": ["$app/types", "node"],
+		// server.ts and src/lib/server/* run under Node type stripping: .ts imports, erasable syntax only
+		"allowImportingTsExtensions": true,
+		"erasableSyntaxOnly": true,
+		"noEmit": true
+	},
+	"include": ["src", "tests", "vite.config.ts", "playwright.config.ts", "drizzle.config.ts", "server.ts"]
+}
