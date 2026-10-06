@@ -83,3 +83,24 @@ export function status(fn: () => unknown) {
 	}
 	throw new Error('expected a FileError');
 }
+
+/** A route handler's response (status and JSON body), or the status of the error it throws. */
+export async function hit(handler: (event: never) => Response | Promise<Response>, event: object) {
+	try {
+		const res = await handler(event as never);
+		const type = res.headers.get('content-type') ?? '';
+		return { status: res.status, body: type.includes('json') ? await res.json() : null };
+	} catch (e) {
+		return { status: (e as { status: number }).status, body: null };
+	}
+}
+
+export const json = (method: string, body: unknown) =>
+	new Request('http://x/', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+export const ev = (email: string, params: Record<string, string>, request?: Request) => ({
+	locals: { user: user(email) },
+	params,
+	request,
+	url: new URL('http://x/')
+});

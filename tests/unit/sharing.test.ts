@@ -32,7 +32,7 @@ import * as memberRoute from '../../src/routes/api/projects/[pid]/members/[userI
 import * as symbolsRoute from '../../src/routes/api/projects/[pid]/symbols/+server.ts';
 import * as transferRoute from '../../src/routes/api/projects/[pid]/transfer/+server.ts';
 import * as zipRoute from '../../src/routes/api/projects/[pid]/zip/+server.ts';
-import { connect, OWNER, project, start, status, user, waitFor, type Started } from './helpers.ts';
+import { connect, ev, hit, json, OWNER, project, start, status, user, waitFor, type Started } from './helpers.ts';
 
 // Sharing (005 US3, SC-002): roles enforced on the server, bypassing the UI.
 
@@ -43,27 +43,6 @@ const D = 'd@test.local';
 function member(server: Started, pid: string, email: string, role: MemberRole) {
 	server.db.insert(memberships).values({ projectId: pid, userId: user(email).id, role, viaLink: false, createdAt: Date.now() }).run();
 }
-
-/** A route handler's response (status and JSON body), or the status of the error it throws. */
-async function hit(handler: (event: never) => Response | Promise<Response>, event: object) {
-	try {
-		const res = await handler(event as never);
-		const type = res.headers.get('content-type') ?? '';
-		return { status: res.status, body: type.includes('json') ? await res.json() : null };
-	} catch (e) {
-		return { status: (e as { status: number }).status, body: null };
-	}
-}
-
-const json = (method: string, body: unknown) =>
-	new Request('http://x/', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-
-const ev = (email: string, params: Record<string, string>, request?: Request) => ({
-	locals: { user: user(email) },
-	params,
-	request,
-	url: new URL('http://x/')
-});
 
 /** The last id ever given to an `updates` row (compaction deletes rows, never this). */
 const lastUpdateId = (server: Started) =>

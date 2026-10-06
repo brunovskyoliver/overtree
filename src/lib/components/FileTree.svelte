@@ -5,6 +5,7 @@
 	import type { Project } from '#lib/project.svelte.ts';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import FileIcon from './FileIcon.svelte';
+	import PermissionsDialog from './PermissionsDialog.svelte';
 
 	// File tree per contracts/ui.md. `activeId` is the file shown in the editor; `onopen` opens a file in a tab.
 	let { project, activeId, onopen }: { project: Project; activeId?: string | null; onopen?: (id: string) => void } = $props();
@@ -33,6 +34,7 @@
 	let dropTarget = $state<string | null | undefined>(); // null = root, undefined = no valid target
 	let tree: HTMLUListElement;
 	let confirm: ConfirmDialog;
+	let permissions: PermissionsDialog;
 	let picker: HTMLInputElement;
 	let uploadTo: string | null = null;
 
@@ -41,8 +43,17 @@
 	let menuAt = $state({ x: 0, y: 0 });
 
 	const byId = (id: string | null | undefined) => project.files.find((f) => f.id === id);
-	// readers get a tree they can browse and download from, nothing that changes it (US3 scenario 5)
+	// readers get a tree they can browse and download from, nothing that changes it (US3 scenario 5); per-file
+	// overrides (US6) raise or lower that per entry: `canEdit` of each entry comes from the server (research R10)
 	const canEdit = $derived(project.details?.permissions.canEdit !== false);
+	const editable = (f: FileEntry | undefined) => f?.canEdit !== false;
+	/** May create or upload into the folder (null: the root). */
+	const intoOk = (folderId: string | null) => (folderId === null ? canEdit : editable(byId(folderId)));
+	/** May rename, move or delete: the entry and everything inside it (the server checks the same).
+	 *  ponytail: O(files × depth) per row, fine for the 2,000-file limit */
+	const changeable = (f: FileEntry) => project.files.every((g) => g.canEdit !== false || !within(g.id, f.id));
+	// owner only, once someone is named on the project (link-only users get the link role everywhere)
+	const canSetPermissions = $derived(project.details?.role === 'owner' && !!project.members?.members.some((x) => x.via === 'invite'));
 	// nothing clicked yet: the editor's file counts as selected
 	const sel = $derived(byId(selected) ?? byId(activeId));
 	const tabStop = $derived(sel?.id ?? project.children(null)[0]?.id);
@@ -147,7 +158,7 @@
 	// --- menu and delete ---------------------------------------------------------------------------
 
 	function openMenu(f: FileEntry, x: number, y: number) {
-		if (!canEdit && f.kind === 'folder') return; // a reader's folder menu would be empty
+		if (f.kind === 'folder' && !editable(f) && !canSetPermissions) return; // the menu would be empty
 		selected = f.id;
 		menuFor = f;
 		menuAt = { x, y };
@@ -256,11 +267,11 @@
 				activate(f);
 				break;
 			case 'F2':
-				if (canEdit) startRename(f);
+				if (changeable(f)) startRename(f);
 				break;
 			case 'Delete':
 			case 'Backspace': // the Mac "delete" key
-				if (canEdit) remove(f);
+				if (changeable(f)) remove(f);
 				break;
 			case 'F10':
 				if (!e.shiftKey) return;
@@ -282,15 +293,15 @@
 	function targetFor(f: FileEntry | null): string | null | undefined {
 		const d = byId(dragging);
 		const t = folderOf(f);
-		if (!d || d.parentId === t || (t !== null && within(t, d.id))) return undefined;
+		if (!d || d.parentId === t || (t !== null && within(t, d.id)) || !intoOk(t)) return undefined;
 		return t;
 	}
 
 	function ondragover(e: DragEvent, f: FileEntry | null) {
 		e.stopPropagation();
-		if (!canEdit) return;
-		// files from the desktop can go into any folder
-		dropTarget = !dragging && e.dataTransfer?.types.includes('Files') ? folderOf(f) : targetFor(f);
+		// files from the desktop can go into any folder the user may edit
+		const desktop = !dragging && e.dataTransfer?.types.includes('Files');
+		dropTarget = desktop ? (intoOk(folderOf(f)) ? folderOf(f) : undefined) : targetFor(f);
 		if (dropTarget !== undefined) e.preventDefault();
 	}
 
@@ -380,7 +391,7 @@
 				class:active={f.id === activeId}
 				class:drop={dropTarget === f.id}
 				style:--level={level}
-				draggable={canEdit && !renaming}
+				draggable={changeable(f) && !renaming}
 				ondragstart={(e) => ondragstart(e, f)}
 				{ondragend}
 				ondragover={(e) => ondragover(e, f)}
@@ -398,6 +409,9 @@
 					<span class="name">{f.name}</span>
 				{/if}
 				{#if main}<span class="main" aria-hidden="true">main</span>{/if}
+				{#if !editable(f)}
+					<svg class="lock" viewBox="0 0 24 24" role="img" aria-label="Read only"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+				{/if}
 				<button
 					type="button"
 					class="kebab"
@@ -424,13 +438,13 @@
 <section class="tree-panel" aria-labelledby="file-tree-title">
 	<div class="header">
 		<h2 class="pane-header" id="file-tree-title">File tree</h2>
-		<button type="button" class="tool" aria-label="New file" title="New file" disabled={!canEdit} onclick={() => startNew('text')}>
+		<button type="button" class="tool" aria-label="New file" title="New file" disabled={!intoOk(folderOf(sel))} onclick={() => startNew('text')}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7zM14 3v4h4M12 11v6M9 14h6" /></svg>
 		</button>
-		<button type="button" class="tool" aria-label="New folder" title="New folder" disabled={!canEdit} onclick={() => startNew('folder')}>
+		<button type="button" class="tool" aria-label="New folder" title="New folder" disabled={!intoOk(folderOf(sel))} onclick={() => startNew('folder')}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3zM12 11v6M9 14h6" /></svg>
 		</button>
-		<button type="button" class="tool" aria-label="Upload" title="Upload" disabled={!canEdit} onclick={() => pick(folderOf(sel))}>
+		<button type="button" class="tool" aria-label="Upload" title="Upload" disabled={!intoOk(folderOf(sel))} onclick={() => pick(folderOf(sel))}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" /></svg>
 		</button>
 		<a class="tool" href={project.api('/zip')} download aria-label="Download project as zip" title="Download project as zip">
@@ -492,12 +506,12 @@
 		}}
 		onkeydown={m.onmenukey}
 	>
-		{#if f.kind === 'folder' && canEdit}
+		{#if f.kind === 'folder' && editable(f)}
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('text', f.id))}>New file here</button>
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('folder', f.id))}>New folder here</button>
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => pick(f.id), true)}>Upload here</button>
 		{/if}
-		{#if canEdit}
+		{#if changeable(f)}
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startRename(f))}>Rename</button>
 		{/if}
 		{#if f.kind !== 'folder'}
@@ -513,13 +527,17 @@
 				<button type="button" role="menuitem" tabindex="-1" onclick={item(() => setMain(f), true)}>Set as main document</button>
 			{/if}
 		{/if}
-		{#if canEdit}
+		{#if canSetPermissions}
+			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => permissions.open(f), true)}>Permissions…</button>
+		{/if}
+		{#if changeable(f)}
 			<button type="button" role="menuitem" tabindex="-1" class="danger" onclick={item(() => remove(f))}>Delete</button>
 		{/if}
 	</div>
 {/if}
 
 <ConfirmDialog bind:this={confirm} />
+<PermissionsDialog bind:this={permissions} {project} />
 
 <style>
 	.tree-panel {
@@ -677,6 +695,11 @@
 		stroke-width: 2;
 		stroke-linecap: round;
 		stroke-linejoin: round;
+	}
+	.lock {
+		width: 13px;
+		height: 13px;
+		color: var(--text-muted);
 	}
 	.chevron,
 	.chevron-slot {

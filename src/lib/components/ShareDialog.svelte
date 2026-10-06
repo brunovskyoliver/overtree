@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { blockedBy } from '#lib/auth.svelte.ts';
 	import { Menu } from '#lib/menu.svelte.ts';
-	import type { Project } from '#lib/project.svelte.ts';
+	import type { Members, Person, Project } from '#lib/project.svelte.ts';
 	import Avatar from './Avatar.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 
@@ -11,12 +11,6 @@
 	let { project }: { project: Project } = $props();
 
 	type Role = 'editor' | 'reader';
-	type Person = { id: string; email: string; name: string; avatarUrl: string | null; color: string };
-	type Members = {
-		owner: Person | null;
-		members: { user: Person; role: Role; via: 'invite' | 'link' }[];
-		invites: { email: string; role: Role }[];
-	};
 
 	const ROLES: [Role, string][] = [
 		['editor', 'Editor'],
@@ -85,6 +79,7 @@
 	const setInviteRole = (address: string, r: Role) => call('/members', 'POST', { email: address, role: r });
 	const withdraw = (address: string) => call(`/invites/${encodeURIComponent(address)}`, 'DELETE');
 	const putLink = (r: Role | null, regenerate = false) => call('/link', 'PUT', { role: r, regenerate });
+	const dropOverride = (userId: string, fileId: string) => call('/overrides', 'PUT', { userId, fileId, role: null });
 
 	async function resetLink() {
 		const ok = await confirm.ask({
@@ -156,6 +151,7 @@
 			</li>
 		{/if}
 		{#each list?.members ?? [] as { user: u, role: r, via } (u.id)}
+			{@const own = list?.overrides.filter((o) => o.userId === u.id) ?? []}
 			<li>
 				{@render who(u, via === 'link' ? 'via link' : undefined)}
 				{#if owner}
@@ -186,6 +182,29 @@
 					</span>
 				{:else}
 					<span class="fixed">{r === 'editor' ? 'Editor' : 'Reader'}</span>
+				{/if}
+				{#if own.length}
+					<details class="overrides">
+						<summary>File permissions ({own.length})</summary>
+						<ul aria-label="File permissions for {u.email}">
+							{#each own as o (o.fileId)}
+								<li>
+									<span class="path">{o.path}</span>
+									<span class="fixed">{o.role === 'editor' ? 'Editor' : 'Reader'}</span>
+									<button
+										type="button"
+										class="icon"
+										aria-label="Remove permission on {o.path} for {u.email}"
+										title="Remove"
+										disabled={busy}
+										onclick={() => dropOverride(u.id, o.fileId)}
+									>
+										<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</details>
 				{/if}
 			</li>
 		{/each}
@@ -337,10 +356,37 @@
 	}
 	.people li {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px;
 		min-height: 44px;
 		padding: 4px 0;
+	}
+	.overrides {
+		flex: 1 0 100%;
+		padding-left: 42px;
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.overrides summary {
+		cursor: pointer;
+	}
+	.overrides ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.overrides li {
+		min-height: 30px;
+		padding: 0;
+	}
+	.path {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		color: var(--text);
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.who {
 		display: flex;

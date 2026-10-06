@@ -347,3 +347,32 @@ export function transferOwnership(pid: string, fromId: string, toId: unknown) {
 	kick({ userId: fromId, projectId: pid });
 	kick({ userId: to, projectId: pid });
 }
+
+/** Set (`role`) or remove (null) a collaborator's override on one file or folder (owner, US6). Only named
+ *  collaborators get overrides: link-only users have the link role everywhere (spec assumptions). 422 for anyone
+ *  else, 404 for a file of another project. Their sockets reconnect with the new per-file role. */
+export function setOverride(pid: string, userId: unknown, fileId: unknown, role: unknown) {
+	const r = role === null ? null : memberRole(role);
+	if (typeof userId !== 'string' || typeof fileId !== 'string') fail(422, 'Expected userId and fileId.');
+	const u = userId as string;
+	const f = fileId as string;
+	if (!db().select().from(memberships).where(memberWhere(pid, u)).get()?.role) fail(422, 'Only collaborators can get file permissions.');
+	if (!db().select({ id: files.id }).from(files).where(and(eq(files.id, f), eq(files.projectId, pid))).get()) fail(404, 'File not found.');
+	const where = and(eq(overrides.projectId, pid), eq(overrides.userId, u), eq(overrides.fileId, f));
+	if (r === null) db().delete(overrides).where(where).run();
+	else
+		db()
+			.insert(overrides)
+			.values({ projectId: pid, userId: u, fileId: f, role: r })
+			.onConflictDoUpdate({ target: [overrides.projectId, overrides.userId, overrides.fileId], set: { role: r } })
+			.run();
+	broadcast(pid, { type: 'access' });
+	kick({ userId: u, projectId: pid });
+}
+
+/** After a move: users with overrides here may now have another role on the moved files (US6 scenario 6), their
+ *  open connections re-authenticate. */
+export function kickOverridden(pid: string) {
+	const ids = db().selectDistinct({ userId: overrides.userId }).from(overrides).where(eq(overrides.projectId, pid)).all();
+	for (const { userId } of ids) kick({ userId, projectId: pid });
+}

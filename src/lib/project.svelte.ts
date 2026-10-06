@@ -17,6 +17,15 @@ export type ProjectDetails = {
 	permissions: { canEdit: boolean };
 };
 
+export type Person = { id: string; email: string; name: string; avatarUrl: string | null; color: string };
+/** `GET /api/projects/:pid/members`; invites and overrides only for the owner. */
+export type Members = {
+	owner: Person | null;
+	members: { user: Person; role: 'editor' | 'reader'; via: 'invite' | 'link' }[];
+	invites: { email: string; role: 'editor' | 'reader' }[];
+	overrides: { userId: string; fileId: string; path: string; role: 'editor' | 'reader' }[];
+};
+
 // Client view of one project's tree and its open tabs. Each operation calls the API and reloads the whole list
 // on success (live tree events come with US4); failures return the server's message for the UI.
 export class Project {
@@ -30,6 +39,8 @@ export class Project {
 	open = $state<string[]>([]);
 	active = $state<string | null>(null);
 	uploads = $state<Upload[]>([]);
+	/** the owner's view of the collaborators (Permissions dialog), null for everyone else */
+	members = $state<Members | null>(null);
 	#restored = false;
 
 	constructor(id: string) {
@@ -60,6 +71,24 @@ export class Project {
 		}
 		this.loadError = null;
 		this.details = await res.json();
+		if (this.details?.role === 'owner') await this.loadMembers();
+		else this.members = null;
+	}
+
+	async loadMembers() {
+		const res = await fetch(this.api('/members')).catch(() => undefined);
+		if (res?.ok) this.members = await res.json();
+	}
+
+	/** Set or remove (null) a collaborator's role on one file or folder (owner); null when done, else the message. */
+	async setOverride(userId: string, fileId: string, role: 'editor' | 'reader' | null): Promise<string | null> {
+		const init = { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, fileId, role }) };
+		const res = await fetch(this.api('/overrides'), init).catch(() => undefined);
+		if (await blockedBy(res)) return null;
+		if (!res) return 'Network error, try again.';
+		if (!res.ok) return (await res.json().catch(() => null))?.message ?? `Request failed (${res.status}).`;
+		await this.loadMembers();
+		return null;
 	}
 
 	/** Rename the project (owner only); null when done, else the server's message. */
