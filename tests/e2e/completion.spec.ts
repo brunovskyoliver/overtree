@@ -148,8 +148,8 @@ test('Enter after \\begin{itemize} closes it, but not twice (US5-6)', async ({ p
 	expect(await text(page)).toBe('\\begin{itemize}\n\n\\end{itemize}');
 });
 
-test('commands defined in another project file are offered (US5-7)', async ({ page }) => {
-	await upload(page, 'macros.tex', '\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\pair}[2]{(#1, #2)}\n');
+test('commands and environments defined in another project file are offered (US5-7)', async ({ page }) => {
+	await upload(page, 'macros.tex', '\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\pair}[2]{(#1, #2)}\n\\newenvironment{proof2}{}{}\n');
 	await page.reload();
 	await openEditor(page);
 	await empty(page);
@@ -169,6 +169,16 @@ test('commands defined in another project file are offered (US5-7)', async ({ pa
 	await page.keyboard.press('Tab');
 	await page.keyboard.type('b');
 	expect(await text(page)).toBe('\\pair{a}{b}');
+
+	await empty(page);
+	await page.keyboard.type('\\begin{proof');
+	await ready(page, 'proof');
+	const own = options(page).filter({ hasText: /^proof2env$/ });
+	await expect(own).toBeVisible();
+	await page.keyboard.type('2');
+	await ready(page, 'proof2');
+	await page.keyboard.press('Enter');
+	expect(await text(page)).toBe('\\begin{proof2}');
 });
 
 test('no popup in comments or non-LaTeX files (US5-8)', async ({ page }) => {

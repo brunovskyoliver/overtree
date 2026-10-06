@@ -91,7 +91,7 @@
 		bracketMatching(),
 		closeBrackets(),
 		autocompletion({
-			override: [latexSource(() => symbols.commands)],
+			override: [latexSource(symbols)],
 			icons: false,
 			addToOptions: [{ position: 90, render: kindLabel }],
 			activateOnTyping: true,

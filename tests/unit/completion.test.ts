@@ -4,11 +4,12 @@ import { CompletionContext, nextSnippetField, type Completion, type CompletionRe
 import { StreamLanguage } from '@codemirror/language';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { codePointAt, codePointSize, EditorState, fromCodePoint, Transaction, type TransactionSpec } from '@codemirror/state';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { COMMANDS, ENVIRONMENTS, PACKAGES } from '../../src/lib/completion/data.ts';
 import { closeEnvironment, environments } from '../../src/lib/completion/environments.ts';
-import { scanTex, type ProjectCommand } from '../../src/lib/completion/scan.ts';
+import { scanTex, type ProjectSymbols } from '../../src/lib/completion/scan.ts';
 import { latexSource } from '../../src/lib/completion/source.ts';
+import { Symbols } from '../../src/lib/completion/symbols.svelte.ts';
 
 // The popup's own matcher: @codemirror/autocomplete doesn't export FuzzyMatcher, so take the class from its
 // bundle and rank like its sortOptions (score + boost, then label), as the popup does.
@@ -40,9 +41,11 @@ function stateOf(doc: string, latex = true) {
 	return EditorState.create({ doc: doc.replace('|', ''), selection: { anchor: at }, extensions: latex ? [stexLanguage, environments] : [] });
 }
 
-function complete(doc: string, { latex = true, commands = [] as ProjectCommand[], explicit = false } = {}) {
+const NONE: ProjectSymbols = { labels: [], commands: [], environments: [], bibKeys: [], files: [] };
+
+function complete(doc: string, { latex = true, project = {} as Partial<ProjectSymbols>, explicit = false } = {}) {
 	const state = stateOf(doc, latex);
-	return latexSource(() => commands)(new CompletionContext(state, state.selection.main.head, explicit));
+	return latexSource({ ...NONE, ...project })(new CompletionContext(state, state.selection.main.head, explicit));
 }
 
 /** Enough of an EditorView for snippets and commands. */
@@ -157,7 +160,7 @@ describe('command completion', () => {
 
 	it('offers project commands from scanned text with a {} per argument (US5-7)', () => {
 		const { commands } = scanTex('\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\pair}[2]{(#1,#2)}\n\\newcommand{\\section}{x}');
-		const result = complete('\\R', { commands })!;
+		const result = complete('\\R', { project: { commands } })!;
 		const own = (label: string) => result.options.filter((o) => o.label === label);
 		expect(ranked(result, '\\R')[0]).toMatchObject({ label: '\\R', type: 'cmd' });
 		expect(own('\\pair{}{}')).toHaveLength(1);
@@ -219,5 +222,97 @@ describe('snippets and environments', () => {
 		expect(closeEnvironment(fakeView(stateOf('\\begin{figure}[htbp]')))).toBe(true);
 		expect(closeEnvironment(fakeView(stateOf('\\begin{itemize}| x')))).toBe(false);
 		expect(closeEnvironment(fakeView(stateOf('% \\begin{itemize}')))).toBe(false);
+	});
+});
+
+describe('argument completion (US6)', () => {
+	const project: Partial<ProjectSymbols> = {
+		labels: ['sec:intro', 'fig:plot'],
+		environments: ['proof2'],
+		bibKeys: [{ key: 'knuth84', title: 'Literate Programming', author: 'Knuth' }, { key: 'lamport94', author: 'Lamport' }],
+		files: [
+			{ path: 'main.tex', kind: 'text' },
+			{ path: 'chapters/intro.tex', kind: 'text' },
+			{ path: 'figures/plot.png', kind: 'binary' },
+			{ path: 'figures/plot.pdf', kind: 'binary' },
+			{ path: 'refs.bib', kind: 'text' },
+			{ path: 'notes.md', kind: 'text' }
+		]
+	};
+	/** from, labels and kinds of the completion at the end of `doc` */
+	const at = (doc: string) => {
+		const r = complete(doc, { project })!;
+		return { from: r.from, labels: r.options.map((o) => o.label), types: new Set(r.options.map((o) => o.type)) };
+	};
+
+	it('labels in \\ref and its variants, after commas in \\cref (US6-1)', () => {
+		for (const cmd of ['ref', 'eqref', 'autoref', 'pageref', 'cref', 'Cref', 'nameref']) {
+			expect(at(`see \\${cmd}{`)).toEqual({ from: `see \\${cmd}{`.length, labels: ['sec:intro', 'fig:plot'], types: new Set(['label']) });
+		}
+		expect(at('\\ref{sec:in').from).toBe('\\ref{'.length);
+		expect(at('\\cref{sec:intro, fi').from).toBe('\\cref{sec:intro, '.length);
+	});
+
+	it('bib keys in \\cite variants with title or author as detail, after options and commas (US6-2)', () => {
+		const r = complete('\\cite{kn', { project })!;
+		expect(r.from).toBe('\\cite{'.length);
+		expect(r.options).toEqual([
+			{ label: 'knuth84', type: 'cite', detail: 'Literate Programming' },
+			{ label: 'lamport94', type: 'cite', detail: 'Lamport' }
+		]);
+		expect(ranked(r, 'kn')[0].label).toBe('knuth84');
+		for (const cmd of ['citep', 'citet', 'parencite', 'textcite', 'autocite', 'nocite', 'cite*']) expect(at(`\\${cmd}{`).types).toEqual(new Set(['cite']));
+		expect(at('\\cite{a,').from).toBe('\\cite{a,'.length);
+		expect(at('\\cite[p.~3]{a,kn').from).toBe('\\cite[p.~3]{a,'.length);
+		expect(at('\\parencite[see][12]{kn').from).toBe('\\parencite[see][12]{'.length);
+	});
+
+	it('packages in \\usepackage and \\RequirePackage, after options and commas (US6-3)', () => {
+		const r = complete('\\usepackage{amsmath,ams', { project })!;
+		expect(r.from).toBe('\\usepackage{amsmath,'.length);
+		expect(ranked(r, 'ams').slice(0, 4).map((o) => o.label)).toEqual(expect.arrayContaining(['amsmath', 'amssymb', 'amsthm']));
+		expect(new Set(r.options.map((o) => o.type))).toEqual(new Set(['pkg']));
+		expect(at('\\usepackage[utf8]{inp').from).toBe('\\usepackage[utf8]{'.length);
+		expect(at('\\RequirePackage{').labels).toContain('geometry');
+	});
+
+	it('file paths by command, relative to the root (US6-4)', () => {
+		expect(at('\\input{').labels).toEqual(['main', 'chapters/intro']);
+		expect(at('\\include{chap')).toEqual({ from: '\\include{'.length, labels: ['main', 'chapters/intro'], types: new Set(['file']) });
+		expect(at('\\includegraphics[width=\\linewidth]{fig').labels).toEqual(['figures/plot']);
+		expect(at('\\bibliography{').labels).toEqual(['refs']);
+		expect(at('\\addbibresource{').labels).toEqual(['refs.bib']);
+	});
+
+	it('bundled and project environments in \\begin{ and \\end{ (US5-7)', () => {
+		const r = complete('\\begin{pro', { project })!;
+		expect(r.from).toBe('\\begin{'.length);
+		expect(ranked(r, 'pro').map((o) => [o.label, o.type])).toEqual(expect.arrayContaining([['proof2', 'env'], ['proof', 'env']]));
+		expect(at('\\end{').labels).toContain('itemize');
+	});
+
+	it('no argument completion in comments or after \\\\', () => {
+		expect(complete('% \\ref{', { project })).toBeNull();
+		expect(complete('a\\\\ref{', { project })).toBeNull();
+	});
+
+	it('a label typed in an open tab shows up via Symbols without a refetch (US6-5)', () => {
+		vi.useFakeTimers();
+		const fetch = vi.fn();
+		vi.stubGlobal('fetch', fetch);
+		try {
+			const symbols = new Symbols();
+			symbols.scan('a', false, EditorState.create({ doc: '\\section{A}\\label{sec:new}' }));
+			symbols.scan('b', true, EditorState.create({ doc: '@book{newkey, title={New}}' }));
+			vi.advanceTimersByTime(300);
+			const state = stateOf('\\ref{');
+			const labels = latexSource(symbols)(new CompletionContext(state, state.doc.length, false))!.options.map((o) => o.label);
+			expect(labels).toEqual(['sec:new']);
+			expect(symbols.bibKeys).toEqual([{ key: 'newkey', title: 'New' }]);
+			expect(fetch).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+			vi.unstubAllGlobals();
+		}
 	});
 });

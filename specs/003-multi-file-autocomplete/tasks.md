@@ -108,9 +108,9 @@
 
 **Independent Test**: `\label{sec:intro}` + `refs.bib` → `\ref{` and `\cite{kn` offer the keys.
 
-- [ ] T049 [US6] Argument contexts in src/lib/completion/source.ts per research R11 and spec FR-030: refs → labels (kind `label`), cites (with optional args, after commas) → bib keys (kind `cite`, detail = title or author), `\usepackage`/`\RequirePackage` → packages (kind `pkg`, after commas), `\input`/`\include` → `.tex` paths without extension, `\includegraphics` → image/PDF paths without extension, `\bibliography` → `.bib` paths without extension, `\addbibresource` → `.bib` paths with extension (kind `file`), `\begin{`/`\end{` → bundled + project environments (kind `env`); `from` = start of the current key so the fuzzy matcher filters it
-- [ ] T050 [US6] Unit tests in tests/unit/completion.test.ts for each context of T049, including `\cite[p.~3]{a,kn` and `\usepackage{amsmath,ams`, and that a new label typed in an open tab shows up via `Symbols` without refetch
-- [ ] T051 [US6] E2E in tests/e2e/arg-completion.spec.ts covering US6 scenarios 1–5 (labels from another file, cite key with title detail and after a comma, `\usepackage{ams` → amsmath/amssymb/amsthm, file paths for `\input{` and `\includegraphics{`, a label added in one tab is offered in another tab without reload)
+- [X] T049 [US6] Argument contexts in src/lib/completion/source.ts per research R11 and spec FR-030: refs → labels (kind `label`), cites (with optional args, after commas) → bib keys (kind `cite`, detail = title or author), `\usepackage`/`\RequirePackage` → packages (kind `pkg`, after commas), `\input`/`\include` → `.tex` paths without extension, `\includegraphics` → image/PDF paths without extension, `\bibliography` → `.bib` paths without extension, `\addbibresource` → `.bib` paths with extension (kind `file`), `\begin{`/`\end{` → bundled + project environments (kind `env`); `from` = start of the current key so the fuzzy matcher filters it
+- [X] T050 [US6] Unit tests in tests/unit/completion.test.ts for each context of T049, including `\cite[p.~3]{a,kn` and `\usepackage{amsmath,ams`, and that a new label typed in an open tab shows up via `Symbols` without refetch
+- [X] T051 [US6] E2E in tests/e2e/arg-completion.spec.ts covering US6 scenarios 1–5 (labels from another file, cite key with title detail and after a comma, `\usepackage{ams` → amsmath/amssymb/amsthm, file paths for `\input{` and `\includegraphics{`, a label added in one tab is offered in another tab without reload)
 
 ## Phase 9: Polish & cross-cutting
 
