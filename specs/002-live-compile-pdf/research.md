@@ -21,6 +21,7 @@ All runtime numbers below come from a spike on the reference machine (macOS, Doc
 - **Decision**: timeout via `setTimeout(COMPILE_TIMEOUT_MS)` → `docker kill overtree-compile-<uuid>`; status `timeout`. Exit code 137 without our timer firing → status `oom`. Defaults `COMPILE_TIMEOUT_MS=20000`, `COMPILE_MEMORY=512m`, `COMPILE_CPUS=1`. stdout capped at 256 MB (tmpfs size) and stderr discarded beyond 64 KB.
 - **Spike**: `\def\x{\x}\x` killed after 5 s → exit 137 in under 1 s after kill. Lua allocation loop → exit 137 (OOM) in 1.3 s.
 - **Rationale**: killing the `docker run` client process doesn't stop the container; `docker kill` does, and `--rm` cleans it.
+- **Correction (implement, T007)**: under latexmk the OOM killer only kills the engine process; the container keeps running and `; true` makes it exit 0 (the spike's 137 came from running the engine directly). The job script therefore ends with `grep -qs '^oom_kill [1-9]' /sys/fs/cgroup/memory.events && exit 137; true` (cgroup v2). Flags unchanged.
 
 ## R3. Docker unavailable
 - **Decision**: spawn error `ENOENT` (no CLI) or exit 125 with stderr (daemon down, image missing) → status `unavailable` with the first stderr line as message.

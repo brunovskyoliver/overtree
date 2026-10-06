@@ -101,7 +101,16 @@ export function attachCollab(httpServer: HttpServer, dataDir?: string) {
 		});
 	});
 
+	// SvelteKit routes are bundled apart from server.ts/the Vite plugin, so they reach this instance via globalThis.
+	globalThis.__overtreeServer = { hocuspocus, db };
+
 	return { hocuspocus, wss, db };
+}
+
+export function getServer() {
+	const server = globalThis.__overtreeServer;
+	if (!server) throw new Error('collab server not attached: run via `pnpm dev` or `node server.ts`');
+	return server;
 }
 
 function toRequest(req: IncomingMessage) {

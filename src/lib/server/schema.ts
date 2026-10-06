@@ -1,4 +1,5 @@
 import { blob, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import type { Compiler } from '../compile-types.ts';
 
 // Compacted Yjs state per document (Y.encodeStateAsUpdate).
 export const documents = sqliteTable('documents', {
@@ -18,3 +19,9 @@ export const updates = sqliteTable(
 	},
 	(t) => [index('updates_doc_name_idx').on(t.docName)]
 );
+
+// Compiler per project ('main' until feature 005); no row means pdflatex.
+export const compileSettings = sqliteTable('compile_settings', {
+	project: text('project').primaryKey(),
+	compiler: text('compiler').$type<Compiler>().notNull()
+});
