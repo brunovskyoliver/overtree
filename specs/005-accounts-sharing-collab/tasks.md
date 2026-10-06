@@ -11,9 +11,9 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Add dependencies `@clerk/clerk-js@^6`, `@clerk/ui@^1`, `@clerk/backend@^3` and dev `@clerk/testing@^2` (`pnpm add …`), confirm `pnpm build` passes; document env vars `PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_KEY` (optional), `ADMIN_EMAILS`, `OVERTREE_TEST_AUTH` in src/env.ts (publishable key as a public runtime var next to `PUBLIC_TEST_HOOKS`), compose.yaml (pass-through, remove the "no login yet" comment) and Dockerfile (copy nothing new outside src/lib/server)
-- [ ] T002 [P] Startup guard in server.ts: exit with a clear error if `OVERTREE_TEST_AUTH=1` and `NODE_ENV=production`, and if neither test auth nor both Clerk keys are set; same check in the dev Vite plugin in vite.config.ts (warn instead of exit when keys are missing in dev without test auth)
-- [ ] T003 [P] Shared helpers in src/lib/presence.ts: `PALETTE` (8 colors readable on the dark theme), `colorFor(userId)` (stable hash → palette), `lightColor(color)` (20 % alpha), `initials(name)`; unit test in tests/unit/presence.test.ts (stable, spread over palette)
+- [X] T001 Add dependencies `@clerk/clerk-js@^6`, `@clerk/ui@^1`, `@clerk/backend@^3` and dev `@clerk/testing@^2` (`pnpm add …`), confirm `pnpm build` passes; document env vars `PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_KEY` (optional), `ADMIN_EMAILS`, `OVERTREE_TEST_AUTH` in src/env.ts (publishable key as a public runtime var next to `PUBLIC_TEST_HOOKS`), compose.yaml (pass-through, remove the "no login yet" comment) and Dockerfile (copy nothing new outside src/lib/server)
+- [X] T002 [P] Startup guard in server.ts: exit with a clear error if `OVERTREE_TEST_AUTH=1` and `NODE_ENV=production`, and if neither test auth nor both Clerk keys are set; same check in the dev Vite plugin in vite.config.ts (warn instead of exit when keys are missing in dev without test auth)
+- [X] T003 [P] Shared helpers in src/lib/presence.ts: `PALETTE` (8 colors readable on the dark theme), `colorFor(userId)` (stable hash → palette), `lightColor(color)` (20 % alpha), `initials(name)`; unit test in tests/unit/presence.test.ts (stable, spread over palette)
 
 ## Phase 2: Foundational (blocks every story)
 

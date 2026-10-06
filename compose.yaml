@@ -3,7 +3,7 @@ services:
     build: .
     image: overtree
     ports:
-      # loopback only unless OVERTREE_BIND=0.0.0.0 (no login yet)
+      # loopback only unless OVERTREE_BIND=0.0.0.0
       - "${OVERTREE_BIND:-127.0.0.1}:${PORT:-3000}:3000"
     volumes:
       - overtree-data:/data
@@ -19,6 +19,12 @@ services:
       UPLOAD_MAX_FILE_MB: ${UPLOAD_MAX_FILE_MB:-50}
       IMPORT_MAX_MB: ${IMPORT_MAX_MB:-200}
       PROJECT_MAX_FILES: ${PROJECT_MAX_FILES:-2000}
+      # Clerk sign-in: both keys required (the app exits without them); CLERK_JWT_KEY optional for networkless session checks
+      PUBLIC_CLERK_PUBLISHABLE_KEY: ${PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_JWT_KEY: ${CLERK_JWT_KEY:-}
+      # comma-separated emails that are always site admins
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
     restart: unless-stopped
 
   # pulls the TeX image on `up` so the first compile doesn't pull inside its timeout; exits at once

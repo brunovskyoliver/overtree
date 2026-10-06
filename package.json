@@ -16,6 +16,7 @@
 		"db:generate": "drizzle-kit generate"
 	},
 	"devDependencies": {
+		"@clerk/testing": "^2.2.43",
 		"@playwright/test": "^1.63.0",
 		"@sveltejs/adapter-node": "^6.0.0",
 		"@sveltejs/kit": "^3.0.0",
@@ -35,6 +36,9 @@
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
+		"@clerk/backend": "^3.23.0",
+		"@clerk/clerk-js": "^6.38.0",
+		"@clerk/ui": "^1.39.0",
 		"@codemirror/autocomplete": "^6.20.3",
 		"@codemirror/commands": "^6.11.1",
 		"@codemirror/language": "^6.12.4",

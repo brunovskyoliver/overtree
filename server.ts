@@ -1,7 +1,15 @@
 // Production entry: SvelteKit handler + /collab on one HTTP server. Run with `node server.ts`.
 import { createServer } from 'node:http';
 import { limits } from './src/lib/files.ts';
+import { authConfigProblem } from './src/lib/server/auth.ts';
 import { attachCollab } from './src/lib/server/collab.ts';
+
+// research R4: the test sign-in can never run in production, and without it Clerk is the only way in
+const authProblem = authConfigProblem();
+if (authProblem) {
+	console.error(`Overtree: ${authProblem}`);
+	process.exit(1);
+}
 
 // adapter-node takes the protocol to be https unless told, and SvelteKit's CSRF check then refuses body-less
 // DELETEs and form posts whose browser Origin says http. This server speaks plain HTTP: say so, unless the
