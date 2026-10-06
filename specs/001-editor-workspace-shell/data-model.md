@@ -29,7 +29,7 @@ Not stored. ponytail: one project; the name is a constant (`PROJECT_NAME = 'Unti
 
 ## Browser-only
 
-### Layout (local storage, via paneforge `autoSaveId`)
+### Layout (local storage, via paneforge `autoSaveId`; paneforge prefixes the key, so the stored keys are `paneforge:overtree:layout:*`)
 - `overtree:layout:main`: sizes of sidebar / editor / pdf (collapsed = 0)
 - `overtree:layout:sidebar`: sizes of file tree / outline
 

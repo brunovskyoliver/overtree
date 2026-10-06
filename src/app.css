@@ -6,6 +6,8 @@
 	--panel: #262b36; /* sidebar, toolbars */
 	--panel-raised: #2f3542; /* hover, active line */
 	--border: #3a404d;
+	--handle: #4b5363; /* pane borders and drag handles */
+	--pdf: #313a4a; /* PDF pane */
 	--accent: #2f6a31; /* selected item, primary buttons */
 	--accent-bright: #4caf50;
 	--text: #e6e8ec;
@@ -33,4 +35,31 @@ body {
 :focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 1px;
+}
+
+/* panel titles: "File tree", "File outline" */
+.pane-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	margin: 0;
+	padding: 0 12px;
+	font-size: 14px;
+	font-weight: 600;
+}
+.pane-header::before {
+	content: '';
+	width: 6px;
+	height: 6px;
+	margin: 0 2px 3px;
+	border: solid currentColor;
+	border-width: 0 1.5px 1.5px 0;
+	transform: rotate(45deg);
+}
+
+/* handles and tree rows sit inside overflow:hidden panes: draw the ring inside */
+[data-pane-resizer]:focus-visible,
+[role='treeitem']:focus-visible {
+	outline-offset: -2px;
 }

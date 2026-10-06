@@ -32,7 +32,7 @@
 
 ## R7. Connection indicator / offline
 - **Decision**: `HocuspocusProvider` status events drive a "Saved / Connecting… / Offline" badge in the editor tab strip. The provider reconnects on its own and Yjs merges offline edits.
-- **Test**: Playwright `context.setOffline(true)` may leave the open WebSocket up. The test closes the socket through a `window.__overtree.provider` handle exposed only when `import.meta.env.DEV` or `PUBLIC_TEST_HOOKS` from `$env/dynamic/public` is set (dynamic so the e2e build doesn't need it baked in).
+- **Test**: Playwright `context.setOffline(true)` may leave the open WebSocket up. The test closes the socket through a `window.__overtree.provider` handle exposed only when `import.meta.env.DEV` or `PUBLIC_TEST_HOOKS=1` (declared in `src/env.ts`, read from `$app/env/public`; SvelteKit 3 has no `$env/dynamic/public`).
 
 ## R8. Docker
 - **Decision**: multi-stage `node:24-bookworm-slim`. Builder runs `pnpm install --frozen-lockfile && pnpm build`, and the runtime gets prod deps + `build/` + `server.ts` + `drizzle/` + `src/lib/server` (imported by server.ts). `CMD ["node", "server.ts"]`. Compose: `ports: ["${OVERTREE_BIND:-127.0.0.1}:${PORT:-3000}:3000"]`, volume `overtree-data:/data`, `DATA_DIR=/data`, `HOST=0.0.0.0` (the container must listen on all interfaces; the host-side binding stays loopback). `server.ts` defaults `HOST` to `127.0.0.1` for bare-metal runs.

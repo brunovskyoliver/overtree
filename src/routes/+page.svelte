@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Editor from '#lib/components/Editor.svelte';
+	import Workspace from '#lib/components/Workspace.svelte';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 
 	// ponytail: one project, feature 005 adds a projects table
@@ -14,7 +15,13 @@
 		<span class="project">{PROJECT_NAME}</span>
 	</header>
 	<main>
-		<Editor bind:editor />
+		<Workspace>
+			<Editor bind:editor />
+			{#snippet outline()}
+				<!-- phase 5: <Outline {editor} /> -->
+				<p class="placeholder">No sections yet</p>
+			{/snippet}
+		</Workspace>
 	</main>
 </div>
 
@@ -42,5 +49,9 @@
 	main {
 		flex: 1;
 		min-height: 0;
+	}
+	.placeholder {
+		margin: 4px 16px;
+		color: var(--text-muted);
 	}
 </style>

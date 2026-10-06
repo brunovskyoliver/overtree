@@ -82,14 +82,14 @@ description: "Task list for feature 001 Editor workspace shell"
 
 ### Tests for User Story 2
 
-- [ ] T021 [P] [US2] Playwright `tests/e2e/layout.spec.ts`: sidebar (tree with `main.tex`, outline), editor and PDF pane visible (US2-1); drag the tree/outline divider and both vertical borders, sizes change and respect minimums (US2-2, US2-6); collapse/expand sidebar and PDF via the arrow buttons, editor widens and the previous width comes back (US2-3, US2-4); PDF empty-state text shown (US2-5); reload restores sizes and collapsed state (US2-7, FR-018); Tab order reaches handles, toolbar buttons, tree item and outline entries with a visible focus outline and accessible names (US2-8, FR-016); 1024 px wide window keeps minimum widths (edge case)
+- [X] T021 [P] [US2] Playwright `tests/e2e/layout.spec.ts`: sidebar (tree with `main.tex`, outline), editor and PDF pane visible (US2-1); drag the tree/outline divider and both vertical borders, sizes change and respect minimums (US2-2, US2-6); collapse/expand sidebar and PDF via the arrow buttons, editor widens and the previous width comes back (US2-3, US2-4); PDF empty-state text shown (US2-5); reload restores sizes and collapsed state (US2-7, FR-018); Tab order reaches handles, toolbar buttons, tree item and outline entries with a visible focus outline and accessible names (US2-8, FR-016); 1024 px wide window keeps minimum widths (edge case)
 
 ### Implementation for User Story 2
 
-- [ ] T022 [P] [US2] `src/lib/components/FileTree.svelte`: header "File tree", `role="tree"` with one `role="treeitem" aria-selected="true"` item `main.tex` (FR-011)
-- [ ] T023 [P] [US2] `src/lib/components/PdfPane.svelte`: empty state "No PDF yet. Compiling arrives in a later version." (FR-014)
-- [ ] T024 [US2] `src/lib/components/Workspace.svelte`: paneforge outer horizontal group `autoSaveId="overtree:layout:main"` (sidebar default 20% min 12% collapsible | editor min 25% | pdf default 40% min 15% collapsible) and inner vertical group `autoSaveId="overtree:layout:sidebar"` (tree default 50% min 15% / outline slot min 15%); handles styled like the reference with collapse/expand `<button>`s (`aria-label` "Collapse sidebar"/"Expand sidebar"/"Collapse PDF"/"Expand PDF", `aria-expanded`) calling `pane.collapse()/expand()`; outline slot takes a snippet
-- [ ] T025 [US2] Wire `Workspace` into `src/routes/+page.svelte` with FileTree, an outline placeholder slot, Editor and PdfPane; visible `:focus-visible` styles on all controls in `src/app.css`
+- [X] T022 [P] [US2] `src/lib/components/FileTree.svelte`: header "File tree", `role="tree"` with one `role="treeitem" aria-selected="true"` item `main.tex` (FR-011)
+- [X] T023 [P] [US2] `src/lib/components/PdfPane.svelte`: empty state "No PDF yet. Compiling arrives in a later version." (FR-014)
+- [X] T024 [US2] `src/lib/components/Workspace.svelte`: paneforge outer horizontal group `autoSaveId="overtree:layout:main"` (sidebar default 20% min 12% collapsible | editor min 25% | pdf default 40% min 15% collapsible) and inner vertical group `autoSaveId="overtree:layout:sidebar"` (tree default 50% min 15% / outline slot min 15%); handles styled like the reference with collapse/expand `<button>`s (`aria-label` "Collapse sidebar"/"Expand sidebar"/"Collapse PDF"/"Expand PDF", `aria-expanded`) calling `pane.collapse()/expand()`; outline slot takes a snippet
+- [X] T025 [US2] Wire `Workspace` into `src/routes/+page.svelte` with FileTree, an outline placeholder slot, Editor and PdfPane; visible `:focus-visible` styles on all controls in `src/app.css`
 
 **Checkpoint**: US1 + US2 tests pass. The UI matches the reference layout.
 

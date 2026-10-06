@@ -9,7 +9,7 @@ test('fresh start shows the seed with the editor focused (US1-1)', async ({ page
 	const editor = await openEditor(page);
 	expect(await text(page)).toBe(SEED);
 	await expect(editor).toBeFocused();
-	await expect(page.getByText('main.tex', { exact: true })).toBeVisible();
+	await expect(page.getByLabel('Editor').getByText('main.tex', { exact: true })).toBeVisible();
 	await expect(page.getByRole('banner')).toContainText('Overtree');
 	await expect(page.getByRole('banner')).toContainText('Untitled project');
 });
