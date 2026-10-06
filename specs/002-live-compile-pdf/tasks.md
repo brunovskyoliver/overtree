@@ -80,7 +80,7 @@
 - [X] T031 Extend scripts/compose-smoke.sh: after `up`, `POST /api/compile` with `{"stopOnFirstError":false}` returns `status: success`, then `GET /api/compile/output.pdf` starts with `%PDF`; run it and record the result
 - [X] T032 [P] README.md: compile section (Docker requirement, image pull, env vars and defaults from contracts/compile-api.md, the Docker socket note and `DOCKER_GID`)
 - [X] T033 Run quickstart.md end to end (`pnpm check`, `pnpm test`, `pnpm test:e2e`, compose smoke) and capture a screenshot of the PDF pane against reference-layout.png
-- [ ] T034 Set row 002 to `done` in specs/ROADMAP.md
+- [X] T034 Set row 002 to `done` in specs/ROADMAP.md
 
 ## Dependencies & Execution Order
 

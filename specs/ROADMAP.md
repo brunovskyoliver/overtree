@@ -11,7 +11,7 @@ Status: `todo` · `in progress` · `done`
 | # | Feature | Status | Depends on |
 |---|---------|--------|------------|
 | 001 | Editor workspace shell | done | — |
-| 002 | Live compilation & PDF preview | todo | 001 |
+| 002 | Live compilation & PDF preview | done | 001 |
 | 003 | Multi-file projects & file tree | todo | 001 |
 | 004 | LaTeX autocomplete | todo | 003 |
 
