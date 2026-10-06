@@ -32,7 +32,7 @@ One feature covering both parts below (bundled to reach multi-user sooner).
 
 | # | Feature | Status | Depends on |
 |---|---------|--------|------------|
-| 005 | Accounts, roles, sharing & live collaboration (Clerk) | todo | 003 |
+| 005 | Accounts, roles, sharing & live collaboration (Clerk) | in progress | 003 |
 | 006 | *(merged into 005)* | — | — |
 | 007 | *(merged into 005)* | — | — |
 

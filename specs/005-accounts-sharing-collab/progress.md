@@ -1,6 +1,6 @@
 # Feature 005: Accounts, roles, sharing & live collaboration
-Stage: implement
-Updated: 2026-10-06T22:20:00+02:00
+Stage: implement (MVP phases 1-6 done; phases 7-9 pending)
+Updated: 2026-10-06
 
 ## Decisions
 - Branch `005-accounts-sharing-collab` created from `003-multi-file-autocomplete` (not merged to main).
@@ -27,3 +27,39 @@ Updated: 2026-10-06T22:20:00+02:00
 - 2026-10-06 implement phase 6 (T035-T040): sharing service in projects.ts (listMembers/inviteMember/setMemberRole/removeMember/withdrawInvite/setLink/transferOwnership) + routes members, members/[userId], invites/[email], link, transfer; ShareDialog (green Share in TopBar); reader mode (CodeMirror readOnly compartment, toolbar/tree/compiler menu disabled, banner); session.svelte.ts (shared HocuspocusProviderWebsocket, `project:<pid>` events, "Your access was removed"/"This project was deleted", read-only reconnect with unsaved edits rebuilds the tab); sharing unit tests (11) and sharing.spec e2e (6); auth/dashboard specs use the link/members API instead of SQLite. Deviations: compile sweep also skips `created` containers (they are other processes' jobs about to start; removing them gave the remaining 'oom' failures), ConfirmDialog ids made unique, invite role changes reuse POST members, joinByLink broadcasts `access`, sync.spec disconnects the shared socket, "Reset link" asks for confirmation, overrides not shown in the Share dialog yet (US6). pnpm test 170/170 x3, e2e 129/129 per browser.
 
 ## Report
+
+**Scope:** `go mvp`, so Phases 1–6 (T001–T040) are done. Phases 7–9 (T041–T057: per-file permissions, live presence, polish) are not started. Converge was skipped because it would only re-list those phases.
+
+**What changed (commits on `005-accounts-sharing-collab`):**
+- 7ecf51b docs: spec, plan, tasks, plus the analyze fixes M1–M3.
+- 75fc151 Phase 1 setup: Clerk packages, env vars, startup guard, presence helpers.
+- dc3fddd Phase 2 foundational:
+  - schema and migration (the 003 project becomes `main` with no owner; the first admin gets it);
+  - project-scoped files, compile and routes under `/api/projects/[pid]`;
+  - Clerk auth core with a test bypass that refuses to run in production;
+  - access guards, WebSocket authentication, read-only connections.
+- 3519842 Phase 3 sign-in: `/sign-in` (Clerk widget), `/blocked`, share-link landing page, TopBar, avatar and account menu, Clerk handshake handling, sign-out across tabs.
+- 41effc1 Phase 4 admin: `/admin` with users, projects and settings tabs, the last-admin rule, disabling kicks live sessions.
+- e23d1aa Phase 5 dashboard: templates (blank, article, report, beamer, letter), zip import, rename, duplicate, delete, leave, search, owner-editable title, no-access page.
+- 49e9d4b fix: the compile container sweep on startup killed other processes' running jobs (exit 137, reported as "oom"). It now removes only exited containers.
+- 5994611 Phase 6 sharing:
+  - members, invites, link and transfer APIs;
+  - Share dialog;
+  - reader mode in the editor, toolbar and tree;
+  - `session.svelte.ts` with live `access`, `tree`, `project` and `deleted` events.
+
+**Verified:**
+- `pnpm check`: 0 errors.
+- `pnpm test`: 170/170.
+- `pnpm test:e2e`: 129/129 on each of Chromium, Firefox and WebKit (sub-agent run). Chromium 129/129 rerun by the orchestrator.
+- `clerk` smoke project: 2/2 against the real Clerk dev instance, keys injected by `agent-secret` (Phase 3).
+
+**Left:**
+- Phases 7–9:
+  - T041–T045 per-file permissions;
+  - T046–T053 live cursors, avatars, offline merge, 5-session test;
+  - T054–T057 README, route-guard test, full run with Clerk plus a manual walk-through, ROADMAP `done`.
+- `scripts/compose-smoke.sh` and `scripts/collab-client.ts` still call the old unauthenticated routes (Phase 2 note).
+- Google sign-in has not been tried by hand.
+- The "disabled user cut off within 2 s" e2e test runs about 1.9 s on Firefox, close to the limit.
+- ROADMAP row 005 is set to `in progress`.
