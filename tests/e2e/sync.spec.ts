@@ -39,7 +39,7 @@ test('an edit in one tab appears in the other in under 300 ms (US1-6, SC-003)', 
 });
 
 test('offline edits show "Offline" and sync after reconnect (FR-015)', async () => {
-	await a.evaluate(() => window.__overtree!.provider.disconnect());
+	await a.evaluate(() => window.__overtree!.provider.configuration.websocketProvider.disconnect());
 	await expect(a.getByRole('status')).toHaveText('Offline');
 
 	const marker = `offline-${Date.now()}`;
@@ -48,7 +48,7 @@ test('offline edits show "Offline" and sync after reconnect (FR-015)', async () 
 	await b.waitForTimeout(300);
 	expect(await b.evaluate(() => window.__overtree!.view.state.doc.toString())).not.toContain(marker);
 
-	await a.evaluate(() => window.__overtree!.provider.connect());
+	await a.evaluate(() => window.__overtree!.provider.configuration.websocketProvider.connect());
 	await expect(a.getByRole('status')).toHaveText('Saved');
 	await has(b, marker);
 });

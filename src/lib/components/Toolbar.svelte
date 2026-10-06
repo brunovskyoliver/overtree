@@ -4,7 +4,8 @@
 	import { bold, figure, italic, link, section, table } from '#lib/editor/commands.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 
-	let { editor }: { editor?: EditorHandle } = $props();
+	// readOnly: the file can't be edited, every button that changes text is disabled (search stays)
+	let { editor, readOnly = false }: { editor?: EditorHandle; readOnly?: boolean } = $props();
 
 	function run(action: (h: EditorHandle) => unknown) {
 		if (!editor) return;
@@ -35,20 +36,21 @@
 </script>
 
 <div class="toolbar" role="toolbar" aria-label="Formatting">
-	<button type="button" aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" onclick={() => run((h) => h.undoManager.undo())}>
+	<button type="button" aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" disabled={readOnly} onclick={() => run((h) => h.undoManager.undo())}>
 		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
 	</button>
 	<button
 		type="button"
 		aria-label="Redo"
 		title="Redo (Ctrl/Cmd+Shift+Z)"
+		disabled={readOnly}
 		onclick={() => run((h) => h.undoManager.redo())}
 	>
 		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
 	</button>
 	<span class="separator" aria-hidden="true"></span>
 	{#each insertions as { label, cmd, icon } (label)}
-		<button type="button" aria-label={label} title={label} onclick={() => insert(cmd)}>
+		<button type="button" aria-label={label} title={label} disabled={readOnly} onclick={() => insert(cmd)}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d={icon} /></svg>
 		</button>
 	{/each}
@@ -91,8 +93,12 @@
 	.search {
 		margin-left: auto;
 	}
-	button:hover {
+	button:hover:not(:disabled) {
 		background: var(--panel-raised);
+	}
+	button:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 	svg {
 		width: 18px;

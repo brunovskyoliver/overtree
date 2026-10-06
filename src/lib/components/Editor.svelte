@@ -31,6 +31,7 @@
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { isLatexName } from '#lib/files.ts';
 	import type { Project } from '#lib/project.svelte.ts';
+	import type { Session } from '#lib/session.svelte.ts';
 	import EditorTabs from './EditorTabs.svelte';
 	import FilePreview from './FilePreview.svelte';
 	import Toolbar from './Toolbar.svelte';
@@ -38,10 +39,11 @@
 	// One EditorView; each open text file keeps its own EditorState, Yjs doc, provider and undo (research R9).
 	let {
 		project,
+		session,
 		editor = $bindable(),
 		onLocalEdit,
 		onCompile
-	}: { project: Project; editor?: EditorHandle; onLocalEdit?: () => void; onCompile?: () => void } = $props();
+	}: { project: Project; session: Session; editor?: EditorHandle; onLocalEdit?: () => void; onCompile?: () => void } = $props();
 
 	type Tab = {
 		ytext: Y.Text;
@@ -49,6 +51,8 @@
 		undoManager: Y.UndoManager;
 		state: EditorState;
 		scroll?: StateEffect<unknown>;
+		/** local edits the server hasn't acknowledged yet */
+		dirty: boolean;
 	};
 
 	const STATUS_TEXT = { connecting: 'Connecting…', connected: 'Saved', disconnected: 'Offline' };
@@ -59,9 +63,13 @@
 	let handleFor: string | null = null; // the tab `editor` points at
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
+	let rebuilt = $state(0); // bumped when a tab is rebuilt from the server: the view effect runs again
+	let lostEdits = $state(false);
 
 	const activeFile = $derived(project.files.find((f) => f.id === project.active));
 	const latex = $derived(!!activeFile && isLatexName(activeFile.name));
+	// per-file edit right from the API (research R10); the server refuses edits anyway (R7)
+	const readOnly = $derived(activeFile?.canEdit === false);
 
 	const listeners = new Set<(u: ViewUpdate) => void>();
 	const listen = (fn: (u: ViewUpdate) => void) => (listeners.add(fn), () => void listeners.delete(fn));
@@ -78,6 +86,11 @@
 	const latexExtensions: Extension = [StreamLanguage.define(stex), environments];
 	const plainText: Extension = [];
 	const language = new Compartment();
+	const locked: Extension = [EditorState.readOnly.of(true), EditorView.editable.of(false)];
+	const unlocked: Extension = [];
+	const editable = new Compartment();
+	// Y.UndoManager changes the Yjs text directly, past CodeMirror's readOnly: no undo in a read-only file
+	const undoKeys = yUndoManagerKeymap.map((b) => ({ ...b, run: (v: EditorView) => v.state.readOnly || b.run!(v) }));
 
 	// the same for every tab
 	const shared: Extension = [
@@ -110,7 +123,7 @@
 			{ key: 'Mod-Enter', run: compileKey },
 			{ key: 'Mod-s', run: compileKey }
 		]),
-		keymap.of([...yUndoManagerKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap, ...completionKeymap]),
+		keymap.of([...undoKeys, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap, ...completionKeymap]),
 		editorTheme,
 		EditorView.lineWrapping,
 		EditorView.updateListener.of((u) => {
@@ -126,23 +139,45 @@
 		const doc = new Y.Doc();
 		const ytext = doc.getText('content');
 		const undoManager = new Y.UndoManager(ytext);
-		// ponytail: one WebSocket per tab (provider.connect/disconnect keep working); share a
-		// HocuspocusProviderWebsocket if people keep dozens of tabs open
+		// every document of the tab shares the session's socket (research R8)
 		const provider = new HocuspocusProvider({
-			url: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/collab`,
+			websocketProvider: session.socket,
 			name: id,
 			document: doc,
 			token: getToken // a fresh session token on every (re)connect (research R3)
 		});
-		statuses[id] = STATUS_TEXT.connecting;
+		statuses[id] = STATUS_TEXT[session.socket.status as keyof typeof STATUS_TEXT] ?? STATUS_TEXT.connecting;
 		provider.on('status', ({ status }: { status: keyof typeof STATUS_TEXT }) => (statuses[id] = STATUS_TEXT[status]));
 		// refused after a kick (4403): a disabled account goes to /blocked (T025)
 		provider.on('authenticationFailed', checkBlocked);
 		const state = EditorState.create({
 			doc: ytext.toString(),
-			extensions: [shared, language.of(isLatexName(name) ? latexExtensions : plainText), yCollab(ytext, provider.awareness, { undoManager })]
+			extensions: [
+				shared,
+				language.of(isLatexName(name) ? latexExtensions : plainText),
+				editable.of(unlocked),
+				yCollab(ytext, provider.awareness, { undoManager })
+			]
 		});
-		return { ytext, provider, undoManager, state };
+		const tab: Tab = { ytext, provider, undoManager, state, dirty: false };
+		doc.on('update', (_: Uint8Array, origin: unknown) => origin !== provider && (tab.dirty = true));
+		provider.on('unsyncedChanges', ({ number }: { number: number }) => number === 0 && (tab.dirty = false));
+		// back as a reader with edits the server never took (spec edge case 1): they are rejected, so the tab starts
+		// over from the server's text
+		provider.on('authenticated', ({ scope }: { scope: string }) => {
+			if (scope === 'readonly' && tab.dirty && tabs.get(id) === tab) rebuild(id);
+		});
+		provider.attach();
+		return tab;
+	}
+
+	function rebuild(id: string) {
+		const name = project.files.find((f) => f.id === id)?.name ?? '';
+		destroyTab(id);
+		tabs.set(id, createTab(id, name));
+		handleFor = null;
+		lostEdits = true;
+		rebuilt++;
 	}
 
 	function destroyTab(id: string) {
@@ -187,6 +222,7 @@
 		for (const id of [...tabs.keys()]) if (!textIds.includes(id)) destroyTab(id);
 		for (const id of textIds) if (!tabs.has(id)) tabs.set(id, createTab(id, project.files.find((f) => f.id === id)!.name));
 
+		void rebuilt;
 		const id = project.active;
 		const tab = id ? tabs.get(id) : undefined;
 		if (!id || !tab) {
@@ -200,6 +236,8 @@
 		// a rename can change the language
 		const wanted = latex ? latexExtensions : plainText;
 		if (language.get(v.state) !== wanted) v.dispatch({ effects: language.reconfigure(wanted) });
+		const lock = readOnly ? locked : unlocked;
+		if (editable.get(v.state) !== lock) v.dispatch({ effects: editable.reconfigure(lock) });
 		if (handleFor !== id) {
 			handleFor = id;
 			editor = { view: v, undoManager: tab.undoManager, provider: tab.provider, fileId: id, listen };
@@ -226,7 +264,16 @@
 
 <section class="editor" aria-label="Editor">
 	<EditorTabs {project} status={project.active ? statuses[project.active] : undefined} />
-	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} />{/if}
+	{#if lostEdits}
+		<p class="notice lost" role="alert">
+			Your changes could not be saved: you no longer have edit access
+			<button type="button" aria-label="Dismiss" onclick={() => (lostEdits = false)}>×</button>
+		</p>
+	{/if}
+	{#if activeFile && readOnly}
+		<p class="notice">Read only: you can view and compile but not edit.</p>
+	{/if}
+	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} {readOnly} />{/if}
 	<div class="host" bind:this={host} hidden={activeFile?.kind !== 'text'}></div>
 	{#if activeFile && activeFile.kind !== 'text'}
 		{#key activeFile.id}<FilePreview file={activeFile} url={project.rawUrl(activeFile)} />{/key}
@@ -252,6 +299,31 @@
 	}
 	.host :global(.cm-editor) {
 		height: 100%;
+	}
+	.notice {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		padding: 5px 12px;
+		border-bottom: 1px solid var(--border);
+		background: var(--panel);
+		color: var(--text-muted);
+		font-size: 13px;
+	}
+	.notice.lost {
+		background: #4a2a2a;
+		color: var(--text);
+	}
+	.notice button {
+		margin-left: auto;
+		padding: 0 6px;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		font-size: 16px;
+		cursor: pointer;
 	}
 	.hint {
 		margin: auto;

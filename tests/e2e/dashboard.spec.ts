@@ -1,22 +1,9 @@
-import { join } from 'node:path';
 import { expect, test as plain, type Browser, type Page } from '@playwright/test';
-import Database from 'better-sqlite3';
 import { zips } from '../fixtures/projects/zips.ts';
 import { allow, newProject, openEditor, projectPath, signInAs, test, USER } from './helpers.ts';
 
 // US2 "My projects dashboard" (scenarios 1–7, 9; scenario 8, the migrated project, is migration.test.ts). The
 // server is shared by every test and browser of the run: titles carry a per-test tag and rows are found by it.
-
-/** The e2e server's database: memberships have no UI before US3 (sharing). */
-function sql(statement: string, ...params: unknown[]) {
-	const db = new Database(join(process.env.OVERTREE_E2E_DATA_DIR!, 'overtree.db'));
-	try {
-		db.pragma('busy_timeout = 5000');
-		db.prepare(statement).run(...params);
-	} finally {
-		db.close();
-	}
-}
 
 /** A signed-in page of `email` in a context of its own; the user exists once it has loaded a page. */
 async function as(browser: Browser, email: string) {
@@ -28,8 +15,12 @@ async function as(browser: Browser, email: string) {
 	return page;
 }
 
-const share = (pid: string, email: string, role: 'editor' | 'reader') =>
-	sql('INSERT INTO memberships (project_id, user_id, role, via_link, created_at) VALUES (?, ?, ?, 0, ?)', pid, `test_${email}`, role, Date.now());
+/** The owner (`owner`'s request) invites `email`, who already has an account, as a collaborator. */
+async function share(owner: Page, pid: string, email: string, role: 'editor' | 'reader') {
+	const res = await owner.request.post(`/api/projects/${pid}/members`, { data: { email, role } });
+	expect(res.status()).toBe(201);
+	expect((await res.json()).status).toBe('member');
+}
 
 const tag = () => Math.random().toString(36).slice(2, 8);
 const row = (page: Page, title: string) => page.getByRole('row').filter({ has: page.getByRole('link', { name: title, exact: true }) });
@@ -163,7 +154,7 @@ test('collaborators see the title but cannot rename; they can duplicate and leav
 	const email = `dash-${browserName}-${t}@test.local`;
 	const other = await as(browser, email);
 	await page.request.patch(`/api/projects/${pid}`, { data: { title: `Shared ${t}` } });
-	share(pid, email, 'reader');
+	await share(page, pid, email, 'reader');
 
 	await other.goto('/');
 	const r = row(other, `Shared ${t}`);

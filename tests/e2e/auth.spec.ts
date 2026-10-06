@@ -1,22 +1,9 @@
-import { join } from 'node:path';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { expect, test as plain, type Browser } from '@playwright/test';
-import Database from 'better-sqlite3';
 import * as Y from 'yjs';
 import { allow, api, newProject, openEditor, projectPath, signInAs, test, USER } from './helpers.ts';
 
 // US1 "Sign in and stay signed in" with the test bypass (research R4); the real Clerk flow is clerk.smoke.spec.ts.
-
-/** The e2e server's database (playwright.config.ts DATA_DIR): for state there is no UI for yet (US3 link sharing). */
-function sql(statement: string, ...params: unknown[]) {
-	const db = new Database(join(process.env.OVERTREE_E2E_DATA_DIR!, 'overtree.db'));
-	try {
-		db.pragma('busy_timeout = 5000');
-		db.prepare(statement).run(...params);
-	} finally {
-		db.close();
-	}
-}
 
 /** A project of USER's, made from a signed-in context of its own. */
 async function projectOfUser(browser: Browser, title = 'Untitled project') {
@@ -138,18 +125,19 @@ test('without a session the API and the live connection refuse (scenario 5)', as
 });
 
 test('share link landing page: title only signed out, joins signed in, bad links say so (scenario 6)', async ({ browser, page: admin, pid }) => {
-	sql(`UPDATE projects SET title = 'Shared thesis', link_token = ?, link_role = 'reader' WHERE id = ?`, `tok-${pid}`, pid);
+	expect((await admin.request.patch(api(pid), { data: { title: 'Shared thesis' } })).status()).toBe(200);
+	const { token } = await (await admin.request.put(`${api(pid)}/link`, { data: { role: 'reader' } })).json();
 	await allow(admin.request, '@test.local');
 
 	const out = await browser.newContext();
 	const page = await out.newPage();
-	await page.goto(`/share/tok-${pid}`);
+	await page.goto(`/share/${token}`);
 	await expect(page.getByRole('heading', { name: 'Shared thesis' })).toBeVisible();
 	await expect(page.getByText('Sign in to open this project')).toBeVisible();
 	await expect(page.locator('body')).not.toContainText('documentclass');
 	await expect(page.locator('.cm-content')).toHaveCount(0);
 	await page.getByRole('link', { name: 'Sign in' }).click();
-	await expect(page).toHaveURL(`/sign-in?redirect=${encodeURIComponent(`/share/tok-${pid}`)}`);
+	await expect(page).toHaveURL(`/sign-in?redirect=${encodeURIComponent(`/share/${token}`)}`);
 	await page.getByLabel('Test email').fill('reader@test.local');
 	await page.getByRole('button', { name: 'Test sign-in' }).click();
 	await expect(page).toHaveURL(projectPath(pid));

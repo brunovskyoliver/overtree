@@ -52,7 +52,9 @@
 						role="menuitemradio"
 						tabindex="-1"
 						aria-checked={compile.compiler === value}
-						onclick={() => compile.setCompiler(value)}>{label}</button
+						aria-disabled={!compile.canConfigure || undefined}
+						title={compile.canConfigure ? undefined : 'Only editors can change the compiler'}
+						onclick={() => compile.canConfigure && compile.setCompiler(value)}>{label}</button
 					>
 				{/each}
 			</div>
@@ -153,6 +155,10 @@
 	.menu button:focus-visible {
 		background: var(--panel-raised);
 		outline: none;
+	}
+	.menu button[aria-disabled='true'] {
+		color: var(--text-muted);
+		cursor: default;
 	}
 	.menu button[aria-checked='true']::before {
 		content: '✓';

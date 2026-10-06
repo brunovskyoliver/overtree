@@ -7,7 +7,8 @@
 	// contracts/ui.md "Top bar": brand link left, project title centre, page controls and the account menu right.
 	// `project`: the editor's title; the owner (onrename set) edits it in place, others see text.
 	type ProjectTitle = { title: string; onrename?: (title: string) => Promise<string | null> }; // resolves to an error or null
-	let { title, right, project }: { title?: Snippet; right?: Snippet; project?: ProjectTitle } = $props();
+	// `onshare`: the green "Share" button (editor page) opening the Share dialog
+	let { title, right, project, onshare }: { title?: Snippet; right?: Snippet; project?: ProjectTitle; onshare?: () => void } = $props();
 
 	let editing = $state(false);
 	let value = $state('');
@@ -90,6 +91,14 @@
 	</div>
 	<div class="right">
 		{@render right?.()}
+		{#if onshare}
+			<button type="button" class="share" onclick={onshare}>
+				<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
+					><path d="M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM3 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1M19 8v6M16 11h6" /></svg
+				>
+				Share
+			</button>
+		{/if}
 		<div class="account" bind:this={m.root}>
 			<button
 				type="button"
@@ -196,6 +205,30 @@
 		align-items: center;
 		justify-content: flex-end;
 		gap: 8px;
+	}
+	.share {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 28px;
+		padding: 0 14px 0 12px;
+		border: 0;
+		border-radius: 14px;
+		background: var(--accent);
+		color: var(--text);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.share:hover {
+		background: #367a39;
+	}
+	.share svg {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 	.account {
 		position: relative;

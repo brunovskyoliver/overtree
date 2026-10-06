@@ -41,6 +41,8 @@
 	let menuAt = $state({ x: 0, y: 0 });
 
 	const byId = (id: string | null | undefined) => project.files.find((f) => f.id === id);
+	// readers get a tree they can browse and download from, nothing that changes it (US3 scenario 5)
+	const canEdit = $derived(project.details?.permissions.canEdit !== false);
 	// nothing clicked yet: the editor's file counts as selected
 	const sel = $derived(byId(selected) ?? byId(activeId));
 	const tabStop = $derived(sel?.id ?? project.children(null)[0]?.id);
@@ -145,6 +147,7 @@
 	// --- menu and delete ---------------------------------------------------------------------------
 
 	function openMenu(f: FileEntry, x: number, y: number) {
+		if (!canEdit && f.kind === 'folder') return; // a reader's folder menu would be empty
 		selected = f.id;
 		menuFor = f;
 		menuAt = { x, y };
@@ -253,11 +256,11 @@
 				activate(f);
 				break;
 			case 'F2':
-				startRename(f);
+				if (canEdit) startRename(f);
 				break;
 			case 'Delete':
 			case 'Backspace': // the Mac "delete" key
-				remove(f);
+				if (canEdit) remove(f);
 				break;
 			case 'F10':
 				if (!e.shiftKey) return;
@@ -285,6 +288,7 @@
 
 	function ondragover(e: DragEvent, f: FileEntry | null) {
 		e.stopPropagation();
+		if (!canEdit) return;
 		// files from the desktop can go into any folder
 		dropTarget = !dragging && e.dataTransfer?.types.includes('Files') ? folderOf(f) : targetFor(f);
 		if (dropTarget !== undefined) e.preventDefault();
@@ -376,7 +380,7 @@
 				class:active={f.id === activeId}
 				class:drop={dropTarget === f.id}
 				style:--level={level}
-				draggable={!renaming}
+				draggable={canEdit && !renaming}
 				ondragstart={(e) => ondragstart(e, f)}
 				{ondragend}
 				ondragover={(e) => ondragover(e, f)}
@@ -420,13 +424,13 @@
 <section class="tree-panel" aria-labelledby="file-tree-title">
 	<div class="header">
 		<h2 class="pane-header" id="file-tree-title">File tree</h2>
-		<button type="button" class="tool" aria-label="New file" title="New file" onclick={() => startNew('text')}>
+		<button type="button" class="tool" aria-label="New file" title="New file" disabled={!canEdit} onclick={() => startNew('text')}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7zM14 3v4h4M12 11v6M9 14h6" /></svg>
 		</button>
-		<button type="button" class="tool" aria-label="New folder" title="New folder" onclick={() => startNew('folder')}>
+		<button type="button" class="tool" aria-label="New folder" title="New folder" disabled={!canEdit} onclick={() => startNew('folder')}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3zM12 11v6M9 14h6" /></svg>
 		</button>
-		<button type="button" class="tool" aria-label="Upload" title="Upload" onclick={() => pick(folderOf(sel))}>
+		<button type="button" class="tool" aria-label="Upload" title="Upload" disabled={!canEdit} onclick={() => pick(folderOf(sel))}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" /></svg>
 		</button>
 		<a class="tool" href={project.api('/zip')} download aria-label="Download project as zip" title="Download project as zip">
@@ -488,18 +492,20 @@
 		}}
 		onkeydown={m.onmenukey}
 	>
-		{#if f.kind === 'folder'}
+		{#if f.kind === 'folder' && canEdit}
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('text', f.id))}>New file here</button>
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('folder', f.id))}>New folder here</button>
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => pick(f.id), true)}>Upload here</button>
 		{/if}
-		<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startRename(f))}>Rename</button>
+		{#if canEdit}
+			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startRename(f))}>Rename</button>
+		{/if}
 		{#if f.kind !== 'folder'}
 			<a role="menuitem" tabindex="-1" href={project.rawUrl(f, true)} download={f.name}
 				onclick={() => setTimeout(m.close)}>Download</a
 			>
 		{/if}
-		{#if f.kind === 'text' && f.name.toLowerCase().endsWith('.tex')}
+		{#if canEdit && f.kind === 'text' && f.name.toLowerCase().endsWith('.tex')}
 			{#if f.id === project.mainFileId}
 				<!-- aria-disabled, not disabled: stays reachable with the arrow keys (ARIA menu pattern) -->
 				<button type="button" role="menuitem" tabindex="-1" aria-disabled="true">Set as main document (current)</button>
@@ -507,7 +513,9 @@
 				<button type="button" role="menuitem" tabindex="-1" onclick={item(() => setMain(f), true)}>Set as main document</button>
 			{/if}
 		{/if}
-		<button type="button" role="menuitem" tabindex="-1" class="danger" onclick={item(() => remove(f))}>Delete</button>
+		{#if canEdit}
+			<button type="button" role="menuitem" tabindex="-1" class="danger" onclick={item(() => remove(f))}>Delete</button>
+		{/if}
 	</div>
 {/if}
 
@@ -541,8 +549,12 @@
 		color: var(--text);
 		cursor: pointer;
 	}
-	.tool:hover {
+	.tool:hover:not(:disabled) {
 		background: var(--panel-raised);
+	}
+	.tool:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 	ul {
 		margin: 0;

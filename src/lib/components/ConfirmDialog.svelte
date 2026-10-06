@@ -1,6 +1,7 @@
 <script lang="ts">
 	// One modal for every confirmation (contracts/ui.md, Dialogs). Escape and Cancel both resolve false.
 	type Options = { title: string; body?: string; confirmLabel: string; danger?: boolean };
+	const uid = $props.id(); // several dialogs on one page (tree, Share dialog): ids must differ
 
 	let dialog: HTMLDialogElement;
 	let cancel: HTMLButtonElement;
@@ -21,10 +22,10 @@
 	}
 </script>
 
-<dialog bind:this={dialog} {onclose} aria-labelledby="confirm-title" aria-describedby={opts.body ? 'confirm-body' : undefined}>
+<dialog bind:this={dialog} {onclose} aria-labelledby="{uid}-title" aria-describedby={opts.body ? `${uid}-body` : undefined}>
 	<form method="dialog">
-		<h2 id="confirm-title">{opts.title}</h2>
-		{#if opts.body}<p id="confirm-body">{opts.body}</p>{/if}
+		<h2 id="{uid}-title">{opts.title}</h2>
+		{#if opts.body}<p id="{uid}-body">{opts.body}</p>{/if}
 		<div class="buttons">
 			<button value="cancel" bind:this={cancel}>Cancel</button>
 			<button value="confirm" class:danger={opts.danger}>{opts.confirmLabel}</button>

@@ -17,8 +17,9 @@ const DOCKER_ERROR = /Cannot connect|failed to connect|permission denied|Error r
 
 // Containers left behind by a crashed app: remove them once on load. No Docker, nothing left: ignore.
 // Only stopped ones: running jobs may belong to another process (a second server, parallel tests)
-// and end themselves through the in-container `timeout`.
-const STOPPED = ['--filter', 'status=created', '--filter', 'status=exited', '--filter', 'status=dead'];
+// and end themselves through the in-container `timeout`. Not `created` either: that is also a job of another
+// process between `docker run` creating and starting its container (removing it kills the job with 137).
+const STOPPED = ['--filter', 'status=exited', '--filter', 'status=dead'];
 execFile('docker', ['ps', '-aq', '--filter', 'name=overtree-compile-', ...STOPPED], (err, out) => {
 	const ids = out.split(/\s+/).filter(Boolean);
 	if (!err && ids.length) execFile('docker', ['rm', '-f', ...ids], () => {});

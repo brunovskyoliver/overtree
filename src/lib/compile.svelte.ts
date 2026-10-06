@@ -14,6 +14,8 @@ export class CompileState {
 	compiler = $state<Compiler>('pdflatex');
 	autoCompile = $state(false);
 	stopOnFirstError = $state(false);
+	/** the compiler is a project setting: readers see it but can't change it (FR-037); set by the page */
+	canConfigure = $state(true);
 	readonly #base: string;
 	#pending = false;
 	#provider: () => HocuspocusProvider | undefined;
