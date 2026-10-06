@@ -3,12 +3,11 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { expect, test as plain, type Browser } from '@playwright/test';
 import Database from 'better-sqlite3';
 import * as Y from 'yjs';
-import { api, newProject, openEditor, projectPath, signInAs, test, USER } from './helpers.ts';
+import { allow, api, newProject, openEditor, projectPath, signInAs, test, USER } from './helpers.ts';
 
 // US1 "Sign in and stay signed in" with the test bypass (research R4); the real Clerk flow is clerk.smoke.spec.ts.
 
-/** The e2e server's database (playwright.config.ts DATA_DIR): for state there is no UI for yet (US3 link sharing,
- *  US5 allowlist). */
+/** The e2e server's database (playwright.config.ts DATA_DIR): for state there is no UI for yet (US3 link sharing). */
 function sql(statement: string, ...params: unknown[]) {
 	const db = new Database(join(process.env.OVERTREE_E2E_DATA_DIR!, 'overtree.db'));
 	try {
@@ -70,8 +69,8 @@ test('account menu shows the user, reload keeps the session (scenarios 2, 3)', a
 	expect(me.color).toMatch(/^#[0-9a-f]{6}$/);
 });
 
-test('a non-admin sees no Admin item', async ({ browser }) => {
-	sql(`UPDATE settings SET allowlist = '["@test.local"]' WHERE id = 1`);
+test('a non-admin sees no Admin item', async ({ browser, page: admin }) => {
+	await allow(admin.request, '@test.local');
 	const ctx = await browser.newContext();
 	await signInAs(ctx, 'plain@test.local');
 	const page = await ctx.newPage();
@@ -138,9 +137,9 @@ test('without a session the API and the live connection refuse (scenario 5)', as
 	}
 });
 
-test('share link landing page: title only signed out, joins signed in, bad links say so (scenario 6)', async ({ browser, pid }) => {
+test('share link landing page: title only signed out, joins signed in, bad links say so (scenario 6)', async ({ browser, page: admin, pid }) => {
 	sql(`UPDATE projects SET title = 'Shared thesis', link_token = ?, link_role = 'reader' WHERE id = ?`, `tok-${pid}`, pid);
-	sql(`UPDATE settings SET allowlist = '["@test.local"]' WHERE id = 1`);
+	await allow(admin.request, '@test.local');
 
 	const out = await browser.newContext();
 	const page = await out.newPage();

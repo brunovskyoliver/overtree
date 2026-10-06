@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { test as base, expect, type BrowserContext, type Page } from '@playwright/test';
+import { test as base, expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
 import type { ProjectInfo } from '../../src/lib/files.ts';
 import { SEED } from '../../src/lib/server/collab.ts';
 
@@ -13,6 +13,19 @@ export const USER = 'admin@test.local';
 export async function signInAs(context: BrowserContext, email = USER) {
 	await context.addCookies([{ name: 'overtree-test-user', value: encodeURIComponent(email), domain: '127.0.0.1', path: '/' }]);
 }
+
+type Signup = { signupMode: 'open' | 'invite'; allowlist: string[] };
+
+/** Change the sign-up settings through the admin API; `request` must be signed in as an admin (USER is). */
+export async function signup(request: APIRequestContext, change: (s: Signup) => Signup) {
+	const current: Signup = await (await request.get('/api/admin/settings')).json();
+	const res = await request.put('/api/admin/settings', { data: change(current) });
+	expect(res.status()).toBe(200);
+}
+
+/** Let these emails or domains sign up (invite-only instance). */
+export const allow = (request: APIRequestContext, ...entries: string[]) =>
+	signup(request, (s) => ({ ...s, allowlist: [...new Set([...s.allowlist, ...entries])] }));
 
 /** Create a blank project through the API as the page's user; returns its id. */
 export async function newProject(page: Page, title = 'Untitled project') {

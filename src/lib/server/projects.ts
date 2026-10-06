@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getServer } from './collab.ts';
 import { fail, textUpdate, type Row } from './files.ts';
-import { projectRole, type Role } from './access.ts';
-import { files, memberships, projects, updates, users } from './schema.ts';
+import { broadcast, kick, projectRole, type Role } from './access.ts';
+import { compileSettings, documents, files, invites, memberships, overrides, projects, updates, users } from './schema.ts';
 
 // Projects (005 research R11). Loaded unbundled by server.ts in production: no SvelteKit imports here.
 
@@ -91,4 +93,33 @@ export function joinByLink(token: string, userId: string): string | null {
 		else tx.insert(memberships).values({ projectId: p.id, userId, role: null, viaLink: true, createdAt: Date.now() }).run();
 		return p.id;
 	});
+}
+
+/** Delete a project and everything in it (T023): files, Yjs documents and updates, memberships, invites, overrides
+ *  and compile settings in one transaction, then the compile output; open editors get `deleted` and are kicked.
+ *  404 for an unknown project. Blobs stay (content-addressed, maybe shared: files.ts putBlob). */
+export function deleteProject(pid: string) {
+	db().transaction((tx) => {
+		if (!tx.select({ id: projects.id }).from(projects).where(eq(projects.id, pid)).get()) fail(404, 'Project not found.');
+		const text = tx
+			.select({ id: files.id })
+			.from(files)
+			.where(and(eq(files.projectId, pid), eq(files.kind, 'text')))
+			.all()
+			.map((f) => f.id);
+		tx.delete(overrides).where(eq(overrides.projectId, pid)).run();
+		tx.delete(memberships).where(eq(memberships.projectId, pid)).run();
+		tx.delete(invites).where(eq(invites.projectId, pid)).run();
+		tx.delete(compileSettings).where(eq(compileSettings.project, pid)).run();
+		tx.delete(files).where(eq(files.projectId, pid)).run(); // one statement: the parent FK is checked at its end
+		if (text.length) {
+			tx.delete(documents).where(inArray(documents.name, text)).run();
+			tx.delete(updates).where(inArray(updates.docName, text)).run();
+		}
+		tx.delete(projects).where(eq(projects.id, pid)).run();
+	});
+	// compile.ts compileDir(); not imported, compile.ts pulls in the compile runner
+	rmSync(join(getServer().dataDir, 'compile', pid), { recursive: true, force: true });
+	broadcast(pid, { type: 'deleted' });
+	kick({ projectId: pid });
 }

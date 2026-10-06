@@ -39,6 +39,27 @@ export function testSignIn(email: string) {
 	document.cookie = `${TEST_COOKIE}=${encodeURIComponent(email.trim().toLowerCase())}; path=/; samesite=lax`;
 }
 
+let leaving = false;
+
+/** An API response that says the user is disabled or not allowed (hooks.server.ts: 403 with `reason`) sends the
+ *  browser to `/blocked` (T025). True when it did; the caller stops there. */
+export async function blockedBy(res: Response | undefined): Promise<boolean> {
+	if (res?.status !== 403) return false;
+	const reason = (await res.clone().json().catch(() => null))?.reason;
+	if (reason !== 'disabled' && reason !== 'not-allowed') return false;
+	if (!leaving) {
+		leaving = true;
+		location.assign(`/blocked?reason=${reason}`);
+	}
+	return true;
+}
+
+/** The live connection refused us (after a 4403 close, research R6): if that's because the account was disabled,
+ *  go to `/blocked`; lost access to one project is the page's business. */
+export async function checkBlocked() {
+	await blockedBy(await fetch('/api/me').catch(() => undefined));
+}
+
 class Auth {
 	me = $state<Me | null>(null);
 

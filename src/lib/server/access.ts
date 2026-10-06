@@ -110,3 +110,11 @@ export type ProjectEvent = { type: 'tree' | 'project' | 'access' | 'deleted' };
 export function broadcast(pid: string, event: ProjectEvent) {
 	getServer().hocuspocus.documents.get(`project:${pid}`)?.broadcastStateless(JSON.stringify(event));
 }
+
+/** Guard for admin routes: 401 signed out, 403 unless a site admin (contracts/http-api.md, Admin). */
+export function requireAdmin(locals: { user?: User | null }): User {
+	const user = locals.user;
+	if (!user) throw new FileError(401, 'Sign in to continue.');
+	if (user.role !== 'admin') throw new FileError(403, 'Only admins can do this.');
+	return user;
+}

@@ -21,7 +21,7 @@
 	import { HocuspocusProvider } from '@hocuspocus/provider';
 	import { onMount } from 'svelte';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
-	import { getToken, onSignOut } from '#lib/auth.svelte.ts';
+	import { checkBlocked, getToken, onSignOut } from '#lib/auth.svelte.ts';
 	import { yCollab, ySyncAnnotation, ySyncFacet, yUndoManagerKeymap } from 'y-codemirror.next';
 	import * as Y from 'yjs';
 	import { environments } from '#lib/completion/environments.ts';
@@ -136,6 +136,8 @@
 		});
 		statuses[id] = STATUS_TEXT.connecting;
 		provider.on('status', ({ status }: { status: keyof typeof STATUS_TEXT }) => (statuses[id] = STATUS_TEXT[status]));
+		// refused after a kick (4403): a disabled account goes to /blocked (T025)
+		provider.on('authenticationFailed', checkBlocked);
 		const state = EditorState.create({
 			doc: ytext.toString(),
 			extensions: [shared, language.of(isLatexName(name) ? latexExtensions : plainText), yCollab(ytext, provider.awareness, { undoManager })]

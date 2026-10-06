@@ -1,3 +1,4 @@
+import { blockedBy } from './auth.svelte.ts';
 import { pathOf, sortEntries, type FileEntry, type FileKind, type ProjectInfo } from './files.ts';
 
 
@@ -52,6 +53,7 @@ export class Project {
 	/** Title, role and permissions. */
 	async loadDetails() {
 		const res = await fetch(this.api()).catch(() => undefined);
+		if (await blockedBy(res)) return;
 		if (!res?.ok) {
 			this.loadError = res?.status ?? 0;
 			return;
@@ -62,7 +64,7 @@ export class Project {
 
 	async load() {
 		const res = await fetch(this.api('/files')).catch(() => undefined);
-		if (!res?.ok) return;
+		if ((await blockedBy(res)) || !res?.ok) return;
 		const info: ProjectInfo = await res.json();
 		this.files = info.files;
 		this.mainFileId = info.mainFileId;
@@ -190,6 +192,7 @@ export class Project {
 			body: body && JSON.stringify(body)
 		}).catch(() => undefined);
 		if (!res) return 'Network error, try again.';
+		await blockedBy(res); // the page goes to /blocked; the message shows meanwhile
 		if (!res.ok) return (await res.json().catch(() => null))?.message ?? `Request failed (${res.status}).`;
 		await this.load();
 		return null;
