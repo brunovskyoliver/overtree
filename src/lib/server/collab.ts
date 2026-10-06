@@ -4,9 +4,8 @@ import { asc, eq, lte, and, max } from 'drizzle-orm';
 import { WebSocketServer } from 'ws';
 import * as Y from 'yjs';
 import { openDb } from './db.ts';
-import { documents, updates } from './schema.ts';
-
-export const DOC_NAME = 'main.tex';
+import { ensureProject } from './files.ts';
+import { documents, files, updates } from './schema.ts';
 
 export const SEED = `\\documentclass{article}
 \\usepackage{graphicx} % Required for inserting images
@@ -28,6 +27,10 @@ export const SEED = `\\documentclass{article}
 // and forward messages/close events to the ClientConnection ourselves.
 export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_DIR ?? './data') {
 	const db = openDb(dataDir);
+	// Document names are text file ids. A deleted file's doc may still get a late (debounced) change or
+	// store: skip it so the row doesn't come back (research R4).
+	const isTextFile = (id: string) =>
+		!!db.select({ id: files.id }).from(files).where(and(eq(files.id, id), eq(files.kind, 'text'))).get();
 
 	const hocuspocus = new Hocuspocus({
 		debounce: 500,
@@ -35,8 +38,8 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 		quiet: true,
 
 		async onConnect({ documentName }) {
-			// ponytail: single-file project, feature 005 adds real projects/auth
-			if (documentName !== DOC_NAME) throw new Error(`unknown document ${documentName}`);
+			// ponytail: one project, no auth; feature 005 adds real projects/auth
+			if (!isTextFile(documentName)) throw new Error(`unknown document ${documentName}`);
 		},
 
 		// Runs before Hocuspocus attaches its own update listener, so nothing here reaches onChange.
@@ -50,21 +53,17 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 				.all();
 			if (snapshot) Y.applyUpdate(document, snapshot.state);
 			for (const row of rows) Y.applyUpdate(document, row.update);
-
-			if (!snapshot && rows.length === 0) {
-				document.getText('content').insert(0, SEED);
-				// persist the seed ourselves, onChange isn't wired yet during load
-				appendUpdate(documentName, Y.encodeStateAsUpdate(document));
-			}
+			// no seeding here: ensureProject() stores the starter text of a new project
 		},
 
 		// better-sqlite3 is synchronous: the update is on disk before the next message is handled.
 		async onChange({ documentName, update }) {
-			appendUpdate(documentName, update);
+			if (isTextFile(documentName)) appendUpdate(documentName, update);
 		},
 
 		// Debounced snapshot + log compaction, one transaction.
 		async onStoreDocument({ document, documentName }) {
+			if (!isTextFile(documentName)) return;
 			db.transaction((tx) => {
 				const last = tx
 					.select({ id: max(updates.id) })
@@ -103,6 +102,7 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 
 	// SvelteKit routes are bundled apart from server.ts/the Vite plugin, so they reach this instance via globalThis.
 	globalThis.__overtreeServer = { hocuspocus, db, dataDir };
+	ensureProject();
 
 	return { hocuspocus, wss, db };
 }

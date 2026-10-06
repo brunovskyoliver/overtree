@@ -1,0 +1,18 @@
+\documentclass{article}
+\usepackage{graphicx}
+% uncompressed streams so tests can find text in the PDF bytes
+\ifdefined\pdfcompresslevel\pdfcompresslevel=0\fi
+
+\begin{document}
+
+\input{chapters/intro}
+\include{chapters/two}
+
+\includegraphics[width=3cm]{figures/dot}
+
+As shown by \cite{knuth84}.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}

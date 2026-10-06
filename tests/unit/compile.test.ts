@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import type { Compiler } from '../../src/lib/compile-types.ts';
 import { attachCollab } from '../../src/lib/server/collab.ts';
+import { getMainFileId } from '../../src/lib/server/files.ts';
 import { compileDir, compileProject, runCompile } from '../../src/lib/server/compile.ts';
 
 // Real Docker with texlive/texlive:latest-medium pulled (see quickstart.md).
@@ -103,7 +104,7 @@ describe('compileProject', { timeout: 60_000 }, () => {
 		const doc = new Y.Doc();
 		const provider = new HocuspocusProvider({
 			url: `ws://127.0.0.1:${(http.address() as AddressInfo).port}/collab`,
-			name: 'main.tex',
+			name: getMainFileId()!,
 			document: doc
 		});
 		try {

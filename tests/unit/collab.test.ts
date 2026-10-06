@@ -7,6 +7,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { attachCollab, SEED } from '../../src/lib/server/collab.ts';
+import { listFiles } from '../../src/lib/server/files.ts';
 import { documents, updates } from '../../src/lib/server/schema.ts';
 
 type Started = Awaited<ReturnType<typeof start>>;
@@ -35,7 +36,8 @@ async function start(dataDir: string) {
 }
 
 // Node's global WebSocket is used by the provider (no `ws` polyfill needed on Node >= 22).
-async function connect(server: Started, name = 'main.tex') {
+// Default: the project's only file, main.tex, by its id (the last started server's).
+async function connect(server: Started, name = listFiles()[0].id) {
 	const doc = new Y.Doc();
 	const provider = new HocuspocusProvider({ url: server.url, name, document: doc });
 	cleanup.push(() => provider.destroy());
@@ -127,8 +129,9 @@ describe('collab server', () => {
 		expect(b.text.toString()).toBe(expected);
 	});
 
-	it('rejects other document names', async () => {
+	it('rejects names that are not text files', async () => {
 		const server = await start(tempDir());
 		await expect(connect(server, 'other.tex')).rejects.toThrow();
+		await expect(connect(server, 'main.tex')).rejects.toThrow(); // the 002 name, now an id
 	});
 });

@@ -1,5 +1,6 @@
-import { blob, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { blob, index, integer, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Compiler } from '../compile-types.ts';
+import type { FileKind } from '../files.ts';
 
 // Compacted Yjs state per document (Y.encodeStateAsUpdate).
 export const documents = sqliteTable('documents', {
@@ -24,4 +25,26 @@ export const updates = sqliteTable(
 export const compileSettings = sqliteTable('compile_settings', {
 	project: text('project').primaryKey(),
 	compiler: text('compiler').$type<Compiler>().notNull()
+});
+
+// Project tree (data-model.md). Text file ids are also their Hocuspocus document names.
+export const files = sqliteTable(
+	'files',
+	{
+		id: text('id').primaryKey(),
+		parentId: text('parent_id').references((): AnySQLiteColumn => files.id),
+		name: text('name').notNull(),
+		kind: text('kind').$type<FileKind>().notNull(),
+		hash: text('hash'),
+		size: integer('size'),
+		createdAt: integer('created_at').notNull(),
+		updatedAt: integer('updated_at').notNull()
+	},
+	(t) => [index('files_parent_idx').on(t.parentId)]
+);
+
+// One row ('main') until feature 005.
+export const project = sqliteTable('project', {
+	id: text('id').primaryKey(),
+	mainFileId: text('main_file_id')
 });

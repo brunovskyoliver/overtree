@@ -4,10 +4,15 @@
 	import Workspace from '#lib/components/Workspace.svelte';
 	import { CompileState } from '#lib/compile.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
+	import { Project } from '#lib/project.svelte.ts';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
 
 	// ponytail: one project, feature 005 adds a projects table
 	const PROJECT_NAME = 'Untitled project';
+
+	const project = new Project();
+	project.load();
+	const mainFile = $derived(project.files.find((f) => f.id === project.mainFileId));
 
 	let editor = $state<EditorHandle>();
 	const compile = new CompileState(() => editor?.provider);
@@ -25,7 +30,16 @@
 	</header>
 	<main>
 		<Workspace {compile} {editor}>
-			<Editor bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
+			{#if mainFile}
+				{#key mainFile.id}
+					<Editor
+						file={mainFile}
+						bind:editor
+						onLocalEdit={() => compile.onLocalEdit()}
+						onCompile={() => compile.compile()}
+					/>
+				{/key}
+			{/if}
 			{#snippet outline()}
 				<Outline {editor} />
 			{/snippet}

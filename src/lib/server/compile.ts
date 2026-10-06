@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { Compiler, CompileResult, CompileStatus } from '../compile-types.ts';
 import { parseLog } from '../log-parser.ts';
-import { DOC_NAME, getServer } from './collab.ts';
+import { getServer } from './collab.ts';
+import { getMainFileId, getText } from './files.ts';
 import { compileSettings } from './schema.ts';
 
 const ENGINE_FLAG: Record<Compiler, string> = { pdflatex: '-pdf', xelatex: '-xelatex', lualatex: '-lualatex' };
@@ -183,9 +184,9 @@ export function compileProject(opts: { stopOnFirstError: boolean }): Promise<Com
 async function compileOnce({ stopOnFirstError }: { stopOnFirstError: boolean }): Promise<CompileResult> {
 	const id = randomUUID();
 	const startedAt = Date.now();
-	const conn = await getServer().hocuspocus.openDirectConnection(DOC_NAME);
-	const source = conn.document!.getText('content').toString();
-	await conn.disconnect();
+	// still single-file input; US3 (T026–T028) sends the whole tree and reports a missing main document
+	const mainId = getMainFileId();
+	const source = mainId ? await getText(mainId) : '';
 
 	const compiler = getCompiler();
 	const r = await runCompile({ source, compiler, stopOnFirstError });

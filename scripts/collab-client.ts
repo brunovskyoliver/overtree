@@ -4,7 +4,11 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 
 const [url, mode, arg = ''] = process.argv.slice(2);
-const provider = new HocuspocusProvider({ url, name: 'main.tex' });
+// documents are named by file id: ask the app for main.tex's
+const api = url.replace(/^ws/, 'http').replace(/\/collab$/, '/api/files');
+const { files } = await (await fetch(api)).json();
+const name = files.find((f: { name: string; parentId: string | null }) => f.name === 'main.tex' && !f.parentId).id;
+const provider = new HocuspocusProvider({ url, name });
 const text = provider.document.getText('content');
 
 const timeout = setTimeout(() => {

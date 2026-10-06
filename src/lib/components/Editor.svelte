@@ -24,13 +24,16 @@
 	import * as Y from 'yjs';
 	import { editorTheme } from '#lib/editor/theme.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
+	import type { FileEntry } from '#lib/files.ts';
 	import Toolbar from './Toolbar.svelte';
 
+	// one file until US2 adds tabs; the page re-creates the editor when the file changes
 	let {
+		file,
 		editor = $bindable(),
 		onLocalEdit,
 		onCompile
-	}: { editor?: EditorHandle; onLocalEdit?: () => void; onCompile?: () => void } = $props();
+	}: { file: FileEntry; editor?: EditorHandle; onLocalEdit?: () => void; onCompile?: () => void } = $props();
 
 	// returning true makes CodeMirror preventDefault, so Mod-s doesn't open the browser's save dialog
 	const compileKey = () => {
@@ -48,7 +51,7 @@
 		const undoManager = new Y.UndoManager(ytext);
 		const provider = new HocuspocusProvider({
 			url: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/collab`,
-			name: 'main.tex',
+			name: file.id,
 			document: doc
 		});
 		provider.on('status', ({ status: s }: { status: keyof typeof STATUS_TEXT }) => (status = STATUS_TEXT[s]));
@@ -114,7 +117,7 @@
 
 <section class="editor" aria-label="Editor">
 	<div class="tabs">
-		<div class="tab" aria-current="page">main.tex</div>
+		<div class="tab" aria-current="page">{file.name}</div>
 		<span class="badge" class:offline={status === STATUS_TEXT.disconnected} role="status">{status}</span>
 	</div>
 	<Toolbar {editor} />
