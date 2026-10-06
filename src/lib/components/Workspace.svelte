@@ -133,6 +133,13 @@
 		color: var(--text);
 		cursor: pointer;
 	}
+	/* 10px rails so the tabs never cover line numbers (left) or the scrollbar (right) */
+	:global(.editor-pane .cm-gutters) {
+		padding-left: 10px;
+	}
+	:global(.editor-pane .cm-scroller) {
+		margin-right: 10px;
+	}
 	.collapse:hover {
 		background: #5a6375;
 	}

@@ -152,9 +152,9 @@ description: "Task list for feature 001 Editor workspace shell"
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T038 [P] Performance check in `tests/e2e/perf.spec.ts`: load a 5,000-line document, typing latency stays < 50 ms per keystroke and the outline updates within 1 s; editor interactive < 2 s after navigation (SC-004, edge case)
-- [ ] T039 [P] Write `README.md`: what Overtree is, `pnpm dev`, tests, `docker compose up`, `OVERTREE_BIND`/`PORT`/`DATA_DIR`, and the no-login warning
-- [ ] T040 Run the quickstart.md validation end to end (`pnpm check`, `pnpm test`, `pnpm test:e2e`, compose smoke) and compare the running UI against `reference-layout.png` by screenshot
+- [X] T038 [P] Performance check in `tests/e2e/perf.spec.ts`: load a 5,000-line document, typing latency stays < 50 ms per keystroke and the outline updates within 1 s; editor interactive < 2 s after navigation (SC-004, edge case)
+- [X] T039 [P] Write `README.md`: what Overtree is, `pnpm dev`, tests, `docker compose up`, `OVERTREE_BIND`/`PORT`/`DATA_DIR`, and the no-login warning
+- [X] T040 Run the quickstart.md validation end to end (`pnpm check`, `pnpm test`, `pnpm test:e2e`, compose smoke) and compare the running UI against `reference-layout.png` by screenshot
 - [ ] T041 Set roadmap row 001 to `done` in `specs/ROADMAP.md`
 
 ---
