@@ -3,7 +3,7 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getServer } from './collab.ts';
-import { fail, textUpdate, type Row } from './files.ts';
+import { fail, getText, textUpdate, type Row } from './files.ts';
 import { broadcast, kick, projectRole, type Role } from './access.ts';
 import { compileSettings, documents, files, invites, memberships, overrides, projects, updates, users } from './schema.ts';
 
@@ -46,6 +46,43 @@ export function createProject({ ownerId, title, mainText }: { ownerId: string; t
 	const now = Date.now();
 	const main = { id: randomUUID(), parentId: null, name: 'main.tex', kind: 'text' as const, hash: null, size: null, createdAt: now, updatedAt: now };
 	return insertProject({ ownerId, title }, [main], new Map([[main.id, mainText]]), main.id);
+}
+
+/** Rename (owner only, checked by the route); open editors get `project` and reload the details. */
+export function renameProject(pid: string, title: unknown) {
+	const t = normalizeTitle(title);
+	if (!db().update(projects).set({ title: t, updatedAt: Date.now() }).where(eq(projects.id, pid)).run().changes) fail(404, 'Project not found.');
+	broadcast(pid, { type: 'project' });
+}
+
+/** A copy owned by `ownerId` titled "Copy of <title>" (cut to 120 characters): new file ids, the same blobs, each
+ *  text document's current text as one stored update, the same main file and compiler, no members. */
+export async function duplicateProject(pid: string, ownerId: string): Promise<string> {
+	const p = getProject(pid) ?? fail(404, 'Project not found.');
+	const all = db().select().from(files).where(eq(files.projectId, pid)).all();
+	const ids = new Map(all.map((f) => [f.id, randomUUID()]));
+	const now = Date.now();
+	const texts = new Map<string, string>();
+	// through Hocuspocus: edits of open editors not stored yet (debounced) are in the copy too
+	for (const f of all) if (f.kind === 'text') texts.set(ids.get(f.id)!, await getText(f.id));
+	const rows = all.map(({ projectId: _, ...f }) => ({ ...f, id: ids.get(f.id)!, parentId: f.parentId && ids.get(f.parentId)!, createdAt: now, updatedAt: now }));
+	const title = `Copy of ${p.title}`.slice(0, 120);
+	const id = insertProject({ ownerId, title }, rows, texts, (p.mainFileId && ids.get(p.mainFileId)) || null);
+	// compile.ts setCompiler(); not imported, compile.ts pulls in the compile runner
+	const compiler = db().select().from(compileSettings).where(eq(compileSettings.project, pid)).get()?.compiler;
+	if (compiler) db().insert(compileSettings).values({ project: id, compiler }).run();
+	return id;
+}
+
+/** A collaborator leaves (the owner can't: 403): their membership and file overrides go, their sockets are kicked. */
+export function leaveProject(pid: string, userId: string) {
+	if (getProject(pid)?.ownerId === userId) fail(403, 'The owner can’t leave their own project.');
+	db().transaction((tx) => {
+		tx.delete(overrides).where(and(eq(overrides.projectId, pid), eq(overrides.userId, userId))).run();
+		tx.delete(memberships).where(and(eq(memberships.projectId, pid), eq(memberships.userId, userId))).run();
+	});
+	broadcast(pid, { type: 'access' });
+	kick({ userId, projectId: pid });
 }
 
 /** Last modified time for the dashboard (research R14). */

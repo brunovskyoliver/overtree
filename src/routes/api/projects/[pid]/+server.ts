@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { canEdit, requireProject } from '#lib/server/access.ts';
 import { api } from '#lib/server/api.ts';
 import { getServer } from '#lib/server/collab.ts';
-import { deleteProject, getProject } from '#lib/server/projects.ts';
+import { deleteProject, getProject, renameProject } from '#lib/server/projects.ts';
 import { users } from '#lib/server/schema.ts';
 import { eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
@@ -22,6 +22,16 @@ export const GET: RequestHandler = ({ locals, params }) => {
 		link: role === 'owner' && p.linkToken ? { token: p.linkToken, role: p.linkRole } : null,
 		permissions: { canEdit: canEdit(role) }
 	});
+};
+
+/** `{ title }`, owner only; 422 unless 1–120 characters after trimming. */
+export const PATCH: RequestHandler = async ({ locals, params, request }) => {
+	const body = await request.json().catch(() => null);
+	api(() => {
+		requireProject(locals, params.pid, 'owner');
+		renameProject(params.pid, body?.title);
+	});
+	return json({ title: getProject(params.pid)!.title });
 };
 
 /** The owner, or a site admin even without access (US5 scenario 7); 404 for anyone else (ids don't leak). */

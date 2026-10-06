@@ -62,6 +62,17 @@ export class Project {
 		this.details = await res.json();
 	}
 
+	/** Rename the project (owner only); null when done, else the server's message. */
+	async renameProject(title: string): Promise<string | null> {
+		const init = { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) };
+		const res = await fetch(this.api(), init).catch(() => undefined);
+		if (await blockedBy(res)) return null;
+		if (!res) return 'Network error, try again.';
+		if (!res.ok) return (await res.json().catch(() => null))?.message ?? `Rename failed (${res.status}).`;
+		if (this.details) this.details.title = (await res.json()).title;
+		return null;
+	}
+
 	async load() {
 		const res = await fetch(this.api('/files')).catch(() => undefined);
 		if ((await blockedBy(res)) || !res?.ok) return;

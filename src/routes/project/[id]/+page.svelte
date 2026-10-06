@@ -49,18 +49,33 @@
 	});
 </script>
 
+<svelte:head>
+	<title>{project.details ? `${project.details.title} · Overtree` : 'Overtree'}</title>
+</svelte:head>
+
 <div class="app">
-	<TopBar>
-		{#snippet title()}{project.details?.title ?? ''}{/snippet}
-	</TopBar>
-	<main>
-		<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
-			<Editor {project} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
-			{#snippet outline()}
-				<Outline {editor} enabled={outlined} />
-			{/snippet}
-		</Workspace>
-	</main>
+	<TopBar
+		project={project.details
+			? { title: project.details.title, onrename: project.details.role === 'owner' ? (t) => project.renameProject(t) : undefined }
+			: undefined}
+	/>
+	{#if project.loadError === 404}
+		<!-- contracts/ui.md "Other pages": no project data, only the way back -->
+		<main class="noaccess">
+			<h1>You don’t have access to this project</h1>
+			<p>Ask the owner to share it with you, or check the link.</p>
+			<a href="/">Back to dashboard</a>
+		</main>
+	{:else}
+		<main>
+			<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
+				<Editor {project} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
+				{#snippet outline()}
+					<Outline {editor} enabled={outlined} />
+				{/snippet}
+			</Workspace>
+		</main>
+	{/if}
 </div>
 
 <style>
@@ -72,5 +87,25 @@
 	main {
 		flex: 1;
 		min-height: 0;
+	}
+	.noaccess {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+		padding-top: 20vh;
+		text-align: center;
+	}
+	.noaccess h1 {
+		margin: 0;
+		font-size: 20px;
+		font-weight: 600;
+	}
+	.noaccess p {
+		margin: 0 0 8px;
+		color: var(--text-muted);
+	}
+	.noaccess a {
+		color: var(--focus);
 	}
 </style>

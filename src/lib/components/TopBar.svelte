@@ -4,8 +4,48 @@
 	import { Menu } from '#lib/menu.svelte.ts';
 	import Avatar from './Avatar.svelte';
 
-	// contracts/ui.md "Top bar": brand link left, project title centre, page controls and the account menu right
-	let { title, right }: { title?: Snippet; right?: Snippet } = $props();
+	// contracts/ui.md "Top bar": brand link left, project title centre, page controls and the account menu right.
+	// `project`: the editor's title; the owner (onrename set) edits it in place, others see text.
+	type ProjectTitle = { title: string; onrename?: (title: string) => Promise<string | null> }; // resolves to an error or null
+	let { title, right, project }: { title?: Snippet; right?: Snippet; project?: ProjectTitle } = $props();
+
+	let editing = $state(false);
+	let value = $state('');
+	let renameError = $state('');
+	let saving = false;
+
+	function startEdit() {
+		value = project!.title;
+		renameError = '';
+		editing = true;
+	}
+
+	async function save() {
+		if (!editing || saving) return;
+		const t = value.trim();
+		if (t === project!.title) return void (editing = false);
+		if (!t || t.length > 120) return void (renameError = 'The title must be 1–120 characters.');
+		saving = true;
+		const err = await project!.onrename!(t);
+		saving = false;
+		if (err) renameError = err;
+		else editing = false;
+	}
+
+	function onkey(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			save();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			editing = false;
+		}
+	}
+
+	function focusSelect(el: HTMLInputElement) {
+		el.focus();
+		el.select();
+	}
 
 	const m = new Menu();
 	if (!auth.me) auth.loadMe();
@@ -20,7 +60,34 @@
 
 <header class="topbar">
 	<a class="brand" href="/">Overtree</a>
-	<div class="title">{@render title?.()}</div>
+	<div class="title">
+		{#if project && editing}
+			<input
+				class="rename"
+				type="text"
+				maxlength="120"
+				aria-label="Project title"
+				aria-invalid={!!renameError}
+				title={renameError || undefined}
+				bind:value
+				use:focusSelect
+				oninput={() => (renameError = '')}
+				onkeydown={onkey}
+				onblur={save}
+			/>
+		{:else if project?.onrename}
+			<button type="button" class="rename-toggle" aria-label="Rename project" title="Rename project" onclick={startEdit}>
+				<span>{project.title}</span>
+				<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"
+					><path d="M11.5 2.5l2 2L6 12H4v-2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg
+				>
+			</button>
+		{:else if project}
+			<span>{project.title}</span>
+		{:else}
+			{@render title?.()}
+		{/if}
+	</div>
 	<div class="right">
 		{@render right?.()}
 		<div class="account" bind:this={m.root}>
@@ -73,7 +140,56 @@
 		text-decoration: none;
 	}
 	.title {
+		min-width: 0;
+		max-width: 40vw;
 		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.rename-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		max-width: 100%;
+		padding: 3px 8px;
+		border: 0;
+		border-radius: 4px;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		cursor: pointer;
+	}
+	.rename-toggle span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.rename-toggle svg {
+		flex: none;
+		color: var(--text-muted);
+		opacity: 0;
+	}
+	.rename-toggle:hover,
+	.rename-toggle:focus-visible {
+		background: var(--panel-raised);
+	}
+	.rename-toggle:hover svg,
+	.rename-toggle:focus-visible svg {
+		opacity: 1;
+	}
+	.rename {
+		width: 320px;
+		max-width: 40vw;
+		padding: 3px 8px;
+		border: 1px solid var(--focus);
+		border-radius: 4px;
+		background: var(--bg-editor);
+		color: var(--text);
+		font: inherit;
+		text-align: center;
+	}
+	.rename[aria-invalid='true'] {
+		border-color: #f28b82;
 	}
 	.right {
 		display: flex;
