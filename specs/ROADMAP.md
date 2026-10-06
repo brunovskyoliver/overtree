@@ -12,7 +12,7 @@ Status: `todo` · `in progress` · `done`
 |---|---------|--------|------------|
 | 001 | Editor workspace shell | done | — |
 | 002 | Live compilation & PDF preview | done | 001 |
-| 003 | Multi-file projects, file tree & LaTeX autocomplete | in progress | 002 |
+| 003 | Multi-file projects, file tree & LaTeX autocomplete | done | 002 |
 | 004 | *(merged into 003)* | — | — |
 
 ### 001 Editor workspace shell
