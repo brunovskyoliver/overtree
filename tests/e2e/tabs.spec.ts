@@ -224,6 +224,46 @@ test('rename and move keep the tab, delete closes it (US2-8)', async ({ page }) 
 	await expect(tab(page, 'main.tex')).toHaveAttribute('aria-selected', 'true');
 });
 
+test('undo after a rename undoes the edit made before it (US1-3)', async ({ page }) => {
+	const a = await create(page, 'text', 'a.tex');
+	await page.reload();
+	await open(page, a);
+	await page.locator('.cm-content').click();
+	await page.keyboard.type('before rename');
+	await synced(page);
+
+	await tree(page).getByRole('treeitem', { name: 'a.tex' }).press('F2');
+	await page.keyboard.press('ControlOrMeta+a');
+	await page.keyboard.type('b.tex');
+	await page.keyboard.press('Enter');
+	await expect(tab(page, 'b.tex')).toHaveAttribute('aria-selected', 'true');
+
+	await page.locator('.cm-content').press('ControlOrMeta+z');
+	expect(await text(page)).toBe('');
+});
+
+test('switching tabs keeps each file scroll position (US2-2)', async ({ page }) => {
+	const a = await create(page, 'text', 'long.tex');
+	await page.reload();
+	await open(page, a);
+	await setDoc(page, Array.from({ length: 500 }, (_, i) => `line ${i + 1}`).join('\n'));
+	// the line at the top of the viewport: raw scrollTop drifts as CodeMirror refines its line height estimates
+	const topLine = () =>
+		page.evaluate(() => {
+			const { view } = window.__overtree!;
+			return view.state.doc.lineAt(view.lineBlockAtHeight(view.scrollDOM.scrollTop).from).number;
+		});
+	await page.evaluate(() => (window.__overtree!.view.scrollDOM.scrollTop = 3000));
+	await expect.poll(topLine).toBeGreaterThan(100);
+	const before = await topLine();
+
+	await tab(page, 'main.tex').click();
+	await page.waitForFunction((id) => window.__overtree?.fileId !== id, a.id);
+	await tab(page, 'long.tex').click();
+	await page.waitForFunction((id) => window.__overtree?.fileId === id, a.id);
+	await expect.poll(async () => Math.abs((await topLine()) - before)).toBeLessThanOrEqual(1);
+});
+
 test('deleting from the tree closes the tab (US2-8)', async ({ page }) => {
 	const a = await create(page, 'text', 'a.tex');
 	await page.reload();

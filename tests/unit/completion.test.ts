@@ -315,4 +315,26 @@ describe('argument completion (US6)', () => {
 			vi.unstubAllGlobals();
 		}
 	});
+
+	it('a \\label removed from an open tab is no longer offered (FR-029)', async () => {
+		vi.useFakeTimers();
+		// the server still has the label in a's stored text unless a is excluded
+		const fetch = vi.fn(async (url: string) => ({
+			ok: true,
+			json: async () => ({ ...NONE, labels: url.includes('exclude=a') ? [] : ['sec:old'] })
+		}));
+		vi.stubGlobal('fetch', fetch);
+		try {
+			const symbols = new Symbols();
+			symbols.refresh();
+			await vi.advanceTimersByTimeAsync(500);
+			expect(symbols.labels).toEqual(['sec:old']);
+			symbols.scan('a', false, EditorState.create({ doc: '\\section{A}' }));
+			await vi.advanceTimersByTimeAsync(800);
+			expect(symbols.labels).toEqual([]);
+		} finally {
+			vi.useRealTimers();
+			vi.unstubAllGlobals();
+		}
+	});
 });

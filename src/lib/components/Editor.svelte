@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+	import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, completionStatus } from '@codemirror/autocomplete';
 	import { defaultKeymap } from '@codemirror/commands';
 	import { bracketMatching, foldGutter, foldKeymap, indentOnInput, StreamLanguage } from '@codemirror/language';
 	import { stex } from '@codemirror/legacy-modes/mode/stex';
@@ -115,6 +115,7 @@
 			// remote Yjs changes carry ySyncAnnotation and don't count as the user's typing
 			if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ySyncAnnotation))) onLocalEdit?.();
 			if (u.docChanged && shown) symbols.scan(shown, !!project.files.find((f) => f.id === shown)?.name.toLowerCase().endsWith('.bib'), u.state);
+			if (completionStatus(u.state) && !completionStatus(u.startState)) symbols.freshen();
 			for (const fn of listeners) fn(u);
 		})
 	];

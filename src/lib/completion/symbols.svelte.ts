@@ -13,15 +13,23 @@ export class Symbols {
 	#live = new Map<string, FileSymbols>();
 	#fetchTimer: ReturnType<typeof setTimeout> | undefined;
 	#scanTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	#fetchedAt = 0;
 
 	/** Refetch from the server, debounced 500 ms (on load, after tree operations and on tab switch). */
 	refresh() {
 		clearTimeout(this.#fetchTimer);
 		this.#fetchTimer = setTimeout(async () => {
+			this.#fetchedAt = Date.now();
 			const exclude = [...this.#live.keys()].join(',');
 			const res = await fetch(`/api/project/symbols?exclude=${encodeURIComponent(exclude)}`).catch(() => undefined);
 			if (res?.ok) this.#server = await res.json();
 		}, 500);
+	}
+
+	/** Refetch if the last fetch is over 2 s old (the completion popup opening): picks up edits made elsewhere.
+	 * ponytail: shows on the next keystroke, not in the popup already open; push symbol changes over the socket if that matters */
+	freshen() {
+		if (Date.now() - this.#fetchedAt > 2000) this.refresh();
 	}
 
 	/** Rescan an open tab's text, debounced 300 ms. */
@@ -32,7 +40,10 @@ export class Symbols {
 			setTimeout(() => {
 				this.#scanTimers.delete(fileId);
 				const text = state.doc.toString();
+				const first = !this.#live.has(fileId);
 				this.#live.set(fileId, bib ? { labels: [], commands: [], environments: [], bibKeys: scanBib(text) } : { ...scanTex(text), bibKeys: [] });
+				// the server snapshot still holds this file's old entries (a deleted \label): refetch without it
+				if (first) this.refresh();
 			}, 300)
 		);
 	}

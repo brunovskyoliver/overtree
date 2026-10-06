@@ -136,3 +136,8 @@
 ## Implementation Strategy
 
 MVP = Phases 1–5 (file model, tree, tabs and previews, multi-file compile). Then US4 (upload, zip), then autocomplete (US5, US6), then polish. Each phase ends with `pnpm check`, `pnpm test` and the e2e specs it adds plus all earlier specs passing on all three browsers.
+
+## Phase 10: Convergence
+
+- [X] T056 Make project symbols drop stale server entries: in src/lib/completion/symbols.svelte.ts call `refresh()` when a file first enters the live map (so the server snapshot excludes it and a label/command deleted or renamed in an open tab disappears within 2 s), and refetch periodically or when the popup opens (debounced) so edits made in another browser tab to files not open here show up within 2 s; unit test in tests/unit/completion.test.ts that a `\label` removed from an open tab's text is no longer offered per FR-029 (partial)
+- [X] T057 Extend the e2e specs for untested clauses of two acceptance scenarios: in tests/e2e/tabs.spec.ts scroll a long file, switch tabs and back, assert the scroll position is restored (US2-2); in tests/e2e/tabs.spec.ts or tests/e2e/tree.spec.ts type in an open file, rename it, then Ctrl/Cmd+Z in its tab undoes the pre-rename edit (US1-3) per Constitution IV (partial)
