@@ -1,0 +1,19 @@
+\chapter{Hardware}
+\label{ch:hardware}
+
+\section{Sensors}
+Each node carries two capacitive sensors at depths of 10 and 30 centimetres,
+a microcontroller and a radio. Figure~\ref{fig:setup} shows one node before
+it went into the ground.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.4\textwidth]{graphics/setup}
+  \caption{A sensor node.}
+  \label{fig:setup}
+\end{figure}
+
+\section{Calibration}
+Raw readings depend on temperature and on the soil itself. We fitted a
+straight line from raw counts to volumetric water content for each sensor,
+using samples dried in an oven as the reference.

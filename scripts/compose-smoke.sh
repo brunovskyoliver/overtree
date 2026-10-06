@@ -41,6 +41,20 @@ else
 	exit 1
 fi
 
+# 003: the zip and symbols routes load server modules the image copies selectively
+if [ "$(curl -s "$URL/api/project/zip" | head -c 2)" = "PK" ]; then
+	echo "ok: project zip export"
+else
+	echo "FAIL: /api/project/zip is not a zip" >&2
+	exit 1
+fi
+if curl -sf "$URL/api/project/symbols" | grep -q '"labels"'; then
+	echo "ok: completion symbols"
+else
+	echo "FAIL: /api/project/symbols" >&2
+	exit 1
+fi
+
 node --no-warnings scripts/collab-client.ts "$WS" append $'\n'"$MARK"
 echo "ok: wrote '$MARK'"
 

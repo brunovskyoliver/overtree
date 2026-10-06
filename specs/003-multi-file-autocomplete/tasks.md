@@ -114,9 +114,9 @@
 
 ## Phase 9: Polish & cross-cutting
 
-- [ ] T052 SC-002 in tests/unit/compile-multi.test.ts: three thesis-like sample projects as zips in tests/fixtures/projects/samples/ (written for this project: a book-class thesis with chapters/figures/bibtex, an article with biblatex+biber and subfolder images, a report with `\include`s and a custom `.sty`), imported with `importZip` and compiled → `success` with the expected page counts recorded in the fixture's README
-- [ ] T053 [P] Update README.md (files, tree, upload/zip, limits env vars, completion) and specs/003-multi-file-autocomplete/quickstart.md if anything changed during implementation
-- [ ] T054 Run `pnpm check`, `pnpm test`, `pnpm test:e2e` (all three browsers) and the quickstart manual walk-through with the t3-code preview tools; fix what fails
+- [X] T052 SC-002 in tests/unit/compile-multi.test.ts: three thesis-like sample projects as zips in tests/fixtures/projects/samples/ (written for this project: a book-class thesis with chapters/figures/bibtex, an article with biblatex+biber and subfolder images, a report with `\include`s and a custom `.sty`), imported with `importZip` and compiled → `success` with the expected page counts recorded in the fixture's README
+- [X] T053 [P] Update README.md (files, tree, upload/zip, limits env vars, completion) and specs/003-multi-file-autocomplete/quickstart.md if anything changed during implementation
+- [X] T054 Run `pnpm check`, `pnpm test`, `pnpm test:e2e` (all three browsers) and the quickstart manual walk-through with the t3-code preview tools; fix what fails
 - [ ] T055 Mark row 003 `done` in specs/ROADMAP.md
 
 ## Dependencies & Execution Order

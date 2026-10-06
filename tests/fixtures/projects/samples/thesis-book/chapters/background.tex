@@ -1,0 +1,27 @@
+\chapter{Background}
+\label{ch:background}
+
+\section{Replicated documents}
+Each client holds a full copy of the document and applies local edits at
+once. Edits travel as small updates that commute, so every replica reaches the
+same state no matter the order in which updates arrive \cite{shapiro11}.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/architecture}
+  \caption{Clients, relay server and storage.}
+  \label{fig:architecture}
+\end{figure}
+
+Figure~\ref{fig:architecture} shows the parts involved. The relay server sits
+between the clients and the storage layer.
+
+\section{Cost model}
+Let $r$ be the number of reads and $w$ the number of writes per minute. With
+a hit rate $h$, the expected storage cost per minute is
+\begin{equation}
+  C = (1 - h)\, r\, c_r + w\, c_w ,
+  \label{eq:cost}
+\end{equation}
+where $c_r$ and $c_w$ are the costs of one read and one write. Knuth's advice
+on premature optimisation \cite{knuth74} applies: measure before tuning.

@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { attachCollab } from '../../src/lib/server/collab.ts';
 import { collectProject, compileDir, compileProject, tarProject } from '../../src/lib/server/compile.ts';
 import { createEntry, deleteEntry, FileError, listFiles, setMainFile, setText, uploadFile } from '../../src/lib/server/files.ts';
+import { zipSync } from 'fflate';
+import { importZip } from '../../src/lib/server/zip.ts';
 import { readTree } from '../fixtures/projects/zips.ts';
 
 // Real Docker with texlive/texlive:latest-medium (see quickstart.md). Each test gets a fresh data dir.
@@ -80,6 +82,23 @@ describe('multi-file compile', { timeout: 60_000 }, () => {
 		deleteEntry(idOf('main.tex'));
 		const r = await compileProject({ stopOnFirstError: false });
 		expect(r).toMatchObject({ status: 'failure', message: expect.stringMatching(/^No main document\./), entries: [] });
+	});
+});
+
+// SC-002: thesis-like projects zipped from their source folders at test time; page counts in samples/README.md
+describe('sample projects', { timeout: 60_000 }, () => {
+	it.each([
+		['thesis-book', 17],
+		['article-biblatex', 2],
+		['report-sty', 5]
+	])('imports and compiles %s to %i pages', async (name, pages) => {
+		await start();
+		importZip(zipSync(readTree(join(import.meta.dirname, '../fixtures/projects/samples', name))));
+		const r = await compileProject({ stopOnFirstError: false });
+		expect(r.status).toBe('success');
+		const log = outputLog();
+		expect(log).toMatch(new RegExp(`Output written on \\S+ \\(${pages} pages?,`));
+		expect(log).not.toMatch(/undefined (citation|reference)|Citation .* undefined|Reference .* undefined/i);
 	});
 });
 

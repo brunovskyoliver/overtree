@@ -1,0 +1,34 @@
+\documentclass[11pt,a4paper]{book}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+
+\title{Caching Strategies for Collaborative Editors}
+\author{A. Student}
+\date{October 2026}
+
+\begin{document}
+
+\frontmatter
+\maketitle
+
+\chapter*{Abstract}
+Collaborative editors keep many copies of one document in sync. This thesis
+measures three caching strategies for the server side of such an editor and
+argues that a small write-through cache is enough for classroom-sized groups.
+
+\tableofcontents
+\listoffigures
+
+\mainmatter
+\include{chapters/introduction}
+\include{chapters/background}
+\include{chapters/evaluation}
+\include{chapters/conclusion}
+
+\backmatter
+\bibliographystyle{plain}
+\bibliography{bibliography}
+
+\end{document}

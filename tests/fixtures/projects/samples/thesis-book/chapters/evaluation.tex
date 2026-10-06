@@ -1,0 +1,36 @@
+\chapter{Evaluation}
+\label{ch:evaluation}
+
+\section{Setup}
+We replayed the edit history of twelve student projects against a test
+server. Each replay ran three times per strategy.
+
+\begin{table}[ht]
+  \centering
+  \begin{tabular}{lrr}
+    \toprule
+    Strategy & Median latency (ms) & Memory (MB) \\
+    \midrule
+    No cache       & 41.0 & 12 \\
+    Write-through  &  6.2 & 48 \\
+    Write-back     &  5.9 & 51 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Latency and memory per strategy.}
+  \label{tab:results}
+\end{table}
+
+\section{Results}
+Table~\ref{tab:results} lists the medians. Both caches cut latency by a
+factor of six; write-back saves little over write-through and risks losing
+edits on a crash. Figure~\ref{fig:results} plots latency against group size.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/results}
+  \caption{Latency as the group grows.}
+  \label{fig:results}
+\end{figure}
+
+Plugging the measured hit rate of $h = 0.93$ into Equation~\eqref{eq:cost}
+predicts the observed drop within ten percent.

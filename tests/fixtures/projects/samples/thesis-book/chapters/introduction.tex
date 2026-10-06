@@ -1,0 +1,21 @@
+\chapter{Introduction}
+\label{ch:introduction}
+
+Students who write a thesis together rarely sit in the same room. They edit
+the same files from different machines, often at the same time, and expect
+every change to show up for everyone within a second. Systems that do this
+well build on ideas from distributed systems \cite{lamport78} and from
+replicated data types \cite{shapiro11}.
+
+\section{Problem statement}
+A server that relays edits must remember the current state of each document.
+Reading that state from disk on every connection is slow; keeping all of it
+in memory does not scale. Chapter~\ref{ch:background} reviews the options and
+Chapter~\ref{ch:evaluation} measures them.
+
+\section{Contributions}
+\begin{itemize}
+  \item A model of the read and write load of a small editing group.
+  \item Measurements of three caching strategies on that load.
+  \item A recommendation for servers with fewer than fifty users.
+\end{itemize}

@@ -1,0 +1,38 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{thesisstyle}[2026/10/06 Layout for the sample report]
+
+\RequirePackage[a4paper,margin=3cm,bindingoffset=1cm]{geometry}
+\RequirePackage{graphicx}
+\RequirePackage{xcolor}
+\RequirePackage{fancyhdr}
+
+\definecolor{thesisblue}{RGB}{20,60,120}
+
+% supervisor shown on the title page
+\newcommand{\supervisor}[1]{\def\@supervisor{#1}}
+\supervisor{}
+
+\renewcommand{\maketitle}{%
+  \begin{titlepage}
+    \centering
+    \vspace*{3cm}
+    {\LARGE\bfseries\color{thesisblue}\@title\par}
+    \vspace{1.5cm}
+    {\large\@author\par}
+    \vspace{1cm}
+    {Supervisor: \@supervisor\par}
+    \vfill
+    {\@date\par}
+  \end{titlepage}}
+
+% a boxed remark for the text
+\newenvironment{remark}
+  {\par\medskip\noindent\textcolor{thesisblue}{\textbf{Remark.}}\itshape\ }
+  {\par\medskip}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\nouppercase{\leftmark}}
+\fancyfoot[C]{\thepage}
+
+\endinput
