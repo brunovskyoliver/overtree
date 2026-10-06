@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { Compiler, CompileResult, CompileStatus } from '../compile-types.ts';
+import { parseLog } from '../log-parser.ts';
 import { DOC_NAME, getServer } from './collab.ts';
 import { compileSettings } from './schema.ts';
 
@@ -184,7 +185,7 @@ async function compileOnce({ stopOnFirstError }: { stopOnFirstError: boolean }):
 		startedAt,
 		durationMs: Date.now() - startedAt,
 		pdfId: r.pdf ? id : previous?.pdfId,
-		entries: [],
+		entries: r.log ? parseLog(r.log) : [],
 		message: r.message
 	};
 	write('result.json', JSON.stringify(result));

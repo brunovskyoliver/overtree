@@ -24,7 +24,7 @@
 		<span class="project">{PROJECT_NAME}</span>
 	</header>
 	<main>
-		<Workspace {compile}>
+		<Workspace {compile} {editor}>
 			<Editor bind:editor />
 			{#snippet outline()}
 				<Outline {editor} />
