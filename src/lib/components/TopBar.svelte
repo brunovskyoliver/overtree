@@ -2,13 +2,32 @@
 	import type { Snippet } from 'svelte';
 	import { auth, signOut } from '#lib/auth.svelte.ts';
 	import { Menu } from '#lib/menu.svelte.ts';
+	import type { Peer } from '#lib/session.svelte.ts';
 	import Avatar from './Avatar.svelte';
 
 	// contracts/ui.md "Top bar": brand link left, project title centre, page controls and the account menu right.
 	// `project`: the editor's title; the owner (onrename set) edits it in place, others see text.
 	type ProjectTitle = { title: string; onrename?: (title: string) => Promise<string | null> }; // resolves to an error or null
 	// `onshare`: the green "Share" button (editor page) opening the Share dialog
-	let { title, right, project, onshare }: { title?: Snippet; right?: Snippet; project?: ProjectTitle; onshare?: () => void } = $props();
+	// `peers`: the others in the project (avatars, `onjump` goes to their cursor); `offline`: the socket dropped
+	let {
+		title,
+		right,
+		project,
+		onshare,
+		peers = [],
+		onjump,
+		offline = false
+	}: {
+		title?: Snippet;
+		right?: Snippet;
+		project?: ProjectTitle;
+		onshare?: () => void;
+		peers?: Peer[];
+		onjump?: (peer: Peer) => void;
+		offline?: boolean;
+	} = $props();
+	const MAX_PEERS = 5;
 
 	let editing = $state(false);
 	let value = $state('');
@@ -49,7 +68,13 @@
 	}
 
 	const m = new Menu();
+	const more = new Menu();
 	if (!auth.me) auth.loadMe();
+
+	function jump(peer: Peer) {
+		more.open = false;
+		onjump?.(peer);
+	}
 
 	function go(href: string) {
 		m.open = false;
@@ -57,7 +82,7 @@
 	}
 </script>
 
-<svelte:window onpointerdown={m.onwindowpointerdown} />
+<svelte:window onpointerdown={(e) => (m.onwindowpointerdown(e), more.onwindowpointerdown(e))} />
 
 <header class="topbar">
 	<a class="brand" href="/">Overtree</a>
@@ -91,6 +116,40 @@
 	</div>
 	<div class="right">
 		{@render right?.()}
+		{#if peers.length}
+			<div class="peers" bind:this={more.root}>
+				{#each peers.slice(0, MAX_PEERS) as peer (peer.id)}
+					<button type="button" class="peer" style:--ring={peer.color} aria-label="{peer.name} (go to cursor)" title={peer.name} onclick={() => jump(peer)}>
+						<Avatar name={peer.name} avatarUrl={peer.avatarUrl} color={peer.color} />
+					</button>
+				{/each}
+				{#if peers.length > MAX_PEERS}
+					<button
+						type="button"
+						class="more"
+						aria-label="{peers.length - MAX_PEERS} more"
+						aria-haspopup="menu"
+						aria-expanded={more.open}
+						bind:this={more.toggle}
+						onclick={more.ontoggle}
+						onkeydown={more.ontogglekey}>+{peers.length - MAX_PEERS}</button
+					>
+					{#if more.open}
+						<div class="menu" role="menu" aria-label="More people" tabindex="-1" bind:this={more.menu} onkeydown={more.onmenukey}>
+							{#each peers.slice(MAX_PEERS) as peer (peer.id)}
+								<button type="button" role="menuitem" tabindex="-1" class="row" aria-label="{peer.name} (go to cursor)" onclick={() => jump(peer)}>
+									<Avatar name={peer.name} avatarUrl={peer.avatarUrl} color={peer.color} size={20} />
+									{peer.name}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			</div>
+		{/if}
+		{#if offline}
+			<span class="offline" role="status">Offline, reconnecting…</span>
+		{/if}
 		{#if onshare}
 			<button type="button" class="share" onclick={onshare}>
 				<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
@@ -205,6 +264,48 @@
 		align-items: center;
 		justify-content: flex-end;
 		gap: 8px;
+	}
+	.peers {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		margin-right: 4px;
+	}
+	.peer,
+	.more {
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		border: 2px solid var(--ring, var(--border));
+		border-radius: 50%;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: 12px;
+		cursor: pointer;
+	}
+	.more {
+		background: var(--panel-raised);
+	}
+	.peer:hover,
+	.more:hover {
+		filter: brightness(1.15);
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.offline {
+		padding: 3px 10px;
+		border-radius: 12px;
+		background: #4a2a2a;
+		color: var(--text);
+		font-size: 12px;
+		white-space: nowrap;
 	}
 	.share {
 		display: inline-flex;

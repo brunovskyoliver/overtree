@@ -21,15 +21,16 @@
 	import { HocuspocusProvider } from '@hocuspocus/provider';
 	import { onMount } from 'svelte';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
-	import { checkBlocked, getToken, onSignOut } from '#lib/auth.svelte.ts';
+	import { auth, checkBlocked, getToken, onSignOut } from '#lib/auth.svelte.ts';
 	import { yCollab, ySyncAnnotation, ySyncFacet, yUndoManagerKeymap } from 'y-codemirror.next';
 	import * as Y from 'yjs';
 	import { environments } from '#lib/completion/environments.ts';
 	import { kindLabel, latexSource } from '#lib/completion/source.ts';
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
-	import { editorTheme } from '#lib/editor/theme.ts';
+	import { cursorLabels, editorTheme } from '#lib/editor/theme.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { isLatexName } from '#lib/files.ts';
+	import { lightColor } from '#lib/presence.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import type { Session } from '#lib/session.svelte.ts';
 	import EditorTabs from './EditorTabs.svelte';
@@ -125,6 +126,7 @@
 		]),
 		keymap.of([...undoKeys, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap, ...completionKeymap]),
 		editorTheme,
+		cursorLabels,
 		EditorView.lineWrapping,
 		EditorView.updateListener.of((u) => {
 			// remote Yjs changes carry ySyncAnnotation and don't count as the user's typing
@@ -167,9 +169,20 @@
 		provider.on('authenticated', ({ scope }: { scope: string }) => {
 			if (scope === 'readonly' && tab.dirty && tabs.get(id) === tab) rebuild(id);
 		});
+		identify(provider);
 		provider.attach();
 		return tab;
 	}
+
+	/** Name and color on this tab's cursor for the others (research R8). */
+	function identify(provider: HocuspocusProvider, me = auth.me) {
+		if (me) provider.awareness!.setLocalStateField('user', { id: me.id, name: me.name, color: me.color, colorLight: lightColor(me.color) });
+	}
+	// tabs opened before /api/me answered
+	$effect(() => {
+		const me = auth.me;
+		for (const tab of tabs.values()) identify(tab.provider, me);
+	});
 
 	function rebuild(id: string) {
 		const name = project.files.find((f) => f.id === id)?.name ?? '';
@@ -263,7 +276,8 @@
 </script>
 
 <section class="editor" aria-label="Editor">
-	<EditorTabs {project} status={project.active ? statuses[project.active] : undefined} />
+	<!-- offline: the top bar's "Offline, reconnecting…" replaces the per-tab badge -->
+	<EditorTabs {project} status={project.active && !session.offline ? statuses[project.active] : undefined} />
 	{#if lostEdits}
 		<p class="notice lost" role="alert">
 			Your changes could not be saved: you no longer have edit access

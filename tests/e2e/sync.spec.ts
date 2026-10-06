@@ -40,7 +40,7 @@ test('an edit in one tab appears in the other in under 300 ms (US1-6, SC-003)', 
 
 test('offline edits show "Offline" and sync after reconnect (FR-015)', async () => {
 	await a.evaluate(() => window.__overtree!.provider.configuration.websocketProvider.disconnect());
-	await expect(a.getByRole('status')).toHaveText('Offline');
+	await expect(a.getByRole('status')).toHaveText('Offline, reconnecting…');
 
 	const marker = `offline-${Date.now()}`;
 	await a.locator('.cm-content').press('ControlOrMeta+End');

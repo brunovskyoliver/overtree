@@ -203,7 +203,7 @@ test('lowered to Reader while offline with edits: the tab starts over from the s
 	const before = await text(page);
 
 	await bob.evaluate(() => window.__overtree!.provider.configuration.websocketProvider.disconnect());
-	await expect(bob.getByRole('status')).toHaveText('Offline');
+	await expect(bob.getByRole('status')).toHaveText('Offline, reconnecting…');
 	await bob.locator('.cm-content').press('ControlOrMeta+End');
 	await bob.keyboard.type('% lost');
 	await dialog.getByRole('combobox', { name: `Role for ${b}` }).selectOption('reader');

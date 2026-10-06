@@ -27,7 +27,7 @@ export type Members = {
 };
 
 // Client view of one project's tree and its open tabs. Each operation calls the API and reloads the whole list
-// on success (live tree events come with US4); failures return the server's message for the UI.
+// on success (and on live `tree` events, research R8); failures return the server’s message for the UI.
 export class Project {
 	readonly id: string;
 	details = $state<ProjectDetails | null>(null);

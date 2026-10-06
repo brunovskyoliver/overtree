@@ -1,7 +1,11 @@
 // Dark editor theme modeled on reference-layout.png.
 import { syntaxHighlighting } from '@codemirror/language';
-import { EditorView } from '@codemirror/view';
+import type { Range } from '@codemirror/state';
+import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import { tagHighlighter, tags } from '@lezer/highlight';
+import { ySyncFacet } from 'y-codemirror.next';
+import type { Awareness } from 'y-protocols/awareness';
+import * as Y from 'yjs';
 
 // Stable class names (tests assert them). stex emits: tag = command, atom = argument,
 // keyword = math delimiter, special(variableName) = math letters, comment, bracket, number.
@@ -84,6 +88,18 @@ const theme = EditorView.theme(
 		'.cm-completionDetail': { marginLeft: '12px', color: 'var(--text-muted)', fontStyle: 'normal', overflow: 'hidden', textOverflow: 'ellipsis' },
 		'.cm-completionKind': { marginLeft: 'auto', paddingLeft: '16px', color: 'var(--text-muted)' },
 		'li[aria-selected] .cm-completionKind': { color: '#c9d6c9' },
+		// remote cursors (y-codemirror): the name label sits on the caret in the user's color (R9 palette, dark text)
+		'.cm-ySelectionCaret': { borderLeftWidth: '2px', borderRightWidth: '0', marginRight: '0' },
+		'.cm-ySelectionInfo': {
+			top: '-1.35em',
+			padding: '1px 5px',
+			borderRadius: '3px 3px 3px 0',
+			color: '#1b1e26',
+			fontFamily: 'var(--font-ui)',
+			fontSize: '11px',
+			fontWeight: '600'
+		},
+		'.cm-yRecent .cm-ySelectionInfo': { opacity: '1' },
 		'.tok-command': { color: '#d27fb3' },
 		'.tok-argument': { color: '#e5a85c', fontStyle: 'italic' },
 		'.tok-math': { color: '#7fc8a9' },
@@ -96,3 +112,70 @@ const theme = EditorView.theme(
 );
 
 export const editorTheme = [theme, syntaxHighlighting(latexClasses)];
+
+const LABEL_MS = 2000;
+
+/** Remote name labels show for 2 s after that user's cursor moves, then only on hover: the lines holding a
+ *  recently moved remote caret get `cm-yRecent`. y-codemirror reuses the caret DOM, so a CSS animation can't. */
+// ponytail: per line, not per caret; two users on one line both show while either moves
+export const cursorLabels = ViewPlugin.fromClass(
+	class {
+		decorations: DecorationSet = Decoration.none;
+		moved = new Map<number, number>(); // awareness client id → last cursor change
+		timer: ReturnType<typeof setTimeout> | undefined;
+		view: EditorView;
+		conf: { ytext: Y.Text; awareness: Awareness } | null;
+
+		constructor(view: EditorView) {
+			this.view = view;
+			// absent in the empty state a closed tab leaves behind
+			this.conf = view.state.facet(ySyncFacet) ?? null;
+			this.conf?.awareness.on('change', this.onchange);
+			this.decorations = this.build();
+		}
+
+		onchange = ({ added, updated }: { added: number[]; updated: number[] }) => {
+			const self = this.conf!.awareness.clientID;
+			const remote = [...added, ...updated].filter((id) => id !== self);
+			// local changes come from inside a view update (y-codemirror sets our cursor there): no dispatch
+			if (!remote.length) return;
+			for (const id of remote) this.moved.set(id, Date.now());
+			this.refresh();
+		};
+
+		/** Redraw now and again when the oldest label is due to hide. */
+		refresh() {
+			this.view.dispatch({});
+			clearTimeout(this.timer);
+			if (this.moved.size) this.timer = setTimeout(() => this.refresh(), Math.max(0, Math.min(...this.moved.values()) + LABEL_MS - Date.now()) + 10);
+		}
+
+		update(u: ViewUpdate) {
+			if (u.docChanged || u.transactions.length) this.decorations = this.build();
+		}
+
+		build() {
+			if (!this.conf) return Decoration.none;
+			const { ytext, awareness } = this.conf;
+			const states = awareness.getStates();
+			const lines = new Set<number>();
+			for (const [id, at] of this.moved) {
+				const head = states.get(id)?.cursor?.head;
+				if (Date.now() - at >= LABEL_MS || !head) {
+					this.moved.delete(id);
+					continue;
+				}
+				const pos = Y.createAbsolutePositionFromRelativePosition(head, ytext.doc!);
+				if (pos?.type === ytext && pos.index <= this.view.state.doc.length) lines.add(this.view.state.doc.lineAt(pos.index).from);
+			}
+			const recent = Decoration.line({ class: 'cm-yRecent' });
+			return Decoration.set([...lines].sort((a, b) => a - b).map((from): Range<Decoration> => recent.range(from)));
+		}
+
+		destroy() {
+			clearTimeout(this.timer);
+			this.conf?.awareness.off('change', this.onchange);
+		}
+	},
+	{ decorations: (v) => v.decorations }
+);

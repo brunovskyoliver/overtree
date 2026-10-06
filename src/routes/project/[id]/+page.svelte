@@ -2,7 +2,7 @@
 	import { EditorView } from '@codemirror/view';
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
-	import { onSignOut, watchSession } from '#lib/auth.svelte.ts';
+	import { auth, onSignOut, watchSession } from '#lib/auth.svelte.ts';
 	import Editor from '#lib/components/Editor.svelte';
 	import Outline from '#lib/components/Outline.svelte';
 	import ShareDialog from '#lib/components/ShareDialog.svelte';
@@ -11,7 +11,8 @@
 	import { CompileState } from '#lib/compile.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { Project } from '#lib/project.svelte.ts';
-	import { Session } from '#lib/session.svelte.ts';
+	import { Session, type Peer } from '#lib/session.svelte.ts';
+	import * as Y from 'yjs';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
 
 	// +layout.svelte keys this page on the id: another project gets a fresh Project, editor and sockets
@@ -23,8 +24,11 @@
 	const session = new Session(project.id, {
 		access: () => (project.loadDetails(), project.load(), share?.refresh()),
 		tree: () => project.load(),
-		project: () => project.loadDetails()
+		// the main document lives in the files list
+		project: () => (project.loadDetails(), project.load())
 	});
+	// the others see who is here and in which file (research R8)
+	$effect(() => session.present(auth.me, project.active));
 	// a refetch that comes back 404 after the project was open: the access went (before the socket even says so)
 	const ended = $derived(session.ended ?? (project.loadError === 404 && project.details ? 'removed' : null));
 	$effect(() => {
@@ -39,8 +43,9 @@
 		compile.canConfigure = project.details?.permissions.canEdit !== false;
 	});
 
-	/** A log entry: open its file in a tab and put the cursor on the line (past the end: the last line). */
-	async function openAt(fileId: string, line: number) {
+	/** Open a file in a tab and hand its synced editor over; undefined when it isn't a text tab or the user
+	 *  switched away meanwhile. */
+	async function opened(fileId: string): Promise<EditorHandle | undefined> {
 		project.openFile(fileId);
 		await tick(); // the editor switches to the tab
 		const h = editor;
@@ -51,11 +56,37 @@
 				const done = () => (h.provider.off('synced', done), resolve());
 				h.provider.on('synced', done);
 			});
-		if (editor !== h) return; // switched away meanwhile
-		const { view } = h;
+		return editor === h ? h : undefined;
+	}
+
+	/** A log entry: open its file in a tab and put the cursor on the line (past the end: the last line). */
+	async function openAt(fileId: string, line: number) {
+		const view = (await opened(fileId))?.view;
+		if (!view) return;
 		const at = view.state.doc.line(Math.min(line, view.state.doc.lines));
 		view.dispatch({ selection: { anchor: at.from }, effects: EditorView.scrollIntoView(at.from, { y: 'center' }) });
 		view.focus();
+	}
+
+	/** An avatar: open the file that user is in and scroll to their cursor (research R8). */
+	async function jumpTo(peer: Peer) {
+		if (!peer.fileId) return;
+		const h = await opened(peer.fileId);
+		if (!h) return;
+		const aw = h.provider.awareness!;
+		const head = () => [...aw.getStates().values()].find((s) => s.user?.id === peer.id && s.cursor?.head)?.cursor.head;
+		// their state in this file can arrive just after the sync
+		if (!head())
+			await new Promise<void>((resolve) => {
+				const done = () => (aw.off('change', check), clearTimeout(timer), resolve());
+				const check = () => head() && done();
+				const timer = setTimeout(done, 1000);
+				aw.on('change', check);
+			});
+		const pos = head() && Y.createAbsolutePositionFromRelativePosition(head(), h.provider.document);
+		if (!pos || editor !== h) return;
+		h.view.dispatch({ effects: EditorView.scrollIntoView(pos.index, { y: 'center' }) });
+		h.view.focus();
 	}
 
 	// signed out in another tab: leaving the page closes every provider (analyze M1)
@@ -78,6 +109,9 @@
 			? { title: project.details.title, onrename: project.details.role === 'owner' ? (t) => project.renameProject(t) : undefined }
 			: undefined}
 		onshare={project.details && !ended ? () => share?.open() : undefined}
+		peers={ended ? [] : session.peers}
+		onjump={jumpTo}
+		offline={!ended && session.offline}
 	/>
 	{#if ended}
 		<!-- contracts/ui.md "Other pages": the project closed under the user (FR-036) -->
