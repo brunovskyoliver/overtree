@@ -12,11 +12,7 @@
 
 	const project = new Project();
 	project.load();
-	// the file in the editor: the one opened from the tree, else the main document (tabs come with US2)
-	let openId = $state<string | null>(null);
-	const shown = $derived(
-		project.files.find((f) => f.id === openId && f.kind === 'text') ?? project.files.find((f) => f.id === project.mainFileId)
-	);
+	const outlined = $derived(!!project.files.find((f) => f.id === project.active)?.name.toLowerCase().endsWith('.tex'));
 
 	let editor = $state<EditorHandle>();
 	const compile = new CompileState(() => editor?.provider);
@@ -33,19 +29,10 @@
 		<span class="project">{PROJECT_NAME}</span>
 	</header>
 	<main>
-		<Workspace {compile} {editor} {project} activeId={shown?.id} onopen={(id) => (openId = id)}>
-			{#if shown}
-				{#key shown.id}
-					<Editor
-						file={shown}
-						bind:editor
-						onLocalEdit={() => compile.onLocalEdit()}
-						onCompile={() => compile.compile()}
-					/>
-				{/key}
-			{/if}
+		<Workspace {compile} {editor} {project} activeId={project.active} onopen={(id) => project.openFile(id)}>
+			<Editor {project} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
 			{#snippet outline()}
-				<Outline {editor} />
+				<Outline {editor} enabled={outlined} />
 			{/snippet}
 		</Workspace>
 	</main>

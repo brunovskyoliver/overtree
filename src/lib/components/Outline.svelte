@@ -1,39 +1,35 @@
 <script lang="ts">
-	import { StateEffect } from '@codemirror/state';
 	import { EditorView } from '@codemirror/view';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { parseOutline, type OutlineEntry } from '#lib/outline.ts';
 
-	let { editor }: { editor?: EditorHandle } = $props();
+	// `enabled`: the active tab is a .tex file; anything else has no outline
+	let { editor, enabled = true }: { editor?: EditorHandle; enabled?: boolean } = $props();
 
 	let entries = $state<OutlineEntry[]>([]);
 	let cursorLine = $state(1);
 	// entry with the greatest line <= cursor line
 	const current = $derived(entries.findLastIndex((e) => e.line <= cursorLine));
 
+	// re-runs on tab switch: the handle changes with the active file
 	$effect(() => {
-		const view = editor?.view;
-		if (!view) return;
+		const handle = enabled ? editor : undefined;
+		entries = [];
+		if (!handle) return;
+		const { view } = handle;
 		const lineOf = () => view.state.doc.lineAt(view.state.selection.main.head).number;
 		entries = parseOutline(view.state.doc.toString());
 		cursorLine = lineOf();
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		let alive = true;
-		// ponytail: appended listener can't be removed, `alive` mutes it; the view outlives the outline anyway
-		view.dispatch({
-			effects: StateEffect.appendConfig.of(
-				EditorView.updateListener.of((u) => {
-					if (!alive) return;
-					if (u.docChanged) {
-						clearTimeout(timer);
-						timer = setTimeout(() => (entries = parseOutline(view.state.doc.toString())), 200);
-					}
-					if (u.docChanged || u.selectionSet) cursorLine = lineOf();
-				})
-			)
+		const stop = handle.listen((u) => {
+			if (u.docChanged) {
+				clearTimeout(timer);
+				timer = setTimeout(() => (entries = parseOutline(view.state.doc.toString())), 200);
+			}
+			if (u.docChanged || u.selectionSet) cursorLine = lineOf();
 		});
 		return () => {
-			alive = false;
+			stop();
 			clearTimeout(timer);
 		};
 	});
@@ -63,7 +59,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<p>No sections yet</p>
+		<p>{enabled ? 'No sections yet' : 'No outline for this file.'}</p>
 	{/if}
 </nav>
 

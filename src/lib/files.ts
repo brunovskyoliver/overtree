@@ -18,6 +18,11 @@ export const kindForName = (name: string): 'text' | 'binary' => (TEXT_EXTENSIONS
 
 export const isLatexName = (name: string) => ['tex', 'cls', 'sty'].includes(ext(name));
 
+/** What the tree icon and the tab show for an entry. */
+export type FileType = 'folder' | 'text' | 'image' | 'pdf' | 'other';
+export const fileType = (f: Pick<FileEntry, 'name' | 'kind'>): FileType =>
+	f.kind !== 'binary' ? f.kind : PREVIEW_IMAGE.includes(ext(f.name)) ? 'image' : ext(f.name) === 'pdf' ? 'pdf' : 'other';
+
 /** The user-facing problem with `name` among `siblings`, or null when it's fine. */
 export function validateName(name: string, siblings: string[]): string | null {
 	if (!name) return 'Name must not be empty.';

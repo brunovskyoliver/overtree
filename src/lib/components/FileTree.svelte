@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { PREVIEW_IMAGE, validateName, type FileEntry } from '#lib/files.ts';
+	import { fileType, validateName, type FileEntry } from '#lib/files.ts';
 	import { Menu } from '#lib/menu.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import FileIcon from './FileIcon.svelte';
 
-	// File tree per contracts/ui.md. `activeId` is the file shown in the editor; `onopen` opens a text file.
+	// File tree per contracts/ui.md. `activeId` is the file shown in the editor; `onopen` opens a file in a tab.
 	let { project, activeId, onopen }: { project: Project; activeId?: string | null; onopen?: (id: string) => void } = $props();
 
 	type Editing = { id: string | null; kind: 'folder' | 'text'; parentId: string | null }; // id null = new entry
@@ -73,16 +74,10 @@
 		noticeTimer = setTimeout(() => (notice = ''), 5000);
 	}
 
-	function iconFor(f: FileEntry) {
-		const ext = f.name.split('.').pop()!.toLowerCase();
-		if (f.kind === 'text') return 'text';
-		return PREVIEW_IMAGE.includes(ext) ? 'image' : ext === 'pdf' ? 'pdf' : 'other';
-	}
-
 	function activate(f: FileEntry) {
 		selected = f.id;
 		if (f.kind === 'folder') setExpanded(f.id, !expanded.includes(f.id));
-		else if (f.kind === 'text') onopen?.(f.id); // previews come with tabs (US2)
+		else onopen?.(f.id);
 	}
 
 	// --- inline name input -------------------------------------------------------------------------
@@ -293,19 +288,6 @@
 
 <svelte:window onpointerdown={m.onwindowpointerdown} />
 
-{#snippet icon(name: string)}
-	<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-		{#if name === 'folder'}
-			<path d="M3 6h6l2 2h10v11H3z" />
-		{:else if name === 'image'}
-			<path d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4" /><circle cx="15.5" cy="9" r="1.5" />
-		{:else}
-			<path d="M14 3H6v18h12V7zM14 3v4h4" />
-			{#if name === 'text'}<path d="M9 12h6M9 16h6" />{:else if name === 'pdf'}<path d="M8 13h8v5H8z" />{/if}
-		{/if}
-	</svg>
-{/snippet}
-
 {#snippet nameInput(label: string)}
 	<input
 		class="name-input"
@@ -331,7 +313,7 @@
 		<li role="none">
 			<div class="row" style:--level={level}>
 				<span class="chevron-slot"></span>
-				{@render icon(editing.kind === 'folder' ? 'folder' : 'text')}
+				<FileIcon type={editing.kind} />
 				{@render nameInput(editing.kind === 'folder' ? 'New folder name' : 'New file name')}
 			</div>
 			{@render errorLine()}
@@ -369,7 +351,7 @@
 				{:else}
 					<span class="chevron-slot"></span>
 				{/if}
-				{@render icon(folder ? 'folder' : iconFor(f))}
+				<FileIcon type={fileType(f)} />
 				{#if renaming}
 					{@render nameInput(`New name for ${f.name}`)}
 				{:else}
