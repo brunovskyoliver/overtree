@@ -42,8 +42,38 @@
 		// fit modes follow the pane size
 		const resize = new ResizeObserver(() => FITS.includes(v.currentScaleValue) && (v.currentScaleValue = v.currentScaleValue));
 		resize.observe(container);
+
+		// Trackpad pinch zooms around the fingers. Chromium and Firefox send it as a wheel event with ctrlKey,
+		// Safari as gesture* events (scale relative to the gesture start). drawingDelay keeps re-rendering off
+		// the hot path while the fingers move.
+		const pinch = (factor: number, x: number, y: number) =>
+			v.pagesCount && v.updateScale({ scaleFactor: factor, origin: [x, y], drawingDelay: 200 });
+		const onWheel = (e: WheelEvent) => {
+			if (!e.ctrlKey) return;
+			e.preventDefault(); // otherwise the browser zooms the whole page
+			const dy = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 16 : e.deltaY;
+			pinch(Math.exp(-dy / 100), e.clientX, e.clientY);
+		};
+		type GestureEvent = UIEvent & { scale: number; clientX: number; clientY: number };
+		let last = 1;
+		const onGestureStart = (e: Event) => {
+			e.preventDefault();
+			last = 1;
+		};
+		const onGestureChange = (e: Event) => {
+			const g = e as GestureEvent;
+			e.preventDefault();
+			pinch(g.scale / last, g.clientX, g.clientY);
+			last = g.scale;
+		};
+		container.addEventListener('wheel', onWheel, { passive: false });
+		container.addEventListener('gesturestart', onGestureStart);
+		container.addEventListener('gesturechange', onGestureChange);
 		viewer = v;
 		return () => {
+			container.removeEventListener('wheel', onWheel);
+			container.removeEventListener('gesturestart', onGestureStart);
+			container.removeEventListener('gesturechange', onGestureChange);
 			resize.disconnect();
 			viewer = undefined;
 			void shown?.destroy();

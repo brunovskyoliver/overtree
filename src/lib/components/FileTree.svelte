@@ -552,10 +552,15 @@
 		gap: 2px;
 		padding-right: 8px;
 	}
+	/* one line at any pane width: the title gives way to the buttons, not the other way round */
 	.header h2 {
 		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
 	}
 	.tool {
+		flex: none;
 		display: grid;
 		place-items: center;
 		width: 26px;
