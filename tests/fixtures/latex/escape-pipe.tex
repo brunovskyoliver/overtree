@@ -1,0 +1,5 @@
+% piped input needs shell escape: must fail, never fetch the page
+\documentclass{article}
+\begin{document}
+\input{|"curl example.com"}
+\end{document}

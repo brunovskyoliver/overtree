@@ -1,0 +1,11 @@
+% the app's DB is not mounted; /etc/hostname is the container's own
+\documentclass{article}
+\begin{document}
+\IfFileExists{/data/overtree.db}{\typeout{DB=READABLE}\input{/data/overtree.db}}{\typeout{DB=MISSING}DB missing.}
+\newread\hostfile
+\openin\hostfile=/etc/hostname
+\read\hostfile to\hostname
+\closein\hostfile
+\typeout{HOSTNAME=\hostname}
+Host: \input{/etc/hostname}
+\end{document}

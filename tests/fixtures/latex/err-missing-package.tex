@@ -1,0 +1,6 @@
+% expect: error line 4 (TeX reports the missing .sty at l.4, the line after \usepackage)
+\documentclass{article}
+\usepackage{doesnotexist}
+\begin{document}
+Hello.
+\end{document}

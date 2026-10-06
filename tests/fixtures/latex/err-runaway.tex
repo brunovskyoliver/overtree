@@ -1,0 +1,9 @@
+% expect: error line 7 (runaway argument: the blank line ends the paragraph inside \shout)
+\documentclass{article}
+\newcommand*{\shout}[1]{#1}
+\begin{document}
+Hello.
+\shout{never closed
+
+More text.
+\end{document}

@@ -9,9 +9,9 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Add `pdfjs-dist@^6.4` as a dependency (`pnpm add pdfjs-dist`) and confirm `pnpm build` still passes in package.json
-- [ ] T002 [P] Create shared types `Compiler`, `CompileStatus`, `LogEntry`, `CompileResult` exactly as in data-model.md in src/lib/compile-types.ts
-- [ ] T003 [P] Add `tests/fixtures/latex/` with `ok.tex` (starter-like, 1 page), `three-pages.tex` (3 pages, `\newpage`), `twenty-pages.tex` (20 pages, lipsum-free filler text), `fontspec.tex` (uses `fontspec` with `TeX Gyre Termes`, needs XeLaTeX/LuaLaTeX), `loop.tex` (`\def\x{\x}\x`), `oom.tex` (LuaLaTeX `\directlua` allocation loop), `escape-shell.tex` (`\immediate\write18{touch /tmp/pwned}` then `\IfFileExists{/tmp/pwned}{PWNED}{safe}`), `escape-read.tex` (`\input{/data/overtree.db}` and `\input{/etc/hostname}` printed), and the ten SC-003 error cases `err-undefined-cmd.tex`, `err-missing-brace.tex`, `err-missing-dollar.tex`, `err-undefined-env.tex`, `err-missing-package.tex`, `err-missing-file.tex`, `err-runaway.tex`, `err-undefined-ref.tex`, `err-undefined-cite.tex`, `err-overfull.tex`, each with a comment on the first line naming the expected level and line
+- [X] T001 Add `pdfjs-dist@^6.4` as a dependency (`pnpm add pdfjs-dist`) and confirm `pnpm build` still passes in package.json
+- [X] T002 [P] Create shared types `Compiler`, `CompileStatus`, `LogEntry`, `CompileResult` exactly as in data-model.md in src/lib/compile-types.ts
+- [X] T003 [P] Add `tests/fixtures/latex/` with `ok.tex` (starter-like, 1 page), `three-pages.tex` (3 pages, `\newpage`), `twenty-pages.tex` (20 pages, lipsum-free filler text), `fontspec.tex` (uses `fontspec` with `TeX Gyre Termes`, needs XeLaTeX/LuaLaTeX), `loop.tex` (`\def\x{\x}\x`), `oom.tex` (LuaLaTeX `\directlua` allocation loop), `escape-shell.tex` (`\immediate\write18{touch /tmp/pwned}` then `\IfFileExists{/tmp/pwned}{PWNED}{safe}`), `escape-read.tex` (`\input{/data/overtree.db}` and `\input{/etc/hostname}` printed), and the ten SC-003 error cases `err-undefined-cmd.tex`, `err-missing-brace.tex`, `err-missing-dollar.tex`, `err-undefined-env.tex`, `err-missing-package.tex`, `err-missing-file.tex`, `err-runaway.tex`, `err-undefined-ref.tex`, `err-undefined-cite.tex`, `err-overfull.tex`, each with a comment on the first line naming the expected level and line
 
 ## Phase 2: Foundational
 

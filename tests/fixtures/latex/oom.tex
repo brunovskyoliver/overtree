@@ -1,0 +1,5 @@
+% LuaLaTeX only: allocates until the container hits COMPILE_MEMORY
+\documentclass{article}
+\begin{document}
+\directlua{local t = {} local i = 0 while true do i = i + 1 t[i] = string.rep("x", 1000000) .. i end}
+\end{document}

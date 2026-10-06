@@ -1,0 +1,6 @@
+% shell escape must be blocked: the PDF and log say "safe"
+\documentclass{article}
+\begin{document}
+\immediate\write18{touch /tmp/pwned}
+\IfFileExists{/tmp/pwned}{\typeout{ESCAPE=PWNED}PWNED}{\typeout{ESCAPE=safe}safe}
+\end{document}
