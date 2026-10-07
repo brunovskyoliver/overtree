@@ -51,7 +51,8 @@
 		pending: 'Finish setup'
 	};
 
-	export async function open() {
+	/** `changeBranch`: start with the branch picker of a linked project (the popover's "Choose branch"). */
+	export async function open(opts: { changeBranch?: boolean } = {}) {
 		error = '';
 		reposError = '';
 		changing = false;
@@ -63,6 +64,7 @@
 		loaded = true;
 		resetPatterns(false);
 		if (github.status?.canManage && !github.status.link && github.account?.connected) await refreshRepos();
+		if (opts.changeBranch && github.status?.canManage && github.status.link && github.status.link.state !== 'pending') await startChange();
 	}
 
 	/** Called on `github` events while open: the link may have changed under us. */

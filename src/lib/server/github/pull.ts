@@ -30,6 +30,8 @@ export type PullResult = { result: 'pulled' | 'noop'; commit?: string };
 const COMMITS_MAX = 20;
 const BATCH = 8; // blob downloads in parallel
 export const REWRITTEN = 'The branch history was rewritten on GitHub; review and confirm the sync again.';
+/** The `needs-access` reason when the linked branch is gone: the popover offers "Create branch" for it (T040). */
+export const branchGone = (branch: string) => `The branch “${branch}” no longer exists on GitHub.`;
 
 type GhCommit = { sha: string; commit: { author: { name: string } | null; message: string } };
 type TreeEntry = { path: string; type: string; sha: string; size?: number };
@@ -117,7 +119,7 @@ export async function pull(link: Link): Promise<PullResult> {
 		}
 		// the branch went away (or the repository was emptied) after a sync
 		if (empty) throw new GitHubError(409, 'conflict', 'The GitHub repository was emptied after the last sync.');
-		throw new GitHubError(404, 'needs-access', `The branch “${link.branch}” no longer exists on GitHub.`);
+		throw new GitHubError(404, 'needs-access', branchGone(link.branch));
 	}
 	if (head === link.baseCommit && link.lastPullAt !== null) {
 		touch();

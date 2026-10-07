@@ -160,13 +160,16 @@ async function run(pid: string, req: SyncRequest): Promise<SyncResult> {
 			if (!syncable(link)) return { result: 'noop' };
 		}
 		result = req.kind === 'push' ? await push(pid, { title: req.title, trigger: req.trigger, userId: req.userId }) : await pull(link);
-		if (!getLink(pid)) return result; // unlinked meanwhile
-		setLink(pid, { status: 'active', failCount: 0, nextAttemptAt: null, error: null });
+		const after = getLink(pid);
+		if (!after) return result; // unlinked meanwhile
+		// an ownership transfer meanwhile (`owner-changed`) stays until the new owner takes the link over (FR-027)
+		if (syncable(after)) setLink(pid, { status: 'active', failCount: 0, nextAttemptAt: null, error: null });
 	} catch (e) {
 		if (!serverOpen() || !getLink(pid)) return { result: 'failed', error: 'The sync stopped.' };
-		// a pull found the branch history rewritten and set the link back to `pending` (T036): it stays there
+		// a pull found the branch history rewritten and set the link back to `pending` (T036), or the project changed
+		// owner meanwhile: the link stays as it is
 		const after = getLink(pid)!;
-		if (after.status === 'pending') {
+		if (after.status === 'pending' || after.status === 'owner-changed') {
 			result = { result: 'failed', error: after.error ?? 'The link needs to be confirmed again.' };
 			record(pid, req, startedAt, result);
 			return result;

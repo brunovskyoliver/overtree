@@ -40,6 +40,8 @@ export type GitHubLinkInfo = {
 	lastPushAt: number | null;
 	lastPullAt: number | null;
 	note: MergeNote | null;
+	/** `needs-access` because the linked branch is gone: the owner can create it again (T040) */
+	branchMissing: boolean;
 	/** "not pulled" patterns; the owner only */
 	ignore?: string[];
 	linkedBy: { id: string; name: string };
@@ -54,6 +56,9 @@ export type GitHubRun = {
 	at: number;
 	user: { name: string } | null;
 };
+
+/** `POST /api/projects/:pid/github/push|pull` with 200: the run's outcome (202: still running) */
+export type GitHubSyncResult = { result: 'pushed' | 'pulled' | 'noop' | 'failed'; commit?: string; error?: string };
 
 /** `GET /api/projects/:pid/github` */
 export type GitHubStatus = {

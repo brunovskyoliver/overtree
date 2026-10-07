@@ -1,14 +1,16 @@
-import { eq } from 'drizzle-orm';
-import type { GitHubLinkInfo, GitHubState, GitHubStatus, MergeNote } from '../../github-types.ts';
+import { desc, eq } from 'drizzle-orm';
+import type { GitHubLinkInfo, GitHubRun, GitHubState, GitHubStatus, GitHubSyncResult, MergeNote } from '../../github-types.ts';
 import { broadcast, canEdit, projectRole } from '../access.ts';
 import { getServer } from '../collab.ts';
 import { fail } from '../files.ts';
 import { githubLinks, githubRuns, users } from '../schema.ts';
-import { branchExists, branchHead, branchPath, findRepo, repoPath, type Link } from './accounts.ts';
+import { branchExists, branchHead, branchPath, checkAccess, findRepo, getAccount, repoPath, type Link } from './accounts.ts';
 import { gh, GitHubError, installationToken } from './api.ts';
 import { githubConfig } from './config.ts';
 import { DEFAULT_IGNORE, ignoreFilter, projectFiles, writeBase, type BaseMap } from './paths.ts';
-import { hasUnpushed, isSyncing, requestSync } from './sync.ts';
+import { branchGone } from './pull.ts';
+import { TITLE_MAX } from './push.ts';
+import { hasUnpushed, isSyncing, requestSync, type SyncKind } from './sync.ts';
 
 // A project's repository link (012 FR-005–010, data-model "github_links", research R7, R12): status for members,
 // link/patch/unlink/confirm for the owner. Route guards check the role; these check the link's own rules.
@@ -18,6 +20,8 @@ const db = () => getServer().db;
 const IGNORE_MAX = 50;
 const PATTERN_MAX = 200;
 const CONFIRM_WAIT_MS = 60_000;
+const SYNC_WAIT_MS = 30_000; // manual push/pull and create-branch answer 202 after this
+const RUNS_SHOWN = 20;
 
 export const getLink = (pid: string): Link | null => db().select().from(githubLinks).where(eq(githubLinks.projectId, pid)).get() ?? null;
 
@@ -70,6 +74,7 @@ export function getStatus(pid: string, userId: string): GitHubStatus {
 		lastPushAt: link.lastPushAt,
 		lastPullAt: link.lastPullAt,
 		note: link.note ? (JSON.parse(link.note) as MergeNote) : null,
+		branchMissing: link.status === 'needs-access' && link.error === branchGone(link.branch),
 		...(owner ? { ignore: JSON.parse(link.ignore) as string[] } : {}),
 		linkedBy: linker ?? { id: link.userId ?? '', name: 'Unknown' }
 	};
@@ -77,8 +82,30 @@ export function getStatus(pid: string, userId: string): GitHubStatus {
 		configured: true,
 		link: info,
 		canManage: owner,
-		canSync: canEdit(role) && (link.status === 'active' || link.status === 'failing')
+		canSync: canEdit(role) && (link.status === 'active' || link.status === 'failing'),
+		runs: recentRuns(pid)
 	};
+}
+
+/** The last 20 sync runs, newest first, with the name of whoever asked for a manual one (US4, contracts `runs`). */
+function recentRuns(pid: string): GitHubRun[] {
+	return db()
+		.select({
+			kind: githubRuns.kind,
+			trigger: githubRuns.trigger,
+			result: githubRuns.result,
+			commit: githubRuns.commit,
+			error: githubRuns.error,
+			at: githubRuns.finishedAt,
+			name: users.name
+		})
+		.from(githubRuns)
+		.leftJoin(users, eq(users.id, githubRuns.userId))
+		.where(eq(githubRuns.projectId, pid))
+		.orderBy(desc(githubRuns.id))
+		.limit(RUNS_SHOWN)
+		.all()
+		.map(({ name, ...r }) => ({ ...r, user: name === null ? null : { name } }));
 }
 
 /** `ignore` as given: trimmed, blank lines dropped, ≤ 50 patterns of ≤ 200 characters (422 otherwise). */
@@ -159,11 +186,12 @@ export async function linkRepo(
 	changed(pid);
 }
 
-/** `PATCH`: new "not pulled" patterns, another branch (back to `pending`, base reset) and/or dismissing the merge
- *  note. `confirmOwner` is Phase 6 (T041). */
-export async function patchLink(pid: string, ownerId: string, body: { ignore?: unknown; branch?: unknown; dismissNote?: unknown }) {
+/** `PATCH`: new "not pulled" patterns, another branch (back to `pending`, base reset), dismissing the merge note
+ *  and/or, after an ownership transfer, the new owner taking the link over (`confirmOwner`, FR-027). */
+export async function patchLink(pid: string, ownerId: string, body: { ignore?: unknown; branch?: unknown; dismissNote?: unknown; confirmOwner?: unknown }) {
 	const link = need(pid);
 	const set: Partial<Link> = {};
+	if (body.confirmOwner === true) Object.assign(set, await takeOver(link, ownerId));
 	if (body.ignore !== undefined) set.ignore = JSON.stringify(normalizeIgnore(body.ignore));
 	if (body.branch !== undefined) {
 		const branch = normalizeBranch(body.branch);
@@ -180,6 +208,47 @@ export async function patchLink(pid: string, ownerId: string, body: { ignore?: u
 		.where(eq(githubLinks.projectId, pid))
 		.run();
 	changed(pid);
+	// taken over: catch up with what waited during the pause (a push pulls first)
+	if (set.status === 'active') void requestSync(pid, { kind: hasUnpushed(getLink(pid)!) ? 'push' : 'pull', trigger: 'manual', userId: ownerId });
+}
+
+/** The new owner takes an `owner-changed` link over (research R12, FR-027): it syncs through their connection from
+ *  now on, after checking that connection can push to the repository (409 otherwise). */
+async function takeOver(link: Link, ownerId: string): Promise<Partial<Link>> {
+	if (link.status !== 'owner-changed') fail(409, 'The link doesn’t need to be taken over.');
+	if (!getAccount(ownerId)) fail(409, 'Connect GitHub first: the link syncs through your GitHub connection.');
+	const access = await checkAccess({ ...link, userId: ownerId });
+	if (access === 'needs-reconnect') fail(409, 'Your GitHub connection stopped working. Reconnect GitHub, then take over the link.');
+	if (access === 'needs-access') fail(409, `Your GitHub connection can’t push to ${link.repo}. Grant Overtree access to it on GitHub, then take over the link.`);
+	return {
+		userId: ownerId,
+		status: link.baseFiles === null ? 'pending' : 'active',
+		error: null,
+		failCount: 0,
+		nextAttemptAt: null
+	};
+}
+
+/** Waits up to 30 s for `run`: its result, or null when it is still going (the route answers 202). */
+async function waitFor<T>(run: Promise<T>): Promise<T | null> {
+	let timer: NodeJS.Timeout | undefined;
+	return Promise.race([run, new Promise<null>((r) => (timer = setTimeout(() => r(null), SYNC_WAIT_MS)))]).finally(() => clearTimeout(timer));
+}
+
+/** `POST …/github/push|pull` (owner or editor, checked by the route; FR-026): a manual run, a push with an optional
+ *  commit title of at most 72 characters after trimming (422 above). 409 unless the link is active (or retrying).
+ *  Resolves with the run's result, or null when it takes longer than 30 s. */
+export async function manualSync(pid: string, userId: string, kind: SyncKind, body: { title?: unknown }): Promise<GitHubSyncResult | null> {
+	let title: string | undefined;
+	if (kind === 'push' && body.title !== undefined && body.title !== null) {
+		if (typeof body.title !== 'string') fail(422, 'The commit title must be text.');
+		title = (body.title as string).trim() || undefined;
+		if (title && title.length > TITLE_MAX) fail(422, `The commit title can have at most ${TITLE_MAX} characters.`);
+	}
+	const link = getLink(pid);
+	if (!link) fail(409, 'This project isn’t linked to a GitHub repository.');
+	if (link!.status !== 'active' && link!.status !== 'failing') fail(409, 'The GitHub link needs attention before it can sync.');
+	return waitFor(requestSync(pid, { kind, trigger: 'manual', title, userId }));
 }
 
 /** Unlinks (FR-010): the link and its run log go; nothing on GitHub or in the project changes. */
@@ -198,8 +267,12 @@ export function unlink(pid: string) {
 async function firstBase(link: Link): Promise<{ head: string | null; base: BaseMap }> {
 	const token = await installationToken(link.installationId);
 	const { head } = await branchHead(token, link.repo, link.branch);
+	return { head, base: head ? await treeBase(token, link, head) : {} };
+}
+
+/** `head`'s tree entries for the non-ignored paths that also exist in the project (see firstBase). */
+async function treeBase(token: string, link: Link, head: string): Promise<BaseMap> {
 	const base: BaseMap = {};
-	if (!head) return { head, base };
 	const commit = await gh<{ tree: { sha: string } }>(token, 'GET', `/repos/${repoPath(link.repo)}/git/commits/${head}`);
 	// ponytail: a truncated tree (over 100 000 entries) is not handled
 	const tree = await gh<{
@@ -209,7 +282,7 @@ async function firstBase(link: Link): Promise<{ head: string | null; base: BaseM
 	const project = projectFiles(link.projectId);
 	const ignored = ignoreFilter(JSON.parse(link.ignore) as string[], [...blobs.map((e) => e.path), ...project.keys()]);
 	for (const e of blobs) if (!ignored(e.path) && project.has(e.path)) base[e.path] = { sha: e.sha };
-	return { head, base };
+	return base;
 }
 
 /** `POST …/github/confirm` with `merge` (T020; `import` is Phase 7): sets the first-sync base, makes the link
@@ -251,4 +324,46 @@ export async function confirmLink(pid: string, mode: unknown) {
 		})(),
 		new Promise((r) => (timer = setTimeout(r, CONFIRM_WAIT_MS)))
 	]).finally(() => clearTimeout(timer));
+}
+
+/** `POST …/github/create-branch` (owner, T040): the linked branch is gone (`needs-access` with branchGone). Creates it
+ *  at the repository's default branch head (`POST git/refs`), sets that as a first-sync base (project files win,
+ *  GitHub-only files are pulled later, as on confirm) and pushes the project on top. Without a default branch head
+ *  (an empty repository, or one without that branch) the push makes the branch from the project's files alone (the
+ *  Contents API seed when empty). A branch that came back meanwhile is used as it is. Waits up to 30 s for the push:
+ *  its result, or null. */
+export async function createBranch(pid: string, userId: string): Promise<GitHubSyncResult | null> {
+	const link = need(pid);
+	if (link.status !== 'needs-access' || link.error !== branchGone(link.branch)) fail(409, 'The linked branch isn’t missing.');
+	const token = await installationToken(link.installationId);
+	let { head } = await branchHead(token, link.repo, link.branch);
+	if (!head) {
+		const repo = await gh<{ default_branch: string }>(token, 'GET', `/repos/${repoPath(link.repo)}`);
+		const from = repo.default_branch && repo.default_branch !== link.branch ? (await branchHead(token, link.repo, repo.default_branch)).head : null;
+		if (from) {
+			await gh(token, 'POST', `/repos/${repoPath(link.repo)}/git/refs`, { ref: `refs/heads/${link.branch}`, sha: from });
+			head = from;
+		}
+	}
+	const base = head ? await treeBase(token, link, head) : {};
+	const now = Date.now();
+	db()
+		.update(githubLinks)
+		.set({
+			status: 'active',
+			baseCommit: head,
+			baseFiles: writeBase(base),
+			pendingPush: true,
+			failCount: 0,
+			nextAttemptAt: null,
+			error: null,
+			note: null,
+			lastPullAt: null,
+			lastCheckAt: now,
+			updatedAt: now
+		})
+		.where(eq(githubLinks.projectId, pid))
+		.run();
+	changed(pid);
+	return waitFor(requestSync(pid, { kind: 'push', trigger: 'manual', userId }));
 }

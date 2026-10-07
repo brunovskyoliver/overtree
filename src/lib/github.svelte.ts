@@ -1,5 +1,5 @@
 import { blockedBy } from './auth.svelte.ts';
-import type { GitHubAccountInfo, GitHubBranches, GitHubRepos, GitHubStatus } from './github-types.ts';
+import type { GitHubAccountInfo, GitHubBranches, GitHubRepos, GitHubStatus, GitHubSyncResult } from './github-types.ts';
 
 // Browser side of GitHub sync (012 contracts/http-api.md, ui.md): the project's link status (refetched on `github`
 // project events), the user's connection and repositories, and the actions. Every action resolves to an error
@@ -34,6 +34,17 @@ export class GitHub {
 	/** `/api/github/connect` that comes back to this project with the dialog open. */
 	get connectUrl() {
 		return `/api/github/connect?return=${encodeURIComponent(`/project/${this.pid}?github=1`)}`;
+	}
+
+	#touch: ReturnType<typeof setTimeout> | undefined;
+
+	/** A local edit: an `in-sync` indicator turns "Not pushed yet" without waiting for the next sync event. */
+	touched() {
+		if (this.status?.link?.state !== 'in-sync' || this.#touch) return;
+		this.#touch = setTimeout(() => {
+			this.#touch = undefined;
+			void this.load();
+		}, 1500);
 	}
 
 	/** The project's link status; call on load and on `github` events. */
@@ -95,7 +106,7 @@ export class GitHub {
 		return this.#call(this.#api(), 'PUT', { installationId, repoId, branch });
 	}
 
-	patch(change: { ignore?: string[]; branch?: string; dismissNote?: true }) {
+	patch(change: { ignore?: string[]; branch?: string; dismissNote?: true; confirmOwner?: true }) {
 		return this.#call(this.#api(), 'PATCH', change);
 	}
 
@@ -109,12 +120,37 @@ export class GitHub {
 		return this.#call(this.#api('/confirm'), 'POST', { mode });
 	}
 
-	// Phase 6 routes (contracts "POST …/github/push|pull"); wired here so the indicator only needs the UI
+	/** A manual run (contracts "POST …/github/push|pull", "create-branch"): `done` false when the server answered 202
+	 *  (still running, the status follows by broadcast); a failed run is an error too. */
+	async #sync(path: string, body: object = {}): Promise<GitHubResult & { done?: boolean; outcome?: GitHubSyncResult }> {
+		this.busy = true;
+		try {
+			const res = await fetch(this.#api(path), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			}).catch(() => undefined);
+			const result = await errorOf(res);
+			if (result.error) return result;
+			if (res!.status === 202) return { error: null, done: false };
+			const outcome = (await res!.json().catch(() => null)) as GitHubSyncResult | null;
+			if (outcome?.result === 'failed') return { error: outcome.error ?? 'The sync failed.', done: true, outcome };
+			return { error: null, done: true, outcome: outcome ?? undefined };
+		} finally {
+			this.busy = false;
+			void this.load();
+		}
+	}
+
 	push(title?: string) {
-		return this.#call(this.#api('/push'), 'POST', title ? { title } : {});
+		return this.#sync('/push', title ? { title } : {});
 	}
 
 	pull() {
-		return this.#call(this.#api('/pull'), 'POST', {});
+		return this.#sync('/pull');
+	}
+
+	createBranch() {
+		return this.#sync('/create-branch');
 	}
 }

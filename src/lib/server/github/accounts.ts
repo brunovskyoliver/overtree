@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { GitHubBranches, GitHubRepos } from '../../github-types.ts';
 import { broadcast } from '../access.ts';
 import { getServer } from '../collab.ts';
@@ -51,13 +51,15 @@ export function saveAccount(userId: string, t: UserTokens, ghUser: { id: number;
 
 const RECONNECT = 'The GitHub connection of the person who linked this project is gone. They need to reconnect GitHub.';
 
-/** Removes the user's connection (FR-010: nothing on GitHub changes); links it authorized → `needs-reconnect`. */
+/** Removes the user's connection (FR-010: nothing on GitHub changes); links it authorized → `needs-reconnect`, except
+ *  links waiting for a new owner (`owner-changed` stays until they take it over). */
 export function disconnect(userId: string) {
 	const d = db();
+	const theirs = and(eq(githubLinks.userId, userId), ne(githubLinks.status, 'owner-changed'));
 	const pids = d
 		.select({ pid: githubLinks.projectId })
 		.from(githubLinks)
-		.where(eq(githubLinks.userId, userId))
+		.where(theirs)
 		.all()
 		.map((r) => r.pid);
 	d.transaction((tx) => {
@@ -68,7 +70,7 @@ export function disconnect(userId: string) {
 				nextAttemptAt: null,
 				updatedAt: Date.now()
 			})
-			.where(eq(githubLinks.userId, userId))
+			.where(theirs)
 			.run();
 		tx.delete(githubAccounts).where(eq(githubAccounts.userId, userId)).run();
 	});

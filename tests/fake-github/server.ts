@@ -132,6 +132,10 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 			return sha;
 		},
 
+		/** Deletes `branch` (someone removed it on GitHub); its commits stay reachable by sha. */
+		deleteBranch(repo: Repo | string, branch: string) {
+			resolve(repo).refs.delete(branch);
+		},
 		/** Head commit of `branch`, or undefined. */
 		head: (repo: Repo | string, branch: string) => resolve(repo).refs.get(branch),
 		/** Files at `ref` (branch or commit sha) as path → content. */
@@ -165,6 +169,10 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 		/** The next `times` API requests answer `status`. */
 		failNext(status: number, times = 1) {
 			for (let i = 0; i < times; i++) failures.push(status);
+		},
+		/** Drops the failures `failNext` queued and no request took yet. */
+		clearFailures() {
+			failures.length = 0;
 		},
 
 		async start(port = 0) {
@@ -667,7 +675,7 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 	// --- HTTP ---------------------------------------------------------------------------------------------------------
 
 	// Test-only control endpoint for other processes (Playwright): POST /_fake/<helper> with { args: [...] }.
-	const remote = ['addUser', 'addInstallation', 'addRepo', 'commitFiles', 'revoke', 'setPush', 'failNext', 'renameRepo', 'head'] as const;
+	const remote = ['addUser', 'addInstallation', 'addRepo', 'commitFiles', 'revoke', 'setPush', 'failNext', 'clearFailures', 'renameRepo', 'head', 'commit', 'deleteBranch'] as const;
 
 	async function serve(req: IncomingMessage, res: ServerResponse) {
 		const chunks: Buffer[] = [];

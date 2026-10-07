@@ -355,12 +355,16 @@ export function setLink(pid: string, role: unknown, regenerate = false): Link {
 	return p.linkToken ? { token: p.linkToken, role: p.linkRole! } : null;
 }
 
+const OWNER_CHANGED = 'The project has a new owner. GitHub sync is paused until they take over the link with their own GitHub connection.';
+
 /** Hand the project to a collaborator (owner `fromId`), in one transaction (data-model "Transfer"): the new owner's
  *  membership and overrides go, the old owner becomes an Editor. 403 unless `fromId` still owns it (two racing
  *  transfers apply in order), 422 unless the target is a collaborator. */
+
 export function transferOwnership(pid: string, fromId: string, toId: unknown) {
 	if (typeof toId !== 'string' || !toId) fail(422, 'Choose a collaborator.');
 	const to = toId as string;
+	let linked = false;
 	db().transaction((tx) => {
 		const p = tx.select().from(projects).where(eq(projects.id, pid)).get() ?? fail(404, 'Project not found.');
 		if (p.ownerId !== fromId) fail(403, 'Only the owner can do this.');
@@ -369,9 +373,16 @@ export function transferOwnership(pid: string, fromId: string, toId: unknown) {
 		tx.delete(memberships).where(memberWhere(pid, to)).run();
 		tx.insert(memberships).values({ projectId: pid, userId: fromId, role: 'editor', viaLink: false, createdAt: Date.now() }).run();
 		tx.update(projects).set({ ownerId: to }).where(eq(projects.id, pid)).run();
+		// GitHub sync pauses until the new owner takes the link over with their own connection (012 FR-027)
+		linked = tx
+			.update(githubLinks)
+			.set({ status: 'owner-changed', error: OWNER_CHANGED, failCount: 0, nextAttemptAt: null, updatedAt: Date.now() })
+			.where(eq(githubLinks.projectId, pid))
+			.run().changes > 0;
 	});
 	broadcast(pid, { type: 'access' });
 	broadcast(pid, { type: 'project' });
+	if (linked) broadcast(pid, { type: 'github' });
 	kick({ userId: fromId, projectId: pid });
 	kick({ userId: to, projectId: pid });
 }

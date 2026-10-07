@@ -171,9 +171,7 @@
 		offline={!ended && session.offline}
 		history={project.details && !ended ? { on: history.open, toggle: () => history.toggle() } : undefined}
 		layout={project.details && !ended ? layout : undefined}
-		github={githubOn && project.details && !ended && (project.details.role === 'owner' || github.status?.link)
-			? { open: () => githubDialog?.open(), linked: !!github.status?.link }
-			: undefined}
+		github={githubOn && project.details && !ended ? { state: github, open: (opts) => githubDialog?.open(opts) } : undefined}
 	/>
 	{#if ended}
 		<!-- contracts/ui.md "Other pages": the project closed under the user (FR-036) -->
@@ -211,7 +209,7 @@
 						{project}
 						{session}
 						bind:editor
-						onLocalEdit={() => compile.onLocalEdit()}
+						onLocalEdit={() => (compile.onLocalEdit(), githubOn && github.touched())}
 						onCompile={() => compile.compile()}
 						onSyncForward={() => workspace?.forward()}
 					/>
