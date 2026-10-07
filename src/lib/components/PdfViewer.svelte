@@ -106,9 +106,11 @@
 		container.addEventListener('scroll', later, { passive: true });
 		// a reload right after a scroll: save now
 		addEventListener('pagehide', track);
-		// fit modes follow the pane size
+		// fit modes follow the pane size. The border box, not the content box: a classic scrollbar coming and going
+		// changes only the latter, and refitting on it looped (the narrower fit drops the scrollbar, the wider one
+		// brings it back). pdf.js leaves room for a scrollbar in its fit anyway.
 		const resize = new ResizeObserver(() => FITS.includes(v.currentScaleValue) && (v.currentScaleValue = v.currentScaleValue));
-		resize.observe(container);
+		resize.observe(container, { box: 'border-box' });
 
 		// Trackpad pinch zooms around the fingers. Chromium and Firefox send it as a wheel event with ctrlKey,
 		// Safari as gesture* events (scale relative to the gesture start). drawingDelay keeps re-rendering off
