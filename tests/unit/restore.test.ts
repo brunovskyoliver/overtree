@@ -193,3 +193,33 @@ describe('restoreVersion', () => {
 		expect(b.text.toString()).toBe(restored);
 	});
 });
+
+describe('files recreated at the same path', () => {
+	it('restore and diff treat a deleted-then-recreated file as the same file', async () => {
+		const { pid } = await setup();
+		const b = user(B).id;
+		const notes = createEntry(pid, { kind: 'text', name: 'notes.tex', parentId: null }, b);
+		await setText(notes.id, 'v1\n', { userId: b, projectId: pid });
+		const v1 = closeVersion(pid, 'edit')!;
+		deleteEntry(pid, notes.id, b);
+		closeVersion(pid, 'edit');
+
+		// the project restore recreates notes.tex with a new id
+		expect((await restore(pid, v1.id, B)).status).toBe(200);
+		const recreated = byPath(pid).get('notes.tex')!;
+		expect(recreated.id).not.toBe(notes.id);
+		const { diffVersion } = await import('../../src/lib/server/history-diff.ts');
+		expect(diffVersion(pid, v1.id, 'current', b).files).toEqual([]);
+
+		// edited afterwards: one edited entry, and restoring it (either id) edits the recreated file in place
+		await setText(recreated.id, 'v2\n', { userId: b, projectId: pid });
+		expect(diffVersion(pid, v1.id, 'current', b).files).toMatchObject([{ id: recreated.id, path: 'notes.tex', change: 'edited' }]);
+		expect((await restore(pid, v1.id, B, { fileId: recreated.id })).status).toBe(200);
+		expect(byPath(pid).get('notes.tex')!.id).toBe(recreated.id);
+		expect(await getText(recreated.id)).toBe('v1\n');
+		await setText(recreated.id, 'v3\n', { userId: b, projectId: pid });
+		expect((await restore(pid, v1.id, B, { fileId: notes.id })).status).toBe(200);
+		expect(byPath(pid).get('notes.tex')!.id).toBe(recreated.id);
+		expect(await getText(recreated.id)).toBe('v1\n');
+	});
+});

@@ -73,24 +73,37 @@ function plan(pid: string, userId: string, target: Manifest, only: string | unde
 		skipped: new Set()
 	};
 
+	// A file deleted and created again at the same path (an earlier restore recreates with new ids) is the same file:
+	// the target entry is restored onto the current one instead of deleting it and recreating it next to itself.
+	const curAt = new Map(cur.filter((r) => !tById.has(r.id)).map((r) => [`${r.kind}:${curPaths.get(r.id)!.toLowerCase()}`, r.id]));
+	const alias = new Map<string, string>(); // target id → current id
+	for (const e of target.entries) {
+		const c = curById.has(e.id) ? undefined : curAt.get(`${e.kind}:${tPaths.get(e.id)!.toLowerCase()}`);
+		if (c) alias.set(e.id, c);
+	}
+	const targetOf = new Map([...alias].map(([t, c]) => [c, t])); // current id → aliased target id
+
 	// in scope: everything, or the file plus the folders of its version path that are gone
 	let scope: Set<string> | null = null;
 	if (only !== undefined) {
 		const kind = (curById.get(only) ?? tById.get(only))?.kind ?? fail(404, 'File not found.');
 		if (kind === 'folder') fail(400, 'Only files can be restored one by one.');
-		scope = new Set([only]);
-		for (let a = tById.get(only)?.parentId ?? null; a !== null && !curById.has(a); a = tById.get(a)?.parentId ?? null) scope.add(a);
+		const tOnly = tById.has(only) ? only : targetOf.get(only);
+		scope = new Set([only, ...(tOnly ? [tOnly] : []), ...(alias.has(only) ? [alias.get(only)!] : [])]);
+		for (let a = (tOnly && tById.get(tOnly)?.parentId) ?? null; a !== null && !curById.has(a) && !alias.has(a); a = tById.get(a)?.parentId ?? null)
+			scope.add(a);
 	}
 	const inScope = (id: string) => scope === null || scope.has(id);
 
-	// target id → current id: the same file, or the one recreated for it
+	// target id → current id: the same file, the aliased one, or the one recreated for it
 	const idMap = new Map<string, string>();
 	for (const e of target.entries) if (curById.has(e.id)) idMap.set(e.id, e.id);
+	for (const [t, c] of alias) idMap.set(t, c);
 	const parentOf = (tid: string | null): string | null | undefined => (tid === null ? null : idMap.get(tid));
 
 	// recreations, parents first
 	const depth = (id: string) => tPaths.get(id)!.split('/').length;
-	const gone = target.entries.filter((e) => !curById.has(e.id) && inScope(e.id)).sort((a, b) => depth(a.id) - depth(b.id));
+	const gone = target.entries.filter((e) => !curById.has(e.id) && !alias.has(e.id) && inScope(e.id)).sort((a, b) => depth(a.id) - depth(b.id));
 	for (const e of gone) {
 		const parentId = parentOf(e.parentId);
 		if (parentId === undefined) {
@@ -127,7 +140,7 @@ function plan(pid: string, userId: string, target: Manifest, only: string | unde
 
 	// files in both: back to their place, name and content
 	for (const c of cur) {
-		const e = tById.get(c.id);
+		const e = tById.get(c.id) ?? tById.get(targetOf.get(c.id) ?? '');
 		if (!e || !inScope(c.id)) continue;
 		const path = curPaths.get(c.id)!;
 		const parentId = parentOf(e.parentId);
@@ -152,7 +165,7 @@ function plan(pid: string, userId: string, target: Manifest, only: string | unde
 
 	// files added since: removed; a folder only once nothing stays in it
 	for (const c of cur) {
-		if (tById.has(c.id) || !inScope(c.id)) continue;
+		if (tById.has(c.id) || targetOf.has(c.id) || !inScope(c.id)) continue;
 		if (editable(c.id)) p.deletes.add(c.id);
 		else p.skipped.add(curPaths.get(c.id)!);
 	}

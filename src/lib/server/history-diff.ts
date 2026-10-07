@@ -164,18 +164,32 @@ export function diffVersion(pid: string, vid: number, compare: Compare, userId: 
 	let sole: string | null | undefined;
 	const fallbackUser = () => (sole === undefined ? (sole = soleAuthor(pid, older.watermark, newer.watermark)) : sole);
 
+	const changed = changedFiles(older.manifest, newer.manifest);
+	// a file deleted and created again at the same path (a restore recreates deleted files with new ids) is one file
+	const at = (e: ManifestEntry, path: string) => `${e.kind}:${path.toLowerCase()}`;
+	const deletedAt = new Map(changed.filter((c) => c.change === 'deleted').map((c) => [at(oldById.get(c.id)!, c.path), c.id]));
+	const pairedWith = new Map<string, string>(); // added id → deleted id
+	for (const c of changed) {
+		const d = c.change === 'added' ? deletedAt.get(at(newById.get(c.id)!, c.path)) : undefined;
+		if (d) pairedWith.set(c.id, d);
+	}
+	const paired = new Set(pairedWith.values());
+
 	const out: FileDiff[] = [];
-	for (const c of changedFiles(older.manifest, newer.manifest)) {
-		const o = oldById.get(c.id);
+	for (const c of changed) {
+		if (paired.has(c.id)) continue;
+		const o = oldById.get(pairedWith.get(c.id) ?? c.id);
 		const n = newById.get(c.id);
 		const kind = (n ?? o)!.kind;
 		if (kind === 'folder') continue;
-		const file: FileDiff = { id: c.id, path: c.path, ...(c.from && { oldPath: c.from }), kind, change: c.change, canRestore: canRestore(c.id) };
+		if (pairedWith.has(c.id) && o!.hash === n!.hash) continue;
+		const change = pairedWith.has(c.id) ? 'edited' : c.change;
+		const file: FileDiff = { id: c.id, path: c.path, ...(c.from && { oldPath: c.from }), kind, change, canRestore: canRestore(c.id) };
 		if (kind === 'binary') file.size = { old: o ? blobSize(o.hash) : null, new: n ? blobSize(n.hash) : null };
 		else {
 			const before = o ? textOf(older, o) : '';
 			const after = n ? textOf(newer, n) : '';
-			file.segments = (n && yjsSegments(c.id, older.watermark, newer.watermark, before, after)) || plainSegments(before, after, fallbackUser());
+			file.segments = (n && !pairedWith.has(c.id) && yjsSegments(c.id, older.watermark, newer.watermark, before, after)) || plainSegments(before, after, fallbackUser());
 		}
 		out.push(file);
 	}

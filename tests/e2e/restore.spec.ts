@@ -132,9 +132,8 @@ test('restore the project: a deleted file comes back and a rename is reverted (s
 	await expect(dialog).toContainText('Changes after it stay in history.');
 	await dialog.getByRole('button', { name: 'Restore project' }).click();
 	await expect(diff.getByRole('status')).toContainText('Project restored.');
-	// the rename is gone from the diff; the recreated notes.tex has a new id, so it still shows as deleted + added
-	await expect(diff.getByRole('article', { name: 'main.tex' })).toHaveCount(0);
-	await expect(diff.getByRole('article', { name: 'paper.tex' })).toHaveCount(0);
+	// the recreated notes.tex has a new id but the same path: the diff pairs it, nothing differs any more
+	await expect(diff).toContainText('No differences from the current state.');
 
 	const after = await tree(page, pid);
 	expect(after.files.map((f) => f.name).sort()).toEqual(['main.tex', 'notes.tex']);
