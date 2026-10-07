@@ -443,6 +443,8 @@
 		color: #f0c36d;
 	}
 	.close {
+		/* the dialog's button rule makes it inline-flex: center the × in its box */
+		justify-content: center;
 		width: 28px;
 		height: 28px;
 		padding: 0;
