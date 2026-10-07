@@ -73,13 +73,15 @@ test('five users typing for a minute converge with every edit; latency stays und
 		await from.keyboard.press('ControlOrMeta+End');
 		await from.keyboard.insertText(mark.slice(0, -1));
 		await to.waitForFunction((m) => window.__overtree!.view.state.doc.toString().includes(m), mark.slice(0, -1));
-		const press = from.evaluate(
-			() =>
-				new Promise<number>((resolve) =>
-					addEventListener('keydown', () => resolve(performance.timeOrigin + performance.now()), { capture: true, once: true })
-				)
-		);
+		// the listener is in place before the key goes out: a busy page could otherwise see the key first and wait forever
+		await from.evaluate(() => {
+			const w = window as unknown as { __pressAt: Promise<number> };
+			w.__pressAt = new Promise<number>((resolve) =>
+				addEventListener('keydown', () => resolve(performance.timeOrigin + performance.now()), { capture: true, once: true })
+			);
+		});
 		await from.keyboard.press('Q');
+		const press = from.evaluate(() => (window as unknown as { __pressAt: Promise<number> }).__pressAt);
 		const latency = (await seen) - (await press);
 		console.log(`latency with five sessions: ${latency.toFixed(1)} ms`);
 		expect(latency).toBeLessThan(300);
