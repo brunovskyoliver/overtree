@@ -32,7 +32,7 @@
 	});
 
 	const dateTime = (ts: number) => new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-	const KIND = { baseline: 'Start of history', edit: 'Edits', compile: 'Compile point', restore: 'Restore' };
+	const KIND = { baseline: 'Start of history', edit: 'Edits', compile: 'Compile point', restore: 'Restore', github: 'Merged from GitHub' };
 	const fileAnchor = (f: FileDiff) => `diff-${f.id}`;
 
 	type Piece = (Segment & { t: Segment['op'] }) | { t: 'fold'; key: string; text: string; lines: number };

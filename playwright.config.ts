@@ -1,9 +1,12 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
+// the fake GitHub (tests/fake-github/main.ts, 012 research R11); API and web paths on one origin
+const GITHUB_PORT = 4175;
+const GITHUB = `http://127.0.0.1:${GITHUB_PORT}`;
 // fresh data per run; exported so specs can delete compile output (clearCompileOutput)
 // ponytail: the config is evaluated again in each worker, keep the first dir
 const DATA_DIR = (process.env.OVERTREE_E2E_DATA_DIR ??= mkdtempSync(join(tmpdir(), 'overtree-e2e-')));
@@ -30,6 +33,13 @@ export default defineConfig({
 	],
 	webServer: [
 		{
+			command: 'node tests/fake-github/main.ts',
+			url: `${GITHUB}/`,
+			reuseExistingServer: false,
+			timeout: 10_000,
+			env: { FAKE_GITHUB_PORT: String(GITHUB_PORT), FAKE_GITHUB_CALLBACK: `http://127.0.0.1:${PORT}/api/github/callback` }
+		},
+		{
 			command: 'pnpm build && node server.ts',
 			url: `http://127.0.0.1:${PORT}/sign-in`,
 			reuseExistingServer: false,
@@ -50,10 +60,22 @@ export default defineConfig({
 				// history versions close within seconds instead of minutes (008 quickstart.md)
 				HISTORY_IDLE_MS: '1500',
 				HISTORY_MAX_OPEN_MS: '10000',
-				HISTORY_SWEEP_MS: '500'
+				HISTORY_SWEEP_MS: '500',
+				// GitHub sync against the fake, with short timings (012 quickstart.md); client id/secret match main.ts
+				GITHUB_APP_ID: '1',
+				GITHUB_APP_SLUG: 'overtree-test',
+				GITHUB_APP_CLIENT_ID: 'overtree-test-client',
+				GITHUB_APP_CLIENT_SECRET: 'overtree-test-secret',
+				GITHUB_APP_PRIVATE_KEY: readFileSync(new URL('./tests/fake-github/key.pem', import.meta.url), 'utf8'),
+				GITHUB_API_URL: GITHUB,
+				GITHUB_URL: GITHUB,
+				GITHUB_GRACE_MS: '1500',
+				GITHUB_LONG_MS: '6000',
+				GITHUB_PULL_MS: '1500',
+				GITHUB_TICK_MS: '250'
 			}
 		},
-		// started after the first one (Playwright sets web servers up in order), so it reuses that build
+		// started after the app server (Playwright sets web servers up in order), so it reuses that build
 		...(clerkKeys
 			? [
 					{

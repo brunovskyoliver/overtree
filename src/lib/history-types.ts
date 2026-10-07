@@ -1,6 +1,6 @@
 // Shared by the history server modules and the client (specs/008-history-synctex/contracts/http-api.md).
 
-export type VersionKind = 'baseline' | 'edit' | 'compile' | 'restore';
+export type VersionKind = 'baseline' | 'edit' | 'compile' | 'restore' | 'github';
 export type Compare = 'current' | 'previous';
 
 /** A user as history shows them; a deleted or unknown account: name 'Unknown user'. */

@@ -133,7 +133,7 @@ export const overrides = sqliteTable(
 // --- history (008 data-model.md) -----------------------------------------------------------------------------------
 
 export type HistoryKind = 'text' | 'tree' | 'baseline';
-export type VersionKind = 'baseline' | 'edit' | 'compile' | 'restore';
+export type VersionKind = 'baseline' | 'edit' | 'compile' | 'restore' | 'github';
 
 // Append-only copy of every Yjs update with its author, plus tree changes; never compacted (research R1).
 export const historyLog = sqliteTable(
@@ -166,6 +166,7 @@ export const versions = sqliteTable(
 		authors: text('authors').notNull(), // JSON array of user ids
 		changed: text('changed').notNull(), // JSON array of Changed
 		restoredFrom: integer('restored_from').references((): AnySQLiteColumn => versions.id),
+		source: text('source'), // JSON { commits, notes } for `github` versions (012 data-model.md); null otherwise
 		startedAt: integer('started_at').notNull(),
 		createdAt: integer('created_at').notNull()
 	},
@@ -189,4 +190,73 @@ export const versionLabels = sqliteTable(
 		createdAt: integer('created_at').notNull()
 	},
 	(t) => [index('version_labels_project_idx').on(t.projectId, t.versionId)]
+);
+
+// --- GitHub sync (012 data-model.md) -------------------------------------------------------------------------------
+
+export type GitHubLinkStatus = 'pending' | 'active' | 'failing' | 'needs-reconnect' | 'needs-access' | 'owner-changed';
+export type GitHubRunKind = 'push' | 'pull' | 'import';
+export type GitHubRunTrigger = 'session-end' | 'long-session' | 'open' | 'periodic' | 'manual' | 'startup' | 'retry' | 'link';
+export type GitHubRunResult = 'pushed' | 'pulled' | 'noop' | 'failed';
+
+// One GitHub connection per Overtree user; tokens AES-GCM sealed (research R10).
+export const githubAccounts = sqliteTable('github_accounts', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => users.id),
+	githubId: integer('github_id').notNull(),
+	login: text('login').notNull(),
+	accessToken: blob('access_token', { mode: 'buffer' }).notNull(),
+	accessExpiresAt: integer('access_expires_at').notNull(),
+	refreshToken: blob('refresh_token', { mode: 'buffer' }).notNull(),
+	refreshExpiresAt: integer('refresh_expires_at').notNull(),
+	createdAt: integer('created_at').notNull(),
+	updatedAt: integer('updated_at').notNull()
+});
+
+// At most one repository link per project (research R7, R12).
+export const githubLinks = sqliteTable('github_links', {
+	projectId: text('project_id')
+		.primaryKey()
+		.references(() => projects.id),
+	userId: text('user_id').references(() => users.id), // whose connection authorizes it: the owner at link time
+	installationId: integer('installation_id').notNull(),
+	repoId: integer('repo_id').notNull(), // stable across renames
+	repo: text('repo').notNull(), // `owner/name`, refreshed on rename
+	branch: text('branch').notNull(),
+	ignore: text('ignore').notNull(), // JSON array of glob patterns (research R8)
+	status: text('status').$type<GitHubLinkStatus>().notNull(),
+	baseCommit: text('base_commit'), // null until the first sync
+	baseFiles: text('base_files'), // blob hash of JSON { [path]: { sha, hash? } }
+	watermark: integer('watermark').notNull().default(0), // history_log.id covered by GitHub
+	pendingPush: integer('pending_push', { mode: 'boolean' }).notNull().default(false),
+	lastPushAt: integer('last_push_at'),
+	lastPullAt: integer('last_pull_at'),
+	lastCheckAt: integer('last_check_at'),
+	failCount: integer('fail_count').notNull().default(0),
+	nextAttemptAt: integer('next_attempt_at'),
+	error: text('error'),
+	note: text('note'), // JSON MergeNote
+	createdAt: integer('created_at').notNull(),
+	updatedAt: integer('updated_at').notNull()
+});
+
+// Sync runs for the status popover (US4); noop periodic pulls are not stored.
+export const githubRuns = sqliteTable(
+	'github_runs',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id),
+		kind: text('kind').$type<GitHubRunKind>().notNull(),
+		trigger: text('trigger').$type<GitHubRunTrigger>().notNull(),
+		userId: text('user_id').references(() => users.id), // manual runs only
+		result: text('result').$type<GitHubRunResult>().notNull(),
+		commit: text('commit'),
+		error: text('error'),
+		startedAt: integer('started_at').notNull(),
+		finishedAt: integer('finished_at').notNull()
+	},
+	(t) => [index('github_runs_project_idx').on(t.projectId, t.id)]
 );

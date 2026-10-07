@@ -25,6 +25,12 @@ services:
       CLERK_JWT_KEY: ${CLERK_JWT_KEY:-}
       # comma-separated emails that are always site admins
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      # GitHub sync (optional, off unless GITHUB_APP_ID is set; all five together): see specs/012-github-sync/quickstart.md
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
     restart: unless-stopped
 
   # pulls the TeX image on `up` so the first compile doesn't pull inside its timeout; exits at once
