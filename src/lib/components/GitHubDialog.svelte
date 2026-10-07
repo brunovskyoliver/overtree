@@ -94,6 +94,8 @@
 		saved = false;
 		loaded = false;
 		dialog.showModal();
+		// the dialog itself takes focus, not the × (showModal's pick): no focus ring on a mouse open, Tab goes on from here
+		dialog.focus();
 		isOpen = true;
 		await Promise.all([github.load(), github.loadAccount()]);
 		loaded = true;
@@ -222,7 +224,7 @@
 	{/if}
 {/snippet}
 
-<dialog bind:this={dialog} aria-labelledby="github-title" onclose={() => ((isOpen = false), (picked = null), (query = ''))}>
+<dialog bind:this={dialog} tabindex="-1" aria-labelledby="github-title" onclose={() => ((isOpen = false), (picked = null), (query = ''))}>
 	<div class="head">
 		<h2 id="github-title">GitHub sync</h2>
 		<form method="dialog"><button class="close" aria-label="Close">×</button></form>
@@ -401,6 +403,9 @@
 		background: var(--panel);
 		color: var(--text);
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+	}
+	dialog:focus {
+		outline: none;
 	}
 	dialog::backdrop {
 		background: rgb(0 0 0 / 0.5);
