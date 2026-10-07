@@ -273,6 +273,19 @@ describe('labels (US5, research R6)', () => {
 		expect((await rename(pid, foreign.id, OWNER, 'y')).status).toBe(404);
 	});
 
+	it('an author demoted to reader can no longer change their label (FR-017)', async () => {
+		const { pid, server } = await setupLabels();
+		const { body: label } = await add(pid, C, { versionId: lastVersion(pid)!.id, name: 'Mine' });
+		server.db
+			.update(memberships)
+			.set({ role: 'reader' })
+			.where(and(eq(memberships.projectId, pid), eq(memberships.userId, user(C).id)))
+			.run();
+		expect(listVersions(pid, user(C).id).versions[0].labels).toMatchObject([{ name: 'Mine', canEdit: false }]);
+		expect((await rename(pid, label.id, C, 'Still mine')).status).toBe(403);
+		expect((await remove(pid, label.id, C)).status).toBe(403);
+	});
+
 	it('labeling the current version closes open edits into a version first, else labels the newest', async () => {
 		const { server, pid, main } = await setupLabels();
 		const first = lastVersion(pid)!;

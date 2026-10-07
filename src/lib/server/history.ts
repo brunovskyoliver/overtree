@@ -3,7 +3,7 @@ import * as Y from 'yjs';
 import type { FileKind } from '../files.ts';
 import type { HistoryPage, Label, UserRef, VersionInfo } from '../history-types.ts';
 import { colorFor } from '../presence.ts';
-import { broadcast, projectRole } from './access.ts';
+import { broadcast, canEdit, projectRole, type Role } from './access.ts';
 import { getServer } from './collab.ts';
 import { FileError, putBlob, readBlob, type Tx } from './files.ts';
 import { documents, files, historyLog, projects, updates, users, versionLabels, versions, type VersionKind } from './schema.ts';
@@ -246,8 +246,8 @@ function versionInfos(pid: string, rows: Version[], userId: string): VersionInfo
 	);
 	const authors = rows.map((v) => JSON.parse(v.authors) as string[]);
 	const refs = userRefs([...authors.flat(), ...labels.map((l) => l.userId)]);
-	const owner = projectRole(pid, userId) === 'owner';
-	const label = labelInfo(refs, userId, owner);
+	const role = projectRole(pid, userId);
+	const label = labelInfo(refs, userId, role);
 	return rows.map((v, i) => ({
 		id: v.id,
 		kind: v.kind,
@@ -260,16 +260,19 @@ function versionInfos(pid: string, rows: Version[], userId: string): VersionInfo
 	}));
 }
 
-/** A label row as the API shows it to `userId`: the author and the owner may rename and delete it (research R6). */
+/** Who may rename/delete a label (research R6, FR-017): the owner, or its author while they can still edit the project. */
+const mayChangeLabel = (role: Role | null, author: string, userId: string) => role === 'owner' || (canEdit(role) && author === userId);
+
+/** A label row as the API shows it to `userId` with project role `role`. */
 const labelInfo =
-	(refs: Map<string, UserRef>, userId: string, owner: boolean) =>
+	(refs: Map<string, UserRef>, userId: string, role: Role | null) =>
 	(l: typeof versionLabels.$inferSelect): Label => ({
 		id: l.id,
 		versionId: l.versionId,
 		name: l.name,
 		user: refs.get(l.userId)!,
 		createdAt: l.createdAt,
-		canEdit: owner || l.userId === userId
+		canEdit: mayChangeLabel(role, l.userId, userId)
 	});
 
 export const PAGE = 50;
@@ -326,7 +329,7 @@ function labelName(name: unknown): string {
 }
 
 const showLabel = (pid: string, row: typeof versionLabels.$inferSelect, userId: string): Label =>
-	labelInfo(userRefs([row.userId]), userId, projectRole(pid, userId) === 'owner')(row);
+	labelInfo(userRefs([row.userId]), userId, projectRole(pid, userId))(row);
 
 /** Labels version `versionId`, or without it the current state: the open edits are closed into a version first,
  *  else the newest version gets the label. The caller checks the project role (E). */
@@ -343,7 +346,7 @@ export function addLabel(pid: string, userId: string, { versionId, name }: { ver
 	return showLabel(pid, row, userId);
 }
 
-/** The label `lid` of project `pid` if `userId` may change it: its author or the owner (404 / 403 otherwise). */
+/** The label `lid` of project `pid` if `userId` may change it: the owner, or its author with edit rights (404 / 403). */
 function ownLabel(pid: string, lid: number, userId: string) {
 	const row =
 		Number.isInteger(lid) &&
@@ -353,8 +356,9 @@ function ownLabel(pid: string, lid: number, userId: string) {
 			.where(and(eq(versionLabels.id, lid), eq(versionLabels.projectId, pid)))
 			.get();
 	if (!row) throw new FileError(404, 'Label not found.');
-	if (row.userId !== userId && projectRole(pid, userId) !== 'owner')
-		throw new FileError(403, 'Only the label’s author or the owner can change it.');
+	const role = projectRole(pid, userId);
+	if (!mayChangeLabel(role, row.userId, userId))
+		throw new FileError(403, canEdit(role) ? 'Only the label’s author or the owner can change it.' : 'You can only view this project.');
 	return row;
 }
 
