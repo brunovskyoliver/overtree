@@ -57,16 +57,17 @@ One feature covering sign-in, site roles, per-user project spaces, sharing with 
 
 | # | Feature | Status | Depends on |
 |---|---------|--------|------------|
-| 008 | Project history & restore | todo | 005 |
-| 009 | SyncTeX & PDF navigation | todo | 002 |
+| 008 | Project history, restore, SyncTeX & PDF navigation | in progress | 005 |
+| 009 | *(merged into 008)* | — | — |
 | 010 | Comments & chat | todo | 005 |
 | 011 | Self-hosting hardening | todo | 005 |
 
-### 008 Project history & restore
-History panel (the "History" button) with a timeline of versions grouped by time and author, created automatically from Yjs updates plus on every compile. Select a version to see a diff of each changed file against the current state, with additions and deletions colored per author. Name a version (labels). Restore a single file or the whole project to a version; restoring creates a new version instead of rewriting history. Download a zip of any version.
+### 008 Project history, restore, SyncTeX & PDF navigation
+One feature covering both parts below. Former rows 008 and 009 are bundled here.
 
-### 009 SyncTeX & PDF navigation
-The arrows between the editor and PDF: jump from cursor position to the matching place in the PDF and from a double-click in the PDF to the source line, across files. PDF pane remembers scroll position across recompiles. Layout menu: side-by-side, editor only, PDF only, PDF in a separate window.
+**History and restore.** History panel (the "History" button) with a timeline of versions grouped by time and author, created automatically from Yjs updates plus on every compile. Select a version to see a diff of each changed file against the current state, with additions and deletions colored per author. Name a version (labels). Restore a single file or the whole project to a version; restoring creates a new version instead of rewriting history. Download a zip of any version. Readers can browse history and download versions; only editors and the owner can restore, and per-file permissions from 005 apply to restoring single files.
+
+**SyncTeX and PDF navigation.** The arrows between the editor and PDF: jump from cursor position to the matching place in the PDF and from a double-click in the PDF to the source line, across files. PDF pane remembers scroll position across recompiles. Layout menu: side-by-side, editor only, PDF only, PDF in a separate window.
 
 ### 010 Comments & chat
 Select text and add a comment; comments anchor to Yjs relative positions so they survive edits, show in a margin, can be replied to and resolved. Project chat panel with message history and unread badge. Real-time for all collaborators, respecting roles (viewers can comment only if the owner allows).
