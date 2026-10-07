@@ -9,6 +9,7 @@ Updated: 2026-10-07T00:00:00Z
 - Gate 1 (user: B,A,B,B = all recommendations): versions close after 5 min idle / max 30 min; whole-project restore skips read-only files and lists them; diff vs current with toggle for vs previous; labels renamed/deleted only by author or owner.
 
 - Gate 2: user said `go` (full implementation). Fixed M1 (spec diff granularity), M2 (authors only from log rows), M3 (tests for US3 #3/#6, US7 #4), L1 (duplicate starts fresh history).
+- Converge F1: a file deleted and recreated at the same path is one file to diff and restore (path identity, like git); spec edge case updated to match the code, not the other way round.
 
 ## Log
 - 2026-10-07 specify: spec.md + checklists/requirements.md written; 2 clarification markers left for gate 1.

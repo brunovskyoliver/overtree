@@ -143,7 +143,7 @@ A Layout menu in the top bar offers: side-by-side (default), editor only, PDF on
 
 ### Edge Cases
 
-- A file was deleted and later a new file with the same path was created: history treats them as different files; restoring the project to a version before the deletion brings back the old file's content at that path.
+- A file was deleted and later a new file with the same path and kind was created (by hand or by a restore): diffs show it as one edited file at that path, and restoring the project or that file to a version before the deletion puts the old content into the file at that path.
 - Restoring a version while another user is typing in the same file: the restore and their concurrent keystrokes both apply (collaborative merge); nothing crashes and both users end up with the same text.
 - Restoring a project whose main file setting pointed at a file that no longer exists: the main-file setting is restored together with the tree.
 - Very large projects or long histories: the timeline loads incrementally (most recent first, more on scroll) and stays responsive.
