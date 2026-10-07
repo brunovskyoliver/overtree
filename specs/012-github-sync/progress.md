@@ -1,5 +1,5 @@
 # Feature 012: GitHub repository sync
-Stage: converge
+Stage: done
 Updated: 2026-10-07
 
 ## Decisions
@@ -34,5 +34,37 @@ Updated: 2026-10-07
 - 2026-10-07 phase 8 polish (T048–T052): github.smoke.test.ts (skipped unless GITHUB_SMOKE=1), README "GitHub sync", token-leak grep clean + echoed-token test, ROADMAP row/paragraph 012. check clean; vitest 403 pass, 1 skipped (smoke), 31 Docker-only fail; playwright github 4 pass. 234e746.
 - 2026-10-07 phase 9 convergence (T053–T058): failing links still pulled on open/periodically with push backoff kept; needs-access re-check (callback incl. Setup URL without code, hourly tick, PATCH recheck + "Check again") keeps the base; branch protection named, not raced; `.git` paths and >100 MB files skipped and noted on push; 403/404/301 re-resolved by repo id with one retry; fake `protect`/`moveRepo` (301 or 404); edge-case tests. check clean; vitest 446 pass, 1 skipped (smoke); playwright github 4 pass.
 - 2026-10-07 fix US1 e2e on WebKit: test-state leak, not a Safari bug. App + fake GitHub are shared across browser projects, so whichever project ran US1 second found USER already connected and `octo/paper` already holding main.tex. US1 now starts with a fresh `octo/paper` and a disconnect; cleanup unlinks send an `origin` header (SvelteKit CSRF had 403'd them silently). playwright github 12/12 (chromium/firefox/webkit), webkit US1 x5; check clean; github-link vitest 40 pass.
+- 2026-10-07 converge: 6 tasks appended (T053–T058: failing links keep pulling, needs-access recovery keeping base, branch protection message, unpushable paths skipped, repo rename/transfer by id, edge-case tests); implemented in phase 9 cedbebe. One round only.
+- 2026-10-07 full run: collab5 stress test hung on this branch (test race: keydown listener registered without waiting); fixed in 6c91aae. Playwright chromium full suite 171/172 before that fix, collab5 then 2/2.
 
 ## Report
+
+**What changed** (branch `012-github-sync`, not pushed)
+
+| Phase | Commit | Content |
+|---|---|---|
+| docs | 69edb1e, 90d64c3, ace6f1b | spec (two-way after gate 1), plan, research, data model, contracts, tasks, analysis fixes |
+| 1 Setup | d8c6ffd | `@octokit/auth-app`, `@octokit/request`, `node-diff3`; env vars; migration 0005 (github_accounts, github_links, github_runs, versions.source, kind `github`); fake GitHub server + Playwright wiring |
+| 2 Foundational | 6d7d2ef | `github/config, crypto, api, paths`; `applyTree` extracted from restore; cleanup hooks; `/api/me` flag |
+| 3 US1 connect & link | b1ceda1 | GitHub App user authorization (Clerk sign-in unchanged), repo picker (push-capable repos only), owner-only link, confirm with first-sync base, GitHubDialog |
+| 4 US2 push | 3266cab | Git Data API single commit on head, never force, Contents API seed for empty repos, Co-authored-by trailers, scheduler (2 min grace after last leave, 30 min long sessions, retries/backoff, startup) |
+| 5 US3 pull | f188924 | tree vs base, diff3 into live Yjs docs with `%` conflict markers, tree changes, kept-deleted/kept-binary notes, pending_push, "Merged from GitHub" versions, rewritten-history → pending |
+| 6 US4 status | b4ca497 | top-bar indicator + popover, Push now (title) / Pull now, create branch, ownership-transfer takeover |
+| 7 US5 preview/import | 8ade527 | first-sync preview groups, import into an empty project |
+| 8 Polish | 234e746 | smoke test (skipped without `GITHUB_SMOKE=1`), README "GitHub sync", token-leak test, ROADMAP row 012 |
+| 9 Convergence | cedbebe | T053–T058 |
+| fixes | 6c91aae, 3efccda | collab5 test race; GitHub e2e isolation across browser projects |
+
+**How it was verified**
+- `pnpm check`: 0 errors, 0 warnings.
+- `pnpm test`: 446 passed, 1 skipped (real-GitHub smoke test), with Docker running.
+- `pnpm exec playwright test github` (Chromium, Firefox, WebKit): 12/12.
+- Full Playwright suite on Chromium: 171/172; the one failure (collab5) was a test race, fixed and rerun 2/2 green.
+- All against the in-process fake GitHub; no real GitHub was contacted.
+
+**What is left**
+- Real-GitHub check: create a GitHub App (quickstart.md "Manual against real GitHub"), set the five `GITHUB_APP_*` env vars, link the repository with `render-latex.yaml`, and optionally run `tests/unit/github.smoke.test.ts` with `GITHUB_SMOKE=1`.
+- Not tested: pushing a file over 100 MB (code path exists, too heavy for a unit test).
+- Accepted deviations: access revoked on GitHub is noticed at the hourly check; a failed first push after "Sync now" goes to `failing` (not `pending`); "Change…" switches branch only (switching repo = unlink + link); empty repo first sync makes two commits.
+- Firefox/WebKit runs of the full non-GitHub suite were not repeated (only the GitHub spec ran there).
+- Deploy to the AI VM not done (not requested).
