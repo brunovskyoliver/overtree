@@ -112,7 +112,7 @@ export class GitHub {
 		return this.#call(this.#api(), 'PUT', { installationId, repoId, branch });
 	}
 
-	patch(change: { ignore?: string[]; branch?: string; dismissNote?: true; confirmOwner?: true }) {
+	patch(change: { ignore?: string[]; branch?: string; dismissNote?: true; confirmOwner?: true; recheck?: true }) {
 		return this.#call(this.#api(), 'PATCH', change);
 	}
 

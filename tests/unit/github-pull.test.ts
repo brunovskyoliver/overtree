@@ -5,11 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getServer } from '../../src/lib/server/collab.ts';
 import { createEntry, deleteEntry, getMainFileId, setText, uploadFile } from '../../src/lib/server/files.ts';
 import { saveAccount } from '../../src/lib/server/github/accounts.ts';
-import { confirmLink, getLink, linkRepo } from '../../src/lib/server/github/links.ts';
+import { confirmLink, getLink, getStatus, linkRepo } from '../../src/lib/server/github/links.ts';
 import { readBase } from '../../src/lib/server/github/paths.ts';
 import { mergeText, REWRITTEN } from '../../src/lib/server/github/pull.ts';
 import { hasUnpushed, requestSync } from '../../src/lib/server/github/sync.ts';
 import { closeVersion, currentText, manifestPaths } from '../../src/lib/server/history.ts';
+import { setOverride } from '../../src/lib/server/projects.ts';
 import { restoreVersion } from '../../src/lib/server/restore.ts';
 import { files, githubRuns, memberships, versions } from '../../src/lib/server/schema.ts';
 import { fakeGitHub, type FileMap } from '../fake-github/server.ts';
@@ -307,5 +308,50 @@ describe('rewritten history (edge case, T036)', () => {
 		expect(getLink(s.pid)!.status).toBe('active');
 		expect(s.g.commit(s.thesis, s.g.head(s.thesis, 'main')!)!.parents).toEqual([orphan]);
 		expect(getServer().db.select().from(githubRuns).all().some((x) => x.result === 'failed' && x.error === REWRITTEN)).toBe(true);
+	});
+});
+
+describe('paths Overtree can’t take (T058, edge cases)', () => {
+	it('a clashing or invalid name and a file over the upload limit are skipped and named; later pushes leave them alone', async () => {
+		const s = await setup();
+		const big = Buffer.alloc(4096, 7);
+		s.g.commitFiles(s.thesis, 'main', { 'MAIN.TEX': 'clash\n', 'back\\slash.tex': 'bad name\n', 'big.bin': big, 'ok.tex': 'fine\n' });
+		process.env.UPLOAD_MAX_FILE_MB = '0.001'; // about 1 KB
+		try {
+			expect((await pull(s)).result).toBe('pulled');
+		} finally {
+			delete process.env.UPLOAD_MAX_FILE_MB;
+		}
+		const t = tree(s);
+		expect(t['ok.tex']).toBe('text');
+		for (const p of ['MAIN.TEX', 'back\\slash.tex', 'big.bin']) expect(t[p]).toBeUndefined();
+		const note = getStatus(s.pid, s.owner).link!.note!.files;
+		expect(note).toEqual(
+			expect.arrayContaining([
+				{ path: 'MAIN.TEX', reason: 'skipped-name' },
+				{ path: 'back\\slash.tex', reason: 'skipped-name' },
+				{ path: 'big.bin', reason: 'skipped-size' }
+			])
+		);
+
+		await setText(s.main, withPara(0, 'Edited after the skip.'), ctx(s));
+		expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('pushed');
+		const onGitHub = s.g.files(s.thesis, 'main');
+		expect(onGitHub.get('MAIN.TEX')!.toString()).toBe('clash\n');
+		expect(onGitHub.get('back\\slash.tex')!.toString()).toBe('bad name\n');
+		expect(onGitHub.get('big.bin')!.equals(big)).toBe(true);
+		expect(onGitHub.get('main.tex')!.toString()).toBe(withPara(0, 'Edited after the skip.'));
+	});
+});
+
+describe('per-file overrides (T058, 005)', () => {
+	it('a GitHub change to a file an editor has read-only is applied, and their open copy gets it', async () => {
+		const s = await setup();
+		setOverride(s.pid, user(B).id, s.main, 'reader');
+		const reader = await connect(s.server.url, s.main, B);
+		s.g.commitFiles(s.thesis, 'main', { 'main.tex': withPara(2, 'Third, from GitHub.') });
+		expect((await pull(s)).result).toBe('pulled');
+		expect(currentText(s.main)).toBe(withPara(2, 'Third, from GitHub.'));
+		await waitFor(() => reader.text.toString() === withPara(2, 'Third, from GitHub.'));
 	});
 });

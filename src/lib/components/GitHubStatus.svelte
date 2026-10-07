@@ -23,8 +23,8 @@
 		overlap: 'overlapping edits in',
 		'kept-deleted': 'kept, though deleted on GitHub:',
 		'kept-binary': 'kept your version of',
-		'skipped-name': 'not pulled (file name not allowed):',
-		'skipped-size': 'not pulled (too large):'
+		'skipped-name': 'skipped (file name not allowed):',
+		'skipped-size': 'skipped (too large):'
 	};
 	const TRIGGER_TEXT: Record<string, string> = {
 		'session-end': 'after a session',
@@ -204,7 +204,10 @@
 
 				{#if owner}
 					{#if link.state === 'needs-reconnect'}
-						<div class="buttons"><a class="button primary" href={github.connectUrl}>Reconnect GitHub</a></div>
+						<div class="buttons">
+							<button type="button" disabled={github.busy} onclick={() => simple(() => github.patch({ recheck: true }))}>Check again</button>
+							<a class="button primary" href={github.connectUrl}>Reconnect GitHub</a>
+						</div>
 					{:else if link.state === 'needs-access' && link.branchMissing}
 						<div class="buttons">
 							<button type="button" onclick={() => settings({ changeBranch: true })}>Choose branch</button>
@@ -213,6 +216,7 @@
 					{:else if link.state === 'needs-access'}
 						<div class="buttons">
 							<button type="button" onclick={() => settings({ changeBranch: true })}>Choose branch</button>
+							<button type="button" id="github-recheck" disabled={github.busy} onclick={() => simple(() => github.patch({ recheck: true }))}>Check again</button>
 							{#if github.account}
 								<a class="button primary" href={github.account.installUrl} target="_blank" rel="noopener noreferrer">Grant access</a>
 							{/if}
@@ -231,7 +235,7 @@
 
 				{#if link.note}
 					<div class="note">
-						<p>Merged GitHub changes on {absoluteTime(link.note.at)}:</p>
+						<p>From the sync on {absoluteTime(link.note.at)}:</p>
 						<ul>
 							{#each link.note.files as f (f.path)}
 								<li>{NOTE_TEXT[f.reason]} <code>{f.path}</code></li>

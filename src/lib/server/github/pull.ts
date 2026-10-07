@@ -10,7 +10,7 @@ import { editText, FileError, putBlob, readBlob, textUpdate } from '../files.ts'
 import { closeVersion, manifestPaths } from '../history.ts';
 import { applyTree, type TreePlan } from '../restore.ts';
 import { files, githubLinks, updates } from '../schema.ts';
-import { branchHead, repoPath, type Link } from './accounts.ts';
+import { branchGone, branchHead, repoPath, type Link } from './accounts.ts';
 import { gh, GitHubError, installationToken } from './api.ts';
 import { ignoreFilter, projectFiles, readBase, writeBase, type BaseMap } from './paths.ts';
 
@@ -30,8 +30,7 @@ export type PullResult = { result: 'pulled' | 'noop'; commit?: string };
 const COMMITS_MAX = 20;
 const BATCH = 8; // blob downloads in parallel
 export const REWRITTEN = 'The branch history was rewritten on GitHub; review and confirm the sync again.';
-/** The `needs-access` reason when the linked branch is gone: the popover offers "Create branch" for it (T040). */
-export const branchGone = (branch: string) => `The branch “${branch}” no longer exists on GitHub.`;
+export { branchGone };
 
 type GhCommit = { sha: string; commit: { author: { name: string } | null; message: string } };
 type TreeEntry = { path: string; type: string; sha: string; size?: number };

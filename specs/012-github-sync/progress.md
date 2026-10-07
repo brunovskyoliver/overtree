@@ -1,5 +1,5 @@
 # Feature 012: GitHub repository sync
-Stage: implement
+Stage: converge
 Updated: 2026-10-07
 
 ## Decisions
@@ -30,7 +30,8 @@ Updated: 2026-10-07
 - 2026-10-07 phase 4 US2 (T024–T029): push.ts (Git Data commit, Contents seed for empty repos, R9 message), pull.ts stub, sync.ts scheduler (queue, presence, session-end/long/periodic/retry, startSync), collab presence hooks, fake Contents PUT. check clean; vitest 363 pass, 31 Docker-only fail; playwright github 1 pass. 3266cab.
 - 2026-10-07 phase 5 US3 (T030–T036): pull.ts (tree vs base map, diff3 into live docs with % markers, applyTree for tree changes, kept-deleted/kept-binary/skipped notes, pending_push, github versions, rewritten history → pending), timeline shows github versions, push merges instead of conflict. check clean; vitest 373 pass, 31 Docker-only fail; playwright github 2 pass. f188924.
 - 2026-10-07 phase 6 US4 (T037–T043): push/pull/create-branch routes (30 s wait, 202), runs in status, GitHubStatus indicator + popover replacing the top-bar button, owner-changed on transfer + confirmOwner take-over, github-sync.test.ts, Playwright US4. check clean; vitest 392 pass, 31 Docker-only fail; playwright github 3 pass, toolbar/history/permissions 11 pass. b4ca497.
-- 2026-10-07 phase 7 US5 (T044–T047): preview route + `preview()`, confirm `import` (empty = untouched starter), GitHubDialog step 3 preview groups + Import, US5 Vitest (7) + Playwright preview/import. check clean; vitest 402 pass, 31 Docker-only fail; playwright github 4 pass. 8ade527.
-- 2026-10-07 phase 8 polish (T048–T052): github.smoke.test.ts (skipped unless GITHUB_SMOKE=1), README "GitHub sync", token-leak grep clean + echoed-token test, ROADMAP row/paragraph 012. check clean; vitest 403 pass, 1 skipped (smoke), 31 Docker-only fail; playwright github 4 pass.
+- 2026-10-07 phase 7 US5 (T044–T047): preview route + `preview()`, confirm `import` (empty = untouched starter), GitHubDialog step 3 preview groups + Import, US5 Vitest (7) + Playwright preview/import. check clean; vitest 402 pass, 31 Docker-only fail; playwright github 4 pass. 8ade527. 8ade527.
+- 2026-10-07 phase 8 polish (T048–T052): github.smoke.test.ts (skipped unless GITHUB_SMOKE=1), README "GitHub sync", token-leak grep clean + echoed-token test, ROADMAP row/paragraph 012. check clean; vitest 403 pass, 1 skipped (smoke), 31 Docker-only fail; playwright github 4 pass. 234e746.
+- 2026-10-07 phase 9 convergence (T053–T058): failing links still pulled on open/periodically with push backoff kept; needs-access re-check (callback incl. Setup URL without code, hourly tick, PATCH recheck + "Check again") keeps the base; branch protection named, not raced; `.git` paths and >100 MB files skipped and noted on push; 403/404/301 re-resolved by repo id with one retry; fake `protect`/`moveRepo` (301 or 404); edge-case tests. check clean; vitest 446 pass, 1 skipped (smoke); playwright github 4 pass.
 
 ## Report

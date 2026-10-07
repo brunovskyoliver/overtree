@@ -1,7 +1,9 @@
 // In-memory GitHub for tests (012 research R11): the REST and OAuth endpoints the sync uses, with real git SHA-1s
 // for blobs, trees and commits. API and web paths are served from one origin, as @octokit/oauth-methods derives the
 // OAuth URL from a non-github.com baseUrl by dropping `/api/v3`.
-// ponytail: no pagination (every list fits one page), no rename detection in compare, no 301 for renamed repos.
+// Renamed or transferred repositories answer under the old `owner/name` with a 301 to the new one, as GitHub does
+// (or a 404, as configured); protected branches refuse ref updates with GitHub's 422.
+// ponytail: no pagination (every list fits one page), no rename detection in compare.
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -50,6 +52,8 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 	const installations = new Map<number, Installation>();
 	const repos = new Map<number, Repo>();
 	const noPush = new Set<string>(); // `${login}:${repoId}`
+	const protectedBranches = new Set<string>(); // `${repoId}:${branch}`
+	const movedFrom = new Map<string, { id: number; redirect: boolean }>(); // old `owner/name`, lower-case → repository
 	const codes = new Map<string, string>(); // OAuth code → login
 	const userTokens = new Map<string, { login: string; expiresAt: number }>();
 	const refreshTokens = new Map<string, { login: string; expiresAt: number }>();
@@ -147,8 +151,35 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 			return out;
 		},
 		commit: (repo: Repo | string, sha: string) => get(resolve(repo), sha, 'commit')?.commit,
+		/** Renames `repo` (404 under the old name). */
 		renameRepo(repo: Repo | string, name: string) {
-			resolve(repo).name = name;
+			fake.moveRepo(repo, { name, redirect: false });
+		},
+		/** Renames `repo` and/or transfers it to `owner` (an organization is created on the fly). A transfer takes it out
+		 *  of every installation that selected it (`installation`: selected there instead). The old `owner/name` answers
+		 *  301 to the new one (`redirect`, default, as GitHub does) or 404. */
+		moveRepo(repo: Repo | string, to: { name?: string; owner?: string; installation?: number; redirect?: boolean }) {
+			const r = resolve(repo);
+			movedFrom.set(`${r.owner.login}/${r.name}`.toLowerCase(), { id: r.id, redirect: to.redirect ?? true });
+			if (to.name) r.name = to.name;
+			if (to.owner && to.owner !== r.owner.login) {
+				let owner = accounts.get(to.owner);
+				if (!owner) {
+					owner = { id: nextId++, login: to.owner, type: 'Organization', name: to.owner, email: null };
+					accounts.set(to.owner, owner);
+				}
+				r.owner = owner;
+				for (const i of installations.values()) i.repos.delete(r.id);
+			}
+			if (to.installation !== undefined) installations.get(to.installation)?.repos.add(r.id);
+			movedFrom.delete(`${r.owner.login}/${r.name}`.toLowerCase()); // moved back
+			return r;
+		},
+		/** Branch protection on `branch` (`on` false lifts it): ref updates answer 422 "Protected branch update failed". */
+		protect(repo: Repo | string, branch: string, on = true) {
+			const key = `${resolve(repo).id}:${branch}`;
+			if (on) protectedBranches.add(key);
+			else protectedBranches.delete(key);
 		},
 
 		/** A user-to-server token for `login` without the OAuth dance. */
@@ -253,6 +284,7 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 		for (const c of changes) {
 			const parts = c.path.split('/');
 			if (!c.path || parts.some((p) => !p || p === '.' || p === '..')) throw new Error(`tree.path ${c.path} is invalid`);
+			if (parts.some((p) => /^\.git$/i.test(p))) throw new Error('tree.path contains a malformed path component');
 			if (c.sha !== null && !r.objects.has(c.sha) && c.type !== 'commit') throw new Error(`tree.sha ${c.sha} is not a valid ${c.type}`);
 			const dir = descend(root, parts.slice(0, -1), c.sha !== null);
 			const name = parts.at(-1)!;
@@ -484,8 +516,15 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 
 		if (!(m = path.match(/^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/))) return notFound();
 		const r = [...repos.values()].find((r) => r.owner.login.toLowerCase() === m![1].toLowerCase() && r.name.toLowerCase() === m![2].toLowerCase());
-		if (!r || !canRead(auth, r)) return notFound();
 		const rest = m[3] ?? '';
+		if (!r) {
+			const moved = movedFrom.get(`${m[1]}/${m[2]}`.toLowerCase());
+			const to = moved?.redirect ? repos.get(moved.id) : undefined;
+			if (!to || !canRead(auth, to)) return notFound();
+			const location = `${api(to)}${rest}${query.size ? `?${query}` : ''}`;
+			return { status: 301, location, body: { message: 'Moved Permanently', url: location, documentation_url: 'https://docs.github.com/rest' } };
+		}
+		if (!canRead(auth, r)) return notFound();
 		const write = method !== 'GET';
 		if (write && !canWrite(auth, r)) return fail(403, 'Resource not accessible by integration');
 		const empty = r.refs.size === 0;
@@ -513,6 +552,7 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 			if (method === 'PATCH' && m[1] === 'refs') {
 				const current = r.refs.get(branch);
 				if (!current) return fail(422, 'Reference does not exist');
+				if (protectedBranches.has(`${r.id}:${branch}`)) return fail(422, `Protected branch update failed for refs/heads/${branch}.`);
 				const sha = String(body.sha ?? '');
 				if (!get(r, sha, 'commit')) return fail(422, 'Object does not exist');
 				if (!body.force && !ancestors(r, sha).includes(current)) return fail(422, 'Update is not a fast forward');
@@ -675,7 +715,7 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 	// --- HTTP ---------------------------------------------------------------------------------------------------------
 
 	// Test-only control endpoint for other processes (Playwright): POST /_fake/<helper> with { args: [...] }.
-	const remote = ['addUser', 'addInstallation', 'addRepo', 'commitFiles', 'revoke', 'setPush', 'failNext', 'clearFailures', 'renameRepo', 'head', 'commit', 'deleteBranch'] as const;
+	const remote = ['addUser', 'addInstallation', 'addRepo', 'commitFiles', 'revoke', 'setPush', 'failNext', 'clearFailures', 'renameRepo', 'moveRepo', 'protect', 'head', 'commit', 'deleteBranch'] as const;
 
 	async function serve(req: IncomingMessage, res: ServerResponse) {
 		const chunks: Buffer[] = [];

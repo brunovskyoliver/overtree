@@ -14,20 +14,24 @@ const TOKEN_RE = /\b(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)/g;
 export class GitHubError extends Error {
 	readonly status: number; // HTTP status; 0 for network errors
 	readonly reason: GitHubReason;
-	constructor(status: number, reason: GitHubReason, message: string) {
+	/** GitHub's own message (tokens masked), for telling refusals apart (branch protection) */
+	readonly said: string;
+	constructor(status: number, reason: GitHubReason, message: string, said = '') {
 		super(message);
 		this.name = 'GitHubError';
 		this.status = status;
 		this.reason = reason;
+		this.said = said;
 	}
 }
 
-/** 401 → reconnect; 403/404 → access (a 403 that is a rate limit → retry); 409/422 → conflict; 429, 5xx and the
- *  network → retry. Other 4xx count as conflicts: retried with backoff, never silently dropped. */
+/** 401 → reconnect; 403/404 and a redirect (a renamed or transferred repository, answered to a write) → access (a
+ *  403 that is a rate limit → retry); 409/422 → conflict; 429, 5xx and the network → retry. Other 4xx count as
+ *  conflicts: retried with backoff, never silently dropped. */
 export function reasonFor(status: number, rateLimited = false): GitHubReason {
 	if (status === 401) return 'needs-reconnect';
 	if (status === 403 && !rateLimited) return 'needs-access';
-	if (status === 404) return 'needs-access';
+	if (status === 404 || status === 301 || status === 307 || status === 308) return 'needs-access';
 	if (status === 429 || status === 403 || status === 0 || status >= 500) return 'retry';
 	return 'conflict';
 }
@@ -46,7 +50,7 @@ export function githubError(status: number, githubMessage?: unknown, rateLimited
 	const reason = reasonFor(status, rateLimited);
 	const said = clean(githubMessage);
 	const code = status ? ` (${status})` : '';
-	return new GitHubError(status, reason, `${MESSAGES[reason]}${said ? ` GitHub said: ${said}` : ''}${code}`);
+	return new GitHubError(status, reason, `${MESSAGES[reason]}${said ? ` GitHub said: ${said}` : ''}${code}`, said);
 }
 
 /** Any error from fetch or @octokit as a GitHubError (network failures: status 0, `retry`). */
@@ -66,7 +70,9 @@ function config(): GitHubConfig {
 	return c;
 }
 
-/** One REST call with `token` (user or installation); JSON in and out, null for an empty body. */
+/** One REST call with `token` (user or installation); JSON in and out, null for an empty body. GETs follow GitHub's
+ *  redirect for a renamed or transferred repository; writes don't (fetch would resend a POST as a GET): they fail
+ *  as `needs-access` and the sync looks the repository up again by id (sync.ts). */
 export async function gh<T = any>(token: string, method: string, path: string, body?: unknown): Promise<T> {
 	let res: Response;
 	try {
@@ -80,6 +86,7 @@ export async function gh<T = any>(token: string, method: string, path: string, b
 				...(body === undefined ? {} : { 'content-type': 'application/json' })
 			},
 			body: body === undefined ? undefined : JSON.stringify(body),
+			redirect: method === 'GET' ? 'follow' : 'manual',
 			signal: AbortSignal.timeout(TIMEOUT_MS)
 		});
 	} catch {

@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, lte, max } from 'drizzle-orm';
+import type { MergeNote } from '../../github-types.ts';
 import { getServer } from '../collab.ts';
 import { putBlob } from '../files.ts';
 import { flushHistory } from '../history.ts';
@@ -13,6 +14,8 @@ import { pull } from './pull.ts';
 // workflow's PDFs and `.github/`) are inherited from `base_tree` untouched (FR-013).
 // An empty repository refuses every Git Data call (409 "Git Repository is empty."): there the first file goes in
 // with one Contents API PUT, which creates the branch, and the rest follows as the normal commit on top.
+// Paths git can't store (a `.git` segment) and files over GitHub's 100 MB blob limit are left out of the commit and
+// the base map and named in the link's note (`skipped-name` / `skipped-size`), so the rest still goes up.
 // ponytail: the first push to an empty repository makes two commits.
 // Loaded unbundled by server.ts in production: no SvelteKit imports here.
 
@@ -36,7 +39,31 @@ function need(pid: string): Link {
 	return link;
 }
 
-const isRefRace = (e: unknown) => e instanceof GitHubError && e.status === 422;
+const BLOB_MAX = 100 * 1024 * 1024; // GitHub refuses larger files
+
+/** A ref update refused by branch protection or a ruleset (422 "Protected branch update failed", 403/409/422
+ *  "Repository rule violations"), not a fast-forward race. */
+const isProtected = (e: unknown) =>
+	e instanceof GitHubError && [403, 409, 422].includes(e.status) && /protected branch|rule violation|ruleset/i.test(e.said);
+const isRefRace = (e: unknown) => e instanceof GitHubError && e.status === 422 && !isProtected(e);
+export const protectedBranch = (branch: string) =>
+	`The branch “${branch}” is protected on GitHub, so Overtree can’t push to it directly. Choose another branch or allow the Overtree App to push.`;
+
+/** A path segment git (and so GitHub's tree API) refuses: `.git` in any case, also with trailing dots or spaces and
+ *  as the 8.3 name `git~1` (git's NTFS/HFS protections). */
+const gitRefuses = (path: string) => path.split('/').some((s) => /^\.git[. ]*$/i.test(s) || /^git~1$/i.test(s));
+
+/** Adds `skipped` to the link's note unless it lists them already; other notes stay. */
+function noteSkipped(pid: string, note: string | null, commit: string | null, skipped: MergeNote['files']) {
+	if (!skipped.length) return;
+	const prev = note ? (JSON.parse(note) as MergeNote) : null;
+	const has = (f: MergeNote['files'][number]) => prev?.files.some((p) => p.path === f.path && p.reason === f.reason);
+	if (skipped.every(has)) return;
+	const paths = new Set(skipped.map((f) => f.path));
+	const files = [...(prev?.files.filter((f) => !paths.has(f.path)) ?? []), ...skipped];
+	const next: MergeNote = { at: Date.now(), commit: commit ?? prev?.commit ?? '', files };
+	db().update(githubLinks).set({ note: JSON.stringify(next) }).where(eq(githubLinks.projectId, pid)).run();
+}
 const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** The newest history log id of the project, after flushing the buffered rows: what this push covers. */
@@ -118,9 +145,18 @@ export async function push(pid: string, opts: PushOptions): Promise<PushResult> 
 		const ignored = ignoreFilter(JSON.parse(link.ignore) as string[], [...files.keys(), ...Object.keys(base)]);
 		const contents = new Map<string, Content>();
 		const changes: FileChange[] = [];
+		const skipped: MergeNote['files'] = [];
 		for (const [path, f] of files) {
 			if (ignored(path)) continue;
+			if (gitRefuses(path)) {
+				skipped.push({ path, reason: 'skipped-name' });
+				continue;
+			}
 			const bytes = f.bytes();
+			if (bytes.length > BLOB_MAX) {
+				skipped.push({ path, reason: 'skipped-size' });
+				continue;
+			}
 			const sha = f.sha(); // from the same bytes (a text is read once)
 			contents.set(path, { kind: f.kind, bytes, sha, hash: f.hash });
 			if (base[path]?.sha !== sha) changes.push({ op: base[path] ? 'M' : 'A', path, sha });
@@ -129,8 +165,10 @@ export async function push(pid: string, opts: PushOptions): Promise<PushResult> 
 		for (const [path, entry] of Object.entries(base)) if (!files.has(path) && !ignored(path)) changes.push({ op: 'D', path, sha: entry.sha });
 		changes.sort((a, b) => byPath(a.path, b.path));
 
+		const unpushed = new Set(skipped.map((f) => f.path)); // on GitHub as they were (if at all), not deleted
 		if (!changes.length) {
 			db().update(githubLinks).set({ watermark, pendingPush: false }).where(eq(githubLinks.projectId, pid)).run();
+			noteSkipped(pid, link.note, head, skipped);
 			return { result: 'noop', ...(head ? { commit: head } : {}) };
 		}
 
@@ -170,13 +208,14 @@ export async function push(pid: string, opts: PushOptions): Promise<PushResult> 
 			if (head) await gh(token, 'PATCH', api(`/git/refs/heads/${branchPath(link.branch)}`), { sha: commit.sha, force: false });
 			else await gh(token, 'POST', api('/git/refs'), { ref: `refs/heads/${link.branch}`, sha: commit.sha });
 		} catch (e) {
+			if (isProtected(e)) throw new GitHubError((e as GitHubError).status, 'conflict', protectedBranch(link.branch));
 			if (!isRefRace(e)) throw e;
 			if (attempt === ATTEMPTS) throw new GitHubError(422, 'retry', 'GitHub’s branch kept moving while Overtree pushed; Overtree retries.');
 			attempt++; // start over from the new head, pulling it first
 			continue;
 		}
 		const pushed: BaseMap = {};
-		for (const [path, entry] of Object.entries(base)) if (ignored(path)) pushed[path] = entry;
+		for (const [path, entry] of Object.entries(base)) if (ignored(path) || unpushed.has(path)) pushed[path] = entry;
 		for (const [path, c] of contents) pushed[path] = { sha: c.sha, hash: storedHash(c, base[path]) };
 		const now = Date.now();
 		db()
@@ -184,6 +223,7 @@ export async function push(pid: string, opts: PushOptions): Promise<PushResult> 
 			.set({ baseCommit: commit.sha, baseFiles: writeBase(pushed), watermark, pendingPush: false, lastPushAt: now, updatedAt: now })
 			.where(eq(githubLinks.projectId, pid))
 			.run();
+		noteSkipped(pid, link.note, commit.sha, skipped);
 		return { result: 'pushed', commit: commit.sha };
 	}
 }

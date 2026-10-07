@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getServer } from '../../src/lib/server/collab.ts';
-import { createEntry, deleteEntry, getMainFileId, renameOrMove, setText, uploadFile } from '../../src/lib/server/files.ts';
+import { createEntry, deleteEntry, getMainFileId, getText, renameOrMove, setText, uploadFile } from '../../src/lib/server/files.ts';
 import { saveAccount } from '../../src/lib/server/github/accounts.ts';
-import { confirmLink, getLink, linkRepo } from '../../src/lib/server/github/links.ts';
+import { confirmLink, getLink, getStatus, linkRepo } from '../../src/lib/server/github/links.ts';
 import { commitMessage } from '../../src/lib/server/github/push.ts';
 import { hasUnpushed, requestSync } from '../../src/lib/server/github/sync.ts';
 import { closeVersion, flushHistory } from '../../src/lib/server/history.ts';
@@ -308,6 +308,23 @@ describe('what a push contains (US2 #5, #7, FR-013)', () => {
 		neverForced(s);
 	});
 
+	it('a path git can’t store (a `.git` folder) is skipped and named; the rest is pushed (T056)', async () => {
+		const s = await setup();
+		const o = s.owner;
+		const dotGit = createEntry(s.pid, { kind: 'folder', name: '.git', parentId: null }, o);
+		const cfg = createEntry(s.pid, { kind: 'text', name: 'config.tex', parentId: dotGit.id }, o);
+		await setText(cfg.id, 'not for git\n', ctx(s));
+		await setText(s.main, 'the real edit\n', ctx(s));
+		expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('pushed');
+		expect(fileOnGitHub(s, 'main.tex')).toBe('the real edit\n');
+		expect(s.g.files(s.thesis, 'main').has('.git/config.tex')).toBe(false);
+		expect(getLink(s.pid)!.status).toBe('active');
+		expect(getStatus(s.pid, s.owner).link!.note!.files).toEqual([{ path: '.git/config.tex', reason: 'skipped-name' }]);
+		// not pushed, not unpushed, never retried: the next push has nothing to do
+		expect(hasUnpushed(getLink(s.pid)!)).toBe(false);
+		expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('noop');
+	});
+
 	it('an empty repository gets the project: Contents API seed, then the rest in one commit', async () => {
 		const g = fakeGitHub();
 		const { url, stop } = await g.start();
@@ -346,6 +363,20 @@ describe('restart (FR-023)', () => {
 		expect(fileOnGitHub(s, 'main.tex')).toBe('written before the restart\n');
 		const last = getServer().db.select().from(githubRuns).all().at(-1);
 		expect(last).toMatchObject({ kind: 'push', trigger: 'startup', result: 'pushed' });
+	});
+});
+
+describe('restart: GitHub commits made while the server was down (T058, FR-023)', () => {
+	it('are pulled by startSync', async () => {
+		const s = await setup();
+		await s.server.stop();
+		const theirs = s.g.commitFiles(s.thesis, 'main', { 'main.tex': 'edited while Overtree was down\n', 'notes.md': '# notes\n' });
+		await start(s.server.dataDir);
+		await waitFor(() => getServer().db.select().from(githubRuns).all().some((r) => r.trigger === 'startup'), 3000);
+		expect(await getText(s.main)).toBe('edited while Overtree was down\n');
+		expect(getServer().db.select().from(files).all().some((f) => f.name === 'notes.md')).toBe(true);
+		expect(getLink(s.pid)!.baseCommit).toBe(theirs);
+		expect(getServer().db.select().from(githubRuns).all().at(-1)).toMatchObject({ kind: 'pull', trigger: 'startup', result: 'pulled' });
 	});
 });
 

@@ -253,30 +253,46 @@ export async function checkAccess(link: Pick<Link, 'projectId' | 'userId' | 'rep
 	}
 }
 
-/** After the user (re)connects: their `needs-reconnect` links are checked again and resume (R12); a link that was
- *  never confirmed goes back to `pending`. */
-export async function recheckLinks(userId: string) {
-	const links = db().select().from(githubLinks).where(eq(githubLinks.userId, userId)).all();
-	for (const link of links.filter((l) => l.status === 'needs-reconnect')) {
-		let result: AccessCheck;
-		try {
-			result = await checkAccess(link);
-		} catch {
-			continue; // GitHub unreachable: stays as it is, the owner can reconnect again
-		}
-		const status = result === 'ok' ? (link.baseFiles === null ? 'pending' : 'active') : result;
-		const error = result === 'ok' ? null : result === 'needs-access' ? 'GitHub refused access to the linked repository.' : RECONNECT;
-		db()
-			.update(githubLinks)
-			.set({
-				status,
-				error,
-				failCount: 0,
-				nextAttemptAt: null,
-				updatedAt: Date.now()
-			})
-			.where(eq(githubLinks.projectId, link.projectId))
-			.run();
-		broadcast(link.projectId, { type: 'github' });
+/** The `needs-access` reason when the linked branch is gone: the popover offers "Create branch" for it (T040). */
+export const branchGone = (branch: string) => `The branch “${branch}” no longer exists on GitHub.`;
+
+/** A link that may come back by checking access again: `needs-reconnect`, or `needs-access` other than a missing
+ *  branch (that one has "Create branch"). */
+export const recheckable = (l: Pick<Link, 'status' | 'error' | 'branch'>) =>
+	l.status === 'needs-reconnect' || (l.status === 'needs-access' && l.error !== branchGone(l.branch));
+
+const ACCESS_ERROR = 'GitHub refused access to the linked repository.';
+
+/** Checks a paused link's access again (research R12): ok → `active` with its base, watermark and `pending_push` kept
+ *  (`pending` when it was never confirmed), so the next sync merges what changed meanwhile instead of starting over;
+ *  otherwise the matching `needs-*` status. Returns the status now, or null when GitHub was unreachable or the link
+ *  changed meanwhile (it stays as it is). */
+export async function recheckLink(link: Link): Promise<Link['status'] | null> {
+	let result: AccessCheck;
+	try {
+		result = await checkAccess(link);
+	} catch {
+		return null;
 	}
+	const status = result === 'ok' ? (link.baseFiles === null ? 'pending' : 'active') : result;
+	if (status === link.status) return status;
+	const error = result === 'ok' ? null : result === 'needs-access' ? ACCESS_ERROR : RECONNECT;
+	const res = db()
+		.update(githubLinks)
+		.set({ status, error, failCount: 0, nextAttemptAt: null, updatedAt: Date.now() })
+		.where(and(eq(githubLinks.projectId, link.projectId), eq(githubLinks.status, link.status), eq(githubLinks.userId, link.userId ?? '')))
+		.run();
+	if (!res.changes) return null;
+	broadcast(link.projectId, { type: 'github' });
+	return status;
+}
+
+/** After the user (re)connects or comes back from granting the App access: their `needs-reconnect` and `needs-access`
+ *  links (not a missing branch) are checked again (R12). Returns the projects whose link is `active` again (the caller
+ *  asks for a catch-up sync); a link that was never confirmed goes back to `pending`. */
+export async function recheckLinks(userId: string): Promise<string[]> {
+	const links = db().select().from(githubLinks).where(eq(githubLinks.userId, userId)).all();
+	const resumed: string[] = [];
+	for (const link of links.filter(recheckable)) if ((await recheckLink(link)) === 'active') resumed.push(link.projectId);
+	return resumed;
 }

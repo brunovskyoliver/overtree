@@ -18,7 +18,7 @@ Hidden entirely when the integration is not configured (FR-004). Dark theme, key
 
 - Click opens a popover (`role="dialog"`, `aria-label="GitHub sync"`):
   - repo/branch as a link to GitHub; "Last synced <relative time>" with the commit's short SHA linking to it;
-  - error text and "Retrying at <time>" when failing; the fix-it action for the owner ("Reconnect GitHub", "Choose branch", "Create branch", "Grant access", "Take over link");
+  - error text and "Retrying at <time>" when failing; the fix-it action for the owner ("Reconnect GitHub", "Choose branch", "Create branch", "Grant access", "Check again" for `needs-access`/`needs-reconnect`, "Take over link");
   - merge note, if any: "Merged GitHub changes on <time>: overlapping edits in `a.tex`; kept your version of `fig.png`" (one line per file), owner can "Dismiss";
   - editors/owner: title input (placeholder "Commit title (optional)") + **Push now**, and **Pull now**; readers see neither (FR-026);
   - "Settings…" (owner) opens the dialog;

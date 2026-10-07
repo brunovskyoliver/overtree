@@ -10,13 +10,13 @@ import { getProject } from '../projects.ts';
 import { applyTree, type TreePlan } from '../restore.ts';
 import { files, githubLinks, githubRuns, updates, users } from '../schema.ts';
 import { isStarterText } from '../templates.ts';
-import { branchExists, branchHead, branchPath, checkAccess, findRepo, getAccount, repoPath, type Link } from './accounts.ts';
+import { branchExists, branchGone, branchHead, branchPath, checkAccess, findRepo, getAccount, recheckLink, repoPath, type Link } from './accounts.ts';
 import { gh, GitHubError, installationToken } from './api.ts';
 import { githubConfig } from './config.ts';
 import { DEFAULT_IGNORE, ignoreFilter, projectFiles, writeBase, type BaseMap } from './paths.ts';
-import { branchGone, inBatches } from './pull.ts';
+import { inBatches } from './pull.ts';
 import { logWatermark, TITLE_MAX } from './push.ts';
-import { hasUnpushed, isSyncing, requestSync, type SyncKind } from './sync.ts';
+import { catchUp, hasUnpushed, isSyncing, requestSync, type SyncKind } from './sync.ts';
 
 // A project's repository link (012 FR-005–010, data-model "github_links", research R7, R12): status for members,
 // link/patch/unlink/confirm for the owner. Route guards check the role; these check the link's own rules.
@@ -193,10 +193,16 @@ export async function linkRepo(
 	changed(pid);
 }
 
-/** `PATCH`: new "not pulled" patterns, another branch (back to `pending`, base reset), dismissing the merge note
- *  and/or, after an ownership transfer, the new owner taking the link over (`confirmOwner`, FR-027). */
-export async function patchLink(pid: string, ownerId: string, body: { ignore?: unknown; branch?: unknown; dismissNote?: unknown; confirmOwner?: unknown }) {
+/** `PATCH`: new "not pulled" patterns, another branch (back to `pending`, base reset), dismissing the merge note,
+ *  after an ownership transfer the new owner taking the link over (`confirmOwner`, FR-027) and/or checking a paused
+ *  link's access again ("Check again", `recheck`, research R12). */
+export async function patchLink(
+	pid: string,
+	ownerId: string,
+	body: { ignore?: unknown; branch?: unknown; dismissNote?: unknown; confirmOwner?: unknown; recheck?: unknown }
+) {
 	const link = need(pid);
+	if (body.recheck === true) return recheck(link, ownerId);
 	const set: Partial<Link> = {};
 	if (body.confirmOwner === true) Object.assign(set, await takeOver(link, ownerId));
 	if (body.ignore !== undefined) set.ignore = JSON.stringify(normalizeIgnore(body.ignore));
@@ -216,7 +222,20 @@ export async function patchLink(pid: string, ownerId: string, body: { ignore?: u
 		.run();
 	changed(pid);
 	// taken over: catch up with what waited during the pause (a push pulls first)
-	if (set.status === 'active') void requestSync(pid, { kind: hasUnpushed(getLink(pid)!) ? 'push' : 'pull', trigger: 'manual', userId: ownerId });
+	if (set.status === 'active') catchUp(pid, ownerId);
+}
+
+/** "Check again" for a `needs-access` or `needs-reconnect` link: the linker's access is checked again; back → `active`
+ *  with its base kept (a missed GitHub edit is merged, not overwritten) and a catch-up sync. Still refused → 409 with
+ *  the reason. */
+async function recheck(link: Link, ownerId: string) {
+	if (link.status !== 'needs-access' && link.status !== 'needs-reconnect') fail(409, 'The link doesn’t need to be checked again.');
+	const status = await recheckLink(link);
+	if (status === null) fail(409, 'GitHub couldn’t be reached. Try again in a moment.');
+	if (status === 'needs-reconnect') fail(409, 'The GitHub connection of the person who linked this project stopped working. They need to reconnect GitHub.');
+	if (status === 'needs-access')
+		fail(409, `GitHub still refuses access to ${getLink(link.projectId)?.repo ?? link.repo}. Grant the Overtree App access to it, then check again.`);
+	if (status === 'active') catchUp(link.projectId, ownerId);
 }
 
 /** The new owner takes an `owner-changed` link over (research R12, FR-027): it syncs through their connection from

@@ -6,6 +6,8 @@ import { getMainFileId, getText, setText } from '../../src/lib/server/files.ts';
 import { getAccount, saveAccount } from '../../src/lib/server/github/accounts.ts';
 import { open } from '../../src/lib/server/github/crypto.ts';
 import { confirmLink, getLink, getStatus, linkRepo } from '../../src/lib/server/github/links.ts';
+import { projectFiles } from '../../src/lib/server/github/paths.ts';
+import { protectedBranch } from '../../src/lib/server/github/push.ts';
 import { hasUnpushed, requestSync, tick } from '../../src/lib/server/github/sync.ts';
 import { transferOwnership } from '../../src/lib/server/projects.ts';
 import { githubLinks, githubRuns, memberships } from '../../src/lib/server/schema.ts';
@@ -14,7 +16,7 @@ import * as pullRoute from '../../src/routes/api/projects/[pid]/github/pull/+ser
 import * as pushRoute from '../../src/routes/api/projects/[pid]/github/push/+server.ts';
 import * as linkRoute from '../../src/routes/api/projects/[pid]/github/+server.ts';
 import { fakeGitHub } from '../fake-github/server.ts';
-import { cleanup, ev, hit, json, OWNER, project, start, user, waitFor } from './helpers.ts';
+import { cleanup, connect, ev, hit, json, OWNER, project, start, user, waitFor } from './helpers.ts';
 
 // 012 US4 "See sync status and sync on demand" against the fake GitHub (T042): Push now with a title, Pull now,
 // readers refused, failures with backoff and recovery, access problems without retries, one follow-up run for many
@@ -163,7 +165,7 @@ describe('failures (US4 #5, SC-007, FR-024)', () => {
 		expect(runs(s).some((r) => r.trigger === 'retry' && r.result === 'pushed')).toBe(true);
 	});
 
-	it('GitHub 403 → needs-access, no automatic retry', async () => {
+	it('GitHub 403 → needs-access, no automatic retry; the hourly access check brings it back (T054)', async () => {
 		const s = await setup();
 		await setText(s.main, 'x\n', ctx(s));
 		s.g.failNext(403);
@@ -171,10 +173,16 @@ describe('failures (US4 #5, SC-007, FR-024)', () => {
 		const link = getLink(s.pid)!;
 		expect(link).toMatchObject({ status: 'needs-access', nextAttemptAt: null });
 		const count = s.g.count;
-		tick(Date.now() + 3600_000);
+		tick(Date.now() + 30 * 60_000);
 		await new Promise((r) => setTimeout(r, 100));
 		expect(s.g.count).toBe(count);
 		expect(getStatus(s.pid, s.owner)).toMatchObject({ canSync: false, link: { state: 'needs-access', branchMissing: false } });
+
+		// an hour after the last check: access is checked again, it is fine, the link resumes and catches up
+		tick(Date.now() + 3600_000 + 1000);
+		await waitFor(() => s.g.files(s.thesis, 'main').get('main.tex')?.toString() === 'x\n');
+		await waitFor(() => getLink(s.pid)!.status === 'active');
+		expect(runs(s).at(-1)).toMatchObject({ kind: 'push', trigger: 'retry', result: 'pushed' });
 	});
 
 	it('a deleted branch → needs-access with branchMissing; Create branch makes it on the default branch head and pushes', async () => {
@@ -313,5 +321,110 @@ describe('no tokens in status or logs (SC-006)', () => {
 			expect(out).not.toContain(leaked);
 			expect(out).not.toMatch(TOKEN_RE);
 		}
+	});
+});
+
+describe('pulls continue while pushes fail (T053, FR-016)', () => {
+	it('a failing push with unpushed changes: the open project still gets GitHub commits within pullMs, the retry schedule stays', async () => {
+		process.env.GITHUB_PULL_MS = '300';
+		const s = await setup();
+		const onGitHub = s.g.files(s.thesis, 'main').get('main.tex')!.toString();
+		await setText(s.main, 'waiting to be pushed\n', ctx(s));
+		s.g.failNext(500);
+		expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('failed');
+		const failed = getLink(s.pid)!;
+		expect(failed).toMatchObject({ status: 'failing', failCount: 1 });
+
+		await connect(s.server.url, `project:${s.pid}`, OWNER); // the open pull
+		await waitFor(() => runs(s).some((r) => r.trigger === 'open' && r.result !== 'failed'));
+		s.g.commitFiles(s.thesis, 'main', { 'notes.md': 'from GitHub\n' });
+		await waitFor(() => projectFiles(s.pid).has('notes.md'), 3000);
+
+		const link = getLink(s.pid)!;
+		expect(link).toMatchObject({ status: 'failing', failCount: 1, nextAttemptAt: failed.nextAttemptAt, error: failed.error });
+		expect(hasUnpushed(link)).toBe(true);
+		expect(s.g.files(s.thesis, 'main').get('main.tex')!.toString()).toBe(onGitHub);
+		expect(await getText(s.main)).toBe('waiting to be pushed\n');
+	});
+});
+
+describe('branch protection (T055)', () => {
+	it('a protected branch: one attempt, named plainly, changes kept, pulls continue; lifted → the retry pushes', async () => {
+		const s = await setup();
+		await setText(s.main, 'kept\n', ctx(s));
+		s.g.protect(s.thesis, 'main');
+		const patches = () => s.g.requests.filter((r) => r.method === 'PATCH' && r.path.includes('/git/refs/')).length;
+		const before = patches();
+		const r = await requestSync(s.pid, { kind: 'push', trigger: 'manual' });
+		expect(r).toMatchObject({ result: 'failed', error: protectedBranch('main') });
+		expect(patches() - before).toBe(1); // not retried as a fast-forward race
+		const failed = getLink(s.pid)!;
+		expect(failed).toMatchObject({ status: 'failing', failCount: 1, error: protectedBranch('main') });
+		expect(getStatus(s.pid, s.owner).link).toMatchObject({ state: 'failed', error: protectedBranch('main') });
+		expect(hasUnpushed(failed)).toBe(true);
+
+		s.g.commitFiles(s.thesis, 'main', { 'notes.md': 'pulled anyway\n' });
+		expect((await pull(s, EDITOR)).body).toMatchObject({ result: 'pulled' });
+		expect(projectFiles(s.pid).has('notes.md')).toBe(true);
+		expect(getLink(s.pid)).toMatchObject({ status: 'failing', failCount: 1, nextAttemptAt: failed.nextAttemptAt });
+
+		s.g.protect(s.thesis, 'main', false);
+		s.server.db.update(githubLinks).set({ nextAttemptAt: Date.now() - 1 }).where(eq(githubLinks.projectId, s.pid)).run();
+		tick();
+		await waitFor(() => getLink(s.pid)!.status === 'active');
+		expect(s.g.files(s.thesis, 'main').get('main.tex')!.toString()).toBe('kept\n');
+	});
+});
+
+describe('access comes back (T054, R12)', () => {
+	it('needs-access, a GitHub edit meanwhile, access granted + Check again → active with the base kept: the edit is merged', async () => {
+		const s = await setup();
+		await setText(s.main, 'a\nb\nc\n', ctx(s));
+		expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('pushed');
+		const base = getLink(s.pid)!.baseCommit;
+
+		s.g.setPush('ada', s.thesis, false);
+		s.server.db.update(githubLinks).set({ lastCheckAt: 0 }).where(eq(githubLinks.projectId, s.pid)).run();
+		expect((await requestSync(s.pid, { kind: 'pull', trigger: 'manual' })).result).toBe('failed');
+		expect(getLink(s.pid)!.status).toBe('needs-access');
+		s.g.commitFiles(s.thesis, 'main', { 'main.tex': 'a\nb\nC on GitHub\n' });
+		await setText(s.main, 'A in Overtree\nb\nc\n', ctx(s));
+
+		const recheck = (email: string) => hit(linkRoute.PATCH, ev(email, { pid: s.pid }, json('PATCH', { recheck: true })));
+		expect((await recheck(EDITOR)).status).toBe(403);
+		const still = await recheck(OWNER);
+		expect(still.status).toBe(409);
+		expect(getLink(s.pid)!.status).toBe('needs-access');
+
+		s.g.setPush('ada', s.thesis, true);
+		const res = await recheck(OWNER);
+		expect(res.status).toBe(200);
+		expect(getLink(s.pid)!.baseCommit).toBe(base); // not a first sync
+		await waitFor(() => s.g.files(s.thesis, 'main').get('main.tex')?.toString() === 'A in Overtree\nb\nC on GitHub\n');
+		await waitFor(() => getLink(s.pid)!.status === 'active');
+		expect(await getText(s.main)).toBe('A in Overtree\nb\nC on GitHub\n');
+		expect((await recheck(OWNER)).status).toBe(409); // nothing to check any more
+	});
+});
+
+describe('renamed or transferred repositories (T057)', () => {
+	for (const redirect of [true, false])
+		it(`renamed (${redirect ? '301' : '404'} under the old name) → the next sync follows it and the status shows the new name`, async () => {
+			const s = await setup();
+			s.g.moveRepo(s.thesis, { name: 'dissertation', redirect });
+			await setText(s.main, 'after the rename\n', ctx(s));
+			expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('pushed');
+			expect(s.g.files(s.thesis, 'main').get('main.tex')!.toString()).toBe('after the rename\n');
+			expect(getLink(s.pid)).toMatchObject({ status: 'active', repo: 'ada/dissertation' });
+			expect(getStatus(s.pid, s.owner).link!.repo).toBe('ada/dissertation');
+		});
+
+	it('transferred out of the installation → needs-access (not a missing branch)', async () => {
+		const s = await setup();
+		s.g.moveRepo(s.thesis, { owner: 'elsewhere' });
+		await setText(s.main, 'x\n', ctx(s));
+		expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('failed');
+		expect(getLink(s.pid)).toMatchObject({ status: 'needs-access', nextAttemptAt: null });
+		expect(getStatus(s.pid, s.owner).link).toMatchObject({ state: 'needs-access', branchMissing: false });
 	});
 });

@@ -8,7 +8,7 @@ All routes need a signed-in user (Clerk session or the test bypass) and answer J
 Redirects (302) to GitHub's user authorization URL with a `state` = signed, 10-minute token of `{ userId, return, nonce }` (HMAC with the client secret), also set as an `HttpOnly; SameSite=Lax` cookie. `return` must be a same-origin path.
 
 ### `GET /api/github/callback?code&state[&installation_id&setup_action]`
-Used for both authorization and the App's post-install Setup URL. Checks `state` against the cookie and the signed-in user (403 on mismatch), exchanges `code` for tokens, stores/updates `github_accounts`, redirects to `return` (default `/`). Without `code` (install without OAuth), just redirects to `return`. A link in `needs-reconnect` whose user reconnects is re-checked and becomes `active` (R12).
+Used for both authorization and the App's post-install Setup URL. Checks `state` against the cookie and the signed-in user (403 on mismatch), exchanges `code` for tokens, stores/updates `github_accounts`, redirects to `return` (default `/`). Without `code` (install without OAuth, or GitHub's Setup URL redirect after granting a repository, which carries no state of ours) the state is optional and only picks `return`. Either way the signed-in user's `needs-reconnect` links and `needs-access` links (not a missing branch) are re-checked; back → `active` with the base kept and a catch-up sync (R12).
 
 ### `GET /api/github/account`
 `200 { connected: false, installUrl } | { connected: true, login, avatarUrl, installUrl, manageUrl }`. `installUrl` = `<GITHUB_URL>/apps/<slug>/installations/new`, `manageUrl` = `<GITHUB_URL>/settings/installations`.
@@ -66,7 +66,7 @@ Lists are capped at 500 entries each with a `truncated` flag.
 Body `{ mode: 'merge' | 'import' }`. `merge`: project files win on `overwrite`, `addToProject` files are pulled, then a push (FR-008). `import` (only if `projectEmpty`, else 409): the branch's files become the project (FR-009), base := head. Sets `status: 'active'`, runs synchronously up to 60 s, `200 GitHubStatus`. Failure → link stays `pending` with `error`.
 
 ### `PATCH /api/projects/:pid/github` — owner
-Body `{ ignore?: string[]; branch?: string; confirmOwner?: true; dismissNote?: true }`. `ignore`: ≤ 50 patterns, ≤ 200 chars each. `branch`: as PUT (resets base, `pending`). `confirmOwner`: in `owner-changed`, the new owner takes the link over with their own connection (R12, FR-027); 409 if they have no connection or no access. `200 GitHubStatus`.
+Body `{ ignore?: string[]; branch?: string; confirmOwner?: true; dismissNote?: true; recheck?: true }`. `recheck` ("Check again"): in `needs-access`/`needs-reconnect`, checks the linker's access again; ok → `active` with base, watermark and `pending_push` kept, then a catch-up sync; still refused → 409 with the reason. `ignore`: ≤ 50 patterns, ≤ 200 chars each. `branch`: as PUT (resets base, `pending`). `confirmOwner`: in `owner-changed`, the new owner takes the link over with their own connection (R12, FR-027); 409 if they have no connection or no access. `200 GitHubStatus`.
 
 ### `DELETE /api/projects/:pid/github` — owner
 Unlink (FR-010). `204`. Broadcasts `github`.

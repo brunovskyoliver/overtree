@@ -9,9 +9,9 @@ import { createEntry, getMainFileId, setText } from '../../src/lib/server/files.
 import { getLink } from '../../src/lib/server/github/links.ts';
 import { hasUnpushed, requestSync } from '../../src/lib/server/github/sync.ts';
 import { currentText } from '../../src/lib/server/history.ts';
-import { createProject } from '../../src/lib/server/projects.ts';
+import { createProject, duplicateProject } from '../../src/lib/server/projects.ts';
 import { readBase } from '../../src/lib/server/github/paths.ts';
-import { files as filesTable, githubAccounts, githubRuns, memberships, users, versions } from '../../src/lib/server/schema.ts';
+import { files as filesTable, githubAccounts, githubLinks, githubRuns, memberships, users, versions } from '../../src/lib/server/schema.ts';
 import * as accountRoute from '../../src/routes/api/github/account/+server.ts';
 import * as callbackRoute from '../../src/routes/api/github/callback/+server.ts';
 import * as connectRoute from '../../src/routes/api/github/connect/+server.ts';
@@ -548,6 +548,39 @@ describe('disconnect and access (FR-010, US1 #5–6)', () => {
 		s.g.setPush('ada', s.thesis, true);
 		s.g.revoke('ada');
 		expect(await checkAccess(getLink(s.pid)!)).toBe('needs-reconnect');
+	});
+});
+
+describe('duplicates and returning from GitHub (T054, T058)', () => {
+	it('duplicating a linked project gives an unlinked copy', async () => {
+		const s = await setup();
+		await connectGitHub();
+		await linkThesis(s);
+		await call(confirmRoute.POST as Handler, OWNER, { method: 'POST', params: { pid: s.pid }, body: { mode: 'merge' } });
+		expect(getLink(s.pid)!.status).toBe('active');
+		const copy = await duplicateProject(s.pid, user().id);
+		expect(copy).not.toBe(s.pid);
+		expect(getLink(copy)).toBeNull();
+		expect((await call(linkRoute.GET as Handler, OWNER, { params: { pid: copy } })).body).toMatchObject({ link: null, canManage: true });
+		expect(getLink(s.pid)!.status).toBe('active');
+	});
+
+	it('back from granting access (Setup URL, no code, no state of ours): needs-access links are checked again and resume with their base', async () => {
+		const s = await setup();
+		await connectGitHub();
+		await linkThesis(s);
+		await call(confirmRoute.POST as Handler, OWNER, { method: 'POST', params: { pid: s.pid }, body: { mode: 'merge' } });
+		const base = getLink(s.pid)!.baseCommit;
+		s.g.setPush('ada', s.thesis, false);
+		expect(await checkAccess(getLink(s.pid)!)).toBe('needs-access');
+		getServer().db.update(githubLinks).set({ status: 'needs-access', error: 'GitHub refused access to the linked repository.' }).where(eq(githubLinks.projectId, s.pid)).run();
+		s.g.setPush('ada', s.thesis, true);
+		const res = await raw(callbackRoute.GET as Handler, event(OWNER, { url: `${CALLBACK}?installation_id=1&setup_action=update` }));
+		expect(res.status).toBe(302);
+		expect(res.headers.get('location')).toBe('/');
+		expect(getLink(s.pid)).toMatchObject({ status: 'active', error: null, baseCommit: base });
+		// a code still needs our state
+		expect((await raw(callbackRoute.GET as Handler, event(OWNER, { url: `${CALLBACK}?code=x&installation_id=1` }))).status).toBe(403);
 	});
 });
 

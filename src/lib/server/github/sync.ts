@@ -1,10 +1,10 @@
-import { and, eq, gt, inArray, isNotNull, lte } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { broadcast } from '../access.ts';
 import { getServer } from '../collab.ts';
 import type { Db } from '../db.ts';
 import { flushHistory } from '../history.ts';
 import { githubLinks, githubRuns, historyLog, versions, type GitHubRunTrigger } from '../schema.ts';
-import { checkAccess, type Link } from './accounts.ts';
+import { checkAccess, recheckable, recheckLink, type AccessCheck, type Link } from './accounts.ts';
 import { GitHubError } from './api.ts';
 import { githubConfig } from './config.ts';
 import { pull } from './pull.ts';
@@ -53,7 +53,7 @@ const setLink = (pid: string, set: Partial<Link>) =>
 		.set({ ...set, updatedAt: Date.now() })
 		.where(eq(githubLinks.projectId, pid))
 		.run();
-const syncable = (link: Link | null): link is Link => !!link && (link.status === 'active' || link.status === 'failing');
+const syncable = (link: Link | null | undefined): link is Link => !!link && (link.status === 'active' || link.status === 'failing');
 const serverOpen = () => !!globalThis.__overtreeServer?.db.$client.open;
 
 /** Edits by people (not pulls, which log as the system) since GitHub last got the project, or a pull result that
@@ -142,16 +142,33 @@ const ACCESS_MESSAGES = {
 	'needs-reconnect': 'The GitHub connection of the person who linked this project stopped working. They need to reconnect GitHub.'
 };
 
+/** After a 403/404/redirect: the repository of `link` looked up again by id (checkAccess stores a new `owner/name`).
+ *  `moved`: renamed or transferred and still reachable; `ok`: same name, so the refusal stands (a missing branch);
+ *  `needs-*`: access is gone; null: GitHub couldn't tell. */
+async function lookAgain(link: Link): Promise<AccessCheck | 'moved' | null> {
+	try {
+		const access = await checkAccess(link);
+		return access === 'ok' && getLink(link.projectId)?.repo !== link.repo ? 'moved' : access;
+	} catch {
+		return null;
+	}
+}
+
 /** One run: the access check when due, then the push or pull; the outcome moves the link's status (research R12):
  *  success → `active`; `retry`/`conflict` → `failing` with backoff 1, 2, 4 … 60 min; `needs-*` → that status, no
- *  automatic retry. Links that aren't `active`/`failing` are left alone (`noop`). */
+ *  automatic retry. A `needs-access` failure first looks the repository up by id: renamed or transferred within
+ *  reach, the run goes again once under the new name. Pulls on a `failing` link with unpushed changes leave its push
+ *  backoff as it is (a failed one only updates the reason). Links that aren't `active`/`failing` are left alone
+ *  (`noop`). */
 async function run(pid: string, req: SyncRequest): Promise<SyncResult> {
 	if (!githubConfig() || !serverOpen()) return { result: 'noop' };
 	let link = getLink(pid);
 	if (!syncable(link)) return { result: 'noop' };
 	const startedAt = Date.now();
+	const wasFailing = link.status === 'failing';
 	changed(pid); // `syncing`
 	let result: SyncResult;
+	const work = (l: Link) => (req.kind === 'push' ? push(pid, { title: req.title, trigger: req.trigger, userId: req.userId }) : pull(l));
 	try {
 		if (!link.lastCheckAt || startedAt - link.lastCheckAt >= CHECK_MS) {
 			const access = await checkAccess(link);
@@ -159,11 +176,24 @@ async function run(pid: string, req: SyncRequest): Promise<SyncResult> {
 			link = getLink(pid);
 			if (!syncable(link)) return { result: 'noop' };
 		}
-		result = req.kind === 'push' ? await push(pid, { title: req.title, trigger: req.trigger, userId: req.userId }) : await pull(link);
+		try {
+			result = await work(link);
+		} catch (e) {
+			if (!(e instanceof GitHubError && e.reason === 'needs-access')) throw e;
+			const access = await lookAgain(link);
+			// a repository out of reach also looks like a missing branch (404): name the real reason
+			if (access === 'needs-access' || access === 'needs-reconnect') throw new GitHubError(e.status, access, ACCESS_MESSAGES[access]);
+			if (access !== 'moved') throw e;
+			link = getLink(pid);
+			if (!syncable(link)) return { result: 'noop' };
+			result = await work(link);
+		}
 		const after = getLink(pid);
 		if (!after) return result; // unlinked meanwhile
-		// an ownership transfer meanwhile (`owner-changed`) stays until the new owner takes the link over (FR-027)
-		if (syncable(after)) setLink(pid, { status: 'active', failCount: 0, nextAttemptAt: null, error: null });
+		// an ownership transfer meanwhile (`owner-changed`) stays until the new owner takes the link over (FR-027);
+		// a pull doesn't settle a push that keeps failing (branch protection, T053/T055): its backoff stays
+		const owed = req.kind === 'pull' && after.status === 'failing' && hasUnpushed(after);
+		if (syncable(after) && !owed) setLink(pid, { status: 'active', failCount: 0, nextAttemptAt: null, error: null });
 	} catch (e) {
 		if (!serverOpen() || !getLink(pid)) return { result: 'failed', error: 'The sync stopped.' };
 		// a pull found the branch history rewritten and set the link back to `pending` (T036), or the project changed
@@ -176,7 +206,9 @@ async function run(pid: string, req: SyncRequest): Promise<SyncResult> {
 		}
 		if (!(e instanceof GitHubError)) console.error('GitHub sync failed', e);
 		const err = e instanceof GitHubError ? e : new GitHubError(0, 'retry', 'Overtree could not sync with GitHub; it retries.');
-		if (err.reason === 'retry' || err.reason === 'conflict') {
+		if ((err.reason === 'retry' || err.reason === 'conflict') && wasFailing && req.kind === 'pull' && req.trigger !== 'retry') {
+			setLink(pid, { error: err.message }); // an extra pull while retrying: the retry schedule stays
+		} else if (err.reason === 'retry' || err.reason === 'conflict') {
 			const failCount = (getLink(pid)?.failCount ?? 0) + 1;
 			setLink(pid, { status: 'failing', failCount, nextAttemptAt: Date.now() + backoffMin(failCount) * 60_000, error: err.message });
 		} else setLink(pid, { status: err.reason, nextAttemptAt: null, error: err.message });
@@ -191,6 +223,14 @@ async function run(pid: string, req: SyncRequest): Promise<SyncResult> {
 /** Fire and forget: the run records its own outcome. */
 const later = (pid: string, req: SyncRequest) => void requestSync(pid, req);
 
+/** After a paused link is `active` again (taken over, access re-checked): catches up with what waited (a push pulls
+ *  first). `userId`: the owner who asked (a manual run), else a `retry`. */
+export function catchUp(pid: string, userId?: string) {
+	const link = getLink(pid);
+	if (link?.status !== 'active') return;
+	later(pid, { kind: hasUnpushed(link) ? 'push' : 'pull', trigger: userId ? 'manual' : 'retry', ...(userId ? { userId } : {}) });
+}
+
 /** The number of people (editors and readers) with project `pid` open is now `count` (collab.ts, presence document).
  *  Opening (0 → 1) pulls; the last one leaving starts the grace period before the session-end push; coming back
  *  before it ends cancels it (US2 #1–2, US3 #2). */
@@ -200,7 +240,8 @@ export function presence(pid: string, count: number) {
 	const prev = sessions.get(pid);
 	if (count > 0) {
 		sessions.set(pid, { count, endAt: null });
-		if (!prev?.count && getLink(pid)?.status === 'active') later(pid, { kind: 'pull', trigger: 'open' });
+		// a `failing` link is pulled too: only its pushes wait for the backoff (FR-016)
+		if (!prev?.count && syncable(getLink(pid))) later(pid, { kind: 'pull', trigger: 'open' });
 		return;
 	}
 	if (prev?.count) sessions.set(pid, { count: 0, endAt: Date.now() + c.graceMs });
@@ -215,7 +256,9 @@ const versionSince = (pid: string, at: number) =>
 		.get();
 
 /** One scheduler step: due session ends push (when something is unpushed); open projects push once a long session
- *  has unpushed changes and a closed version, else pull periodically; failing links retry when their time comes. */
+ *  has unpushed changes and a closed version, else pull periodically (`failing` links too, FR-016; their pushes wait
+ *  for the backoff); failing links retry when their time comes; paused links (`needs-access`, `needs-reconnect`)
+ *  have their access checked again hourly and catch up when it is back (R12). */
 export function tick(now = Date.now()) {
 	const c = githubConfig();
 	if (!c) return;
@@ -236,12 +279,14 @@ export function tick(now = Date.now()) {
 			}
 			continue;
 		}
-		if (link?.status !== 'active' || busy(pid)) continue;
+		if (!syncable(link) || busy(pid)) continue;
 		const lastPush = link.lastPushAt ?? 0;
-		if (now - lastPush >= c.longMs && hasUnpushed(link) && versionSince(pid, lastPush)) {
+		// a failed run of a failing link also counts as the last pull attempt (no pull on every tick)
+		const lastPull = link.status === 'failing' ? Math.max(link.lastPullAt ?? 0, link.updatedAt) : (link.lastPullAt ?? 0);
+		if (link.status === 'active' && now - lastPush >= c.longMs && hasUnpushed(link) && versionSince(pid, lastPush)) {
 			later(pid, { kind: 'push', trigger: 'long-session' });
 			handled.add(pid);
-		} else if (now - (link.lastPullAt ?? 0) >= c.pullMs) {
+		} else if (now - lastPull >= c.pullMs) {
 			later(pid, { kind: 'pull', trigger: 'periodic' });
 			handled.add(pid);
 		}
@@ -255,6 +300,23 @@ export function tick(now = Date.now()) {
 		if (handled.has(link.projectId) || busy(link.projectId)) continue;
 		// a push pulls first, so it covers both directions; without local changes a pull is enough
 		later(link.projectId, { kind: hasUnpushed(link) ? 'push' : 'pull', trigger: 'retry' });
+	}
+	const paused = db()
+		.select()
+		.from(githubLinks)
+		.where(
+			and(
+				inArray(githubLinks.status, ['needs-access', 'needs-reconnect']),
+				or(isNull(githubLinks.lastCheckAt), lte(githubLinks.lastCheckAt, now - CHECK_MS))
+			)
+		)
+		.all()
+		.filter(recheckable);
+	for (const link of paused) {
+		setLink(link.projectId, { lastCheckAt: now }); // one attempt per hour, even when GitHub can't be reached
+		recheckLink({ ...link, lastCheckAt: now })
+			.then((status) => status === 'active' && serverOpen() && catchUp(link.projectId))
+			.catch((e) => console.error('GitHub access re-check failed', e));
 	}
 }
 
