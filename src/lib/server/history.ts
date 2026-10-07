@@ -1,10 +1,12 @@
-import { and, asc, desc, eq, gt, max, min, notExists, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, gt, inArray, lt, max, min, notExists, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { FileKind } from '../files.ts';
-import { broadcast } from './access.ts';
+import type { HistoryPage, Label, UserRef, VersionInfo } from '../history-types.ts';
+import { colorFor } from '../presence.ts';
+import { broadcast, projectRole } from './access.ts';
 import { getServer } from './collab.ts';
 import { putBlob, readBlob, type Tx } from './files.ts';
-import { documents, files, historyLog, projects, updates, versions, type VersionKind } from './schema.ts';
+import { documents, files, historyLog, projects, updates, users, versionLabels, versions, type VersionKind } from './schema.ts';
 
 // Project history (research R1–R3, R8): a never-compacted log of Yjs updates and tree changes with their authors,
 // and versions derived from it. Synchronous (better-sqlite3), no in-memory state: a restart loses nothing.
@@ -208,3 +210,105 @@ export function sweep(now = Date.now()) {
 		if (now - open.last >= IDLE_MS || now - open.first >= MAX_OPEN_MS) closeVersion(pid, 'edit');
 	}
 }
+
+// --- reading (contracts/http-api.md "History") -----------------------------------------------------------------------
+
+/** Users by id as history shows them; ids without an account become 'Unknown user'. */
+export function userRefs(ids: Iterable<string>): Map<string, UserRef> {
+	const wanted = [...new Set(ids)];
+	const rows = wanted.length
+		? db().select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl }).from(users).where(inArray(users.id, wanted)).all()
+		: [];
+	const found = new Map(rows.map((u) => [u.id, u]));
+	return new Map(
+		wanted.map((id) => {
+			const u = found.get(id);
+			return [id, { id, name: u?.name ?? 'Unknown user', avatarUrl: u?.avatarUrl ?? null, color: colorFor(id) }];
+		})
+	);
+}
+
+/** Version rows as the API shows them, for `userId` (whose labels they may edit). */
+function versionInfos(pid: string, rows: Version[], userId: string): VersionInfo[] {
+	if (!rows.length) return [];
+	const ids = rows.map((v) => v.id);
+	const labels = db().select().from(versionLabels).where(inArray(versionLabels.versionId, ids)).orderBy(asc(versionLabels.id)).all();
+	const sources = rows.flatMap((v) => (v.restoredFrom ? [v.restoredFrom] : []));
+	const restored = new Map(
+		sources.length
+			? db()
+					.select({ id: versions.id, createdAt: versions.createdAt })
+					.from(versions)
+					.where(inArray(versions.id, sources))
+					.all()
+					.map((v) => [v.id, v])
+			: []
+	);
+	const authors = rows.map((v) => JSON.parse(v.authors) as string[]);
+	const refs = userRefs([...authors.flat(), ...labels.map((l) => l.userId)]);
+	const owner = projectRole(pid, userId) === 'owner';
+	return rows.map((v, i) => ({
+		id: v.id,
+		kind: v.kind,
+		startedAt: v.startedAt,
+		createdAt: v.createdAt,
+		authors: authors[i].map((id) => refs.get(id)!),
+		changed: JSON.parse(v.changed) as Changed[],
+		restoredFrom: v.restoredFrom ? (restored.get(v.restoredFrom) ?? null) : null,
+		labels: labels
+			.filter((l) => l.versionId === v.id)
+			.map(
+				(l): Label => ({
+					id: l.id,
+					versionId: l.versionId,
+					name: l.name,
+					user: refs.get(l.userId)!,
+					createdAt: l.createdAt,
+					canEdit: owner || l.userId === userId
+				})
+			)
+	}));
+}
+
+export const PAGE = 50;
+
+/** Newest first, `limit` versions older than version `before`; `labelsOnly`: only labeled ones. */
+export function listVersions(
+	pid: string,
+	userId: string,
+	{ before, limit = PAGE, labelsOnly = false }: { before?: number; limit?: number; labelsOnly?: boolean } = {}
+): HistoryPage {
+	const n = Math.min(Math.max(Math.trunc(limit) || PAGE, 1), 100);
+	const rows = db()
+		.select()
+		.from(versions)
+		.where(
+			and(
+				eq(versions.projectId, pid),
+				before !== undefined ? lt(versions.id, before) : undefined,
+				labelsOnly
+					? exists(db().select({ one: sql`1` }).from(versionLabels).where(eq(versionLabels.versionId, versions.id)))
+					: undefined
+			)
+		)
+		.orderBy(desc(versions.id))
+		.limit(n + 1)
+		.all();
+	return { versions: versionInfos(pid, rows.slice(0, n), userId), hasMore: rows.length > n };
+}
+
+/** A version row of project `pid`; null for an unknown id or one of another project. */
+export const versionRow = (pid: string, vid: number): Version | null =>
+	(Number.isInteger(vid) && db().select().from(versions).where(and(eq(versions.id, vid), eq(versions.projectId, pid))).get()) || null;
+
+/** The version before `v` in its project, if any. */
+export const previousVersion = (v: Version): Version | null =>
+	db()
+		.select()
+		.from(versions)
+		.where(and(eq(versions.projectId, v.projectId), lt(versions.id, v.id)))
+		.orderBy(desc(versions.id))
+		.limit(1)
+		.get() ?? null;
+
+export const getVersion = (pid: string, v: Version, userId: string): VersionInfo => versionInfos(pid, [v], userId)[0];

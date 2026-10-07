@@ -10,6 +10,7 @@
 	type ProjectTitle = { title: string; onrename?: (title: string) => Promise<string | null> }; // resolves to an error or null
 	// `onshare`: the green "Share" button (editor page) opening the Share dialog
 	// `peers`: the others in the project (avatars, `onjump` goes to their cursor); `offline`: the socket dropped
+	// `history`: the History toggle (008 contracts/ui.md), pressed while the History view is on
 	let {
 		title,
 		right,
@@ -17,7 +18,8 @@
 		onshare,
 		peers = [],
 		onjump,
-		offline = false
+		offline = false,
+		history
 	}: {
 		title?: Snippet;
 		right?: Snippet;
@@ -26,6 +28,7 @@
 		peers?: Peer[];
 		onjump?: (peer: Peer) => void;
 		offline?: boolean;
+		history?: { on: boolean; toggle: () => void };
 	} = $props();
 	const MAX_PEERS = 5;
 
@@ -149,6 +152,12 @@
 		{/if}
 		{#if offline}
 			<span class="offline" role="status">Offline, reconnecting…</span>
+		{/if}
+		{#if history}
+			<button type="button" class="history" aria-pressed={history.on} onclick={history.toggle}>
+				<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" /></svg>
+				History
+			</button>
 		{/if}
 		{#if onshare}
 			<button type="button" class="share" onclick={onshare}>
@@ -306,6 +315,33 @@
 		color: var(--text);
 		font-size: 12px;
 		white-space: nowrap;
+	}
+	.history {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 28px;
+		padding: 0 12px 0 10px;
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		cursor: pointer;
+	}
+	.history:hover {
+		background: var(--panel-raised);
+	}
+	.history[aria-pressed='true'] {
+		border-color: var(--accent-bright);
+		background: var(--panel-raised);
+	}
+	.history svg {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 	.share {
 		display: inline-flex;

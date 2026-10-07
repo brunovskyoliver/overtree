@@ -54,16 +54,16 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Independent Test**: quickstart scenarios 1–2
 
-- [ ] T013 [US1] Create `src/lib/server/history-diff.ts`: replay a doc's log into `new Y.Doc({ gc: false })`, snapshots at two watermarks, `toDelta(snapB, snapA, computeYChange)` with client→user (structs) and deleter (delete sets) maps, segments `{ op, text, userId }`; `fast-diff` fallback for files without a shared id; `diffVersion(pid, vid, compare, userId)` returning `FileDiff[]` with `canRestore` from `fileRoles` (research R4, contracts/http-api.md)
-- [ ] T014 [US1] Add `listVersions(pid, { before, limit, labelsOnly })` and `getVersion` (authors/labels resolved to `UserRef` with `colorFor`, unknown users as "Unknown user") to `src/lib/server/history.ts`
-- [ ] T015 [US1] Routes `src/routes/api/projects/[pid]/history/+server.ts` (GET list, R) and `src/routes/api/projects/[pid]/history/[vid]/+server.ts` (GET diff, R, `compare=current|previous`); vid of another project → 404
-- [ ] T016 [P] [US1] Vitest `tests/unit/history-diff.test.ts`: two users' edits attributed to each (insert and delete), unknown author → null, vs-previous vs vs-current, added/deleted/renamed/binary entries, fallback path
-- [ ] T017 [P] [US1] Extend `tests/unit/routes-guarded.test.ts`: history GET routes 401 signed out, 404 non-member, 200 reader
-- [ ] T018 [US1] Create `src/lib/history.svelte.ts`: paged list (50, `before`), selection, compare mode, refetch on the `history` project event (wire in `src/lib/session.svelte.ts` handlers)
-- [ ] T019 [P] [US1] Create `src/lib/components/HistoryTimeline.svelte` (listbox, day groups, avatars, changed files, compile icon, restore line, label chips placeholder, infinite scroll, ↑/↓/Enter) per contracts/ui.md
-- [ ] T020 [P] [US1] Create `src/lib/components/HistoryDiff.svelte` (changed-files nav, per-file segments with `ins`/`del` colored by author via `lightColor`, collapsed context, legend, binary/added/deleted/renamed rows, compare toggle)
-- [ ] T021 [US1] Create `src/lib/components/HistoryView.svelte` composing timeline + diff; add the History button (`aria-pressed`) to `src/lib/components/TopBar.svelte`; in `src/lib/components/Workspace.svelte` and `src/routes/project/[id]/+page.svelte` show HistoryView over editor+PDF while keeping the editor mounted; Escape closes
-- [ ] T022 [US1] Playwright `tests/e2e/history.spec.ts`: two contexts edit, reader context sees versions with both authors and colored diff; compile creates a compile-point version, second compile without edits doesn't; compare toggle
+- [X] T013 [US1] Create `src/lib/server/history-diff.ts`: replay a doc's log into `new Y.Doc({ gc: false })`, snapshots at two watermarks, `toDelta(snapB, snapA, computeYChange)` with client→user (structs) and deleter (delete sets) maps, segments `{ op, text, userId }`; `fast-diff` fallback for files without a shared id; `diffVersion(pid, vid, compare, userId)` returning `FileDiff[]` with `canRestore` from `fileRoles` (research R4, contracts/http-api.md)
+- [X] T014 [US1] Add `listVersions(pid, { before, limit, labelsOnly })` and `getVersion` (authors/labels resolved to `UserRef` with `colorFor`, unknown users as "Unknown user") to `src/lib/server/history.ts`
+- [X] T015 [US1] Routes `src/routes/api/projects/[pid]/history/+server.ts` (GET list, R) and `src/routes/api/projects/[pid]/history/[vid]/+server.ts` (GET diff, R, `compare=current|previous`); vid of another project → 404
+- [X] T016 [P] [US1] Vitest `tests/unit/history-diff.test.ts`: two users' edits attributed to each (insert and delete), unknown author → null, vs-previous vs vs-current, added/deleted/renamed/binary entries, fallback path
+- [X] T017 [P] [US1] Extend `tests/unit/routes-guarded.test.ts`: history GET routes 401 signed out, 404 non-member, 200 reader
+- [X] T018 [US1] Create `src/lib/history.svelte.ts`: paged list (50, `before`), selection, compare mode, refetch on the `history` project event (wire in `src/lib/session.svelte.ts` handlers)
+- [X] T019 [P] [US1] Create `src/lib/components/HistoryTimeline.svelte` (listbox, day groups, avatars, changed files, compile icon, restore line, label chips placeholder, infinite scroll, ↑/↓/Enter) per contracts/ui.md
+- [X] T020 [P] [US1] Create `src/lib/components/HistoryDiff.svelte` (changed-files nav, per-file segments with `ins`/`del` colored by author via `lightColor`, collapsed context, legend, binary/added/deleted/renamed rows, compare toggle)
+- [X] T021 [US1] Create `src/lib/components/HistoryView.svelte` composing timeline + diff; add the History button (`aria-pressed`) to `src/lib/components/TopBar.svelte`; in `src/lib/components/Workspace.svelte` and `src/routes/project/[id]/+page.svelte` show HistoryView over editor+PDF while keeping the editor mounted; Escape closes
+- [X] T022 [US1] Playwright `tests/e2e/history.spec.ts`: two contexts edit, reader context sees versions with both authors and colored diff; compile creates a compile-point version, second compile without edits doesn't; compare toggle
 
 **Checkpoint**: MVP part 1 — history is browsable
 

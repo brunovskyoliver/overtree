@@ -4,11 +4,13 @@
 	import { page } from '$app/state';
 	import { auth, onSignOut, watchSession } from '#lib/auth.svelte.ts';
 	import Editor from '#lib/components/Editor.svelte';
+	import HistoryView from '#lib/components/HistoryView.svelte';
 	import Outline from '#lib/components/Outline.svelte';
 	import ShareDialog from '#lib/components/ShareDialog.svelte';
 	import TopBar from '#lib/components/TopBar.svelte';
 	import Workspace from '#lib/components/Workspace.svelte';
 	import { CompileState } from '#lib/compile.svelte.ts';
+	import { History } from '#lib/history.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { Project } from '#lib/project.svelte.ts';
 	import { Session, type Peer } from '#lib/session.svelte.ts';
@@ -20,12 +22,14 @@
 	project.loadDetails();
 	project.load();
 	let share = $state<ShareDialog>();
+	const history = new History(project.id);
 	// live project events (research R8); a role change refetches what the role decides (FR-036)
 	const session = new Session(project.id, {
 		access: () => (project.loadDetails(), project.load(), share?.refresh()),
 		tree: () => project.load(),
 		// the main document lives in the files list
-		project: () => (project.loadDetails(), project.load())
+		project: () => (project.loadDetails(), project.load()),
+		history: () => history.refresh()
 	});
 	// the others see who is here and in which file (research R8)
 	$effect(() => session.present(auth.me, project.active));
@@ -112,6 +116,7 @@
 		peers={ended ? [] : session.peers}
 		onjump={jumpTo}
 		offline={!ended && session.offline}
+		history={project.details && !ended ? { on: history.open, toggle: () => history.toggle() } : undefined}
 	/>
 	{#if ended}
 		<!-- contracts/ui.md "Other pages": the project closed under the user (FR-036) -->
@@ -129,12 +134,19 @@
 		</main>
 	{:else}
 		<main>
-			<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
-				<Editor {project} {session} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
-				{#snippet outline()}
-					<Outline {editor} enabled={outlined} />
-				{/snippet}
-			</Workspace>
+			<!-- the History view covers the workspace; the editor stays mounted (hidden, inert) so its providers stay
+			     connected and the tabs come back as they were (008 research R13) -->
+			{#if history.open}
+				<div class="history-layer"><HistoryView {history} /></div>
+			{/if}
+			<div class="work" class:hidden={history.open} inert={history.open}>
+				<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
+					<Editor {project} {session} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
+					{#snippet outline()}
+						<Outline {editor} enabled={outlined} />
+					{/snippet}
+				</Workspace>
+			</div>
 		</main>
 		<ShareDialog bind:this={share} {project} />
 	{/if}
@@ -147,8 +159,20 @@
 		height: 100vh;
 	}
 	main {
+		position: relative;
 		flex: 1;
 		min-height: 0;
+	}
+	.work {
+		height: 100%;
+	}
+	.hidden {
+		visibility: hidden;
+	}
+	.history-layer {
+		position: absolute;
+		inset: 0;
+		z-index: 10;
 	}
 	.noaccess {
 		display: flex;

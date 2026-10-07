@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { lastVersion } from '../../src/lib/server/history.ts';
 import { setLink } from '../../src/lib/server/projects.ts';
+import { memberships } from '../../src/lib/server/schema.ts';
 import { load as shareLoad } from '../../src/routes/share/[token]/+page.server.ts';
 import { hit, project, start, user } from './helpers.ts';
 
@@ -16,7 +18,7 @@ const handlers = Object.entries(routes).flatMap(([file, mod]) =>
 
 const event = (method: string, email: string | null, pid: string) => ({
 	locals: { user: email ? user(email) : null },
-	params: { pid, id: 'x', userId: 'x', email: 'x@test.local' },
+	params: { pid, id: 'x', userId: 'x', email: 'x@test.local', vid: 'x' },
 	request: new Request('http://x/', method === 'GET' ? {} : { method, headers: { 'Content-Type': 'application/json' }, body: '{}' }),
 	url: new URL('http://x/')
 });
@@ -38,6 +40,18 @@ describe('API routes', () => {
 			expect((await hit(fn, event(method, 'stranger@test.local', pid))).status).toBe(name.includes('/admin/') ? 403 : 404);
 		}
 	);
+});
+
+describe('history routes (008)', () => {
+	it.each(handlers.filter((h) => h.method === 'GET' && h.name.includes('/history')))('$name: 200 for a reader', async ({ fn }) => {
+		const { db } = await start();
+		const pid = project();
+		const reader = user('reader@test.local');
+		db.insert(memberships).values({ projectId: pid, userId: reader.id, role: 'reader', viaLink: false, createdAt: Date.now() }).run();
+		const e = event('GET', 'reader@test.local', pid);
+		e.params.vid = String(lastVersion(pid)!.id);
+		expect((await hit(fn, e)).status).toBe(200);
+	});
 });
 
 describe('/share/[token]', () => {

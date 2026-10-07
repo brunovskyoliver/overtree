@@ -7,7 +7,7 @@ Conventions from 005 `contracts/http-api.md`: every route needs a session; `401`
 | Method | Path | Role | Body / query → Response |
 |---|---|---|---|
 | GET | `/history` | R | `?before=<versionId>&limit=50&labels=1` → `{ versions: Version[], hasMore }`, newest first |
-| GET | `/history/:vid` | R | `?compare=current\|previous` (default `current`) → `{ version: Version, files: FileDiff[] }` |
+| GET | `/history/:vid` | R | `?compare=current\|previous` (default `current`) → `{ version: Version, files: FileDiff[], users: UserRef[] }` (`users`: everyone a segment names, for the legend; files sorted by path) |
 | GET | `/history/:vid/zip` | R | zip of the project at that version (`Content-Disposition` attachment) |
 | POST | `/history/:vid/restore` | E | `{ fileId?: string }` — with `fileId`: single file (needs E(file), or E(target folder) if the file no longer exists; 403 otherwise). Without: whole project. → `{ version: Version \| null, skipped: string[] }` (`version` null when nothing changed) |
 | POST | `/history/labels` | E | `{ versionId?: number, name }` — no `versionId`: closes the open version first and labels the newest → 201 `Label` |

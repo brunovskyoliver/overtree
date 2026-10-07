@@ -5,7 +5,7 @@ import { checkBlocked, getToken, type Me } from './auth.svelte.ts';
 // the `project:<pid>` document: its stateless channel carries the server's project events, its awareness who is
 // in the project and in which file (top-bar avatars).
 
-export type ProjectEvent = { type: 'tree' | 'project' | 'access' | 'deleted' };
+export type ProjectEvent = { type: 'tree' | 'project' | 'access' | 'deleted' | 'history' };
 /** Why the project closed under the user: access removed (re-authentication refused) or the project deleted. */
 export type Ended = 'removed' | 'deleted';
 
@@ -19,6 +19,8 @@ export type SessionHandlers = {
 	tree(): void;
 	/** title or main document changed */
 	project(): void;
+	/** a version or label was added (008 research R8) */
+	history?(): void;
 };
 
 export class Session {
