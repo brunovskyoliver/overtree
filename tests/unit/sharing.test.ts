@@ -183,7 +183,7 @@ describe('invites', () => {
 		await start();
 		const pid = project();
 		const { status: s, body } = await hit(membersRoute.POST, ev(OWNER, { pid }, json('POST', { email: ' New@Test.local ', role: 'editor' })));
-		expect([s, body]).toEqual([201, { status: 'invited' }]);
+		expect([s, body]).toEqual([201, { status: 'invited', emailed: false }]);
 		expect(listMembers(pid, true).invites).toEqual([{ email: 'new@test.local', role: 'editor' }]);
 		const n = user('new@test.local');
 		expect(projectRole(pid, n.id)).toBe('editor');
@@ -193,7 +193,8 @@ describe('invites', () => {
 	it('a withdrawn invite gives nothing on sign-up', async () => {
 		const server = await start();
 		const pid = project();
-		expect(inviteMember(pid, 'gone@test.local', 'editor')).toBe('invited');
+		expect(inviteMember(pid, 'gone@test.local', 'editor').status).toBe('invited');
+		expect(inviteMember(pid, 'gone@test.local', 'reader').status).toBe('updated');
 		expect((await hit(inviteRoute.DELETE, ev(OWNER, { pid, email: 'gone@test.local' }))).status).toBe(204);
 		expect((await hit(inviteRoute.DELETE, ev(OWNER, { pid, email: 'gone@test.local' }))).status).toBe(404);
 		const g = user('gone@test.local');
@@ -210,7 +211,7 @@ describe('invites', () => {
 		expect(status(() => inviteMember(pid, 'not-an-email', 'reader'))).toBe(422);
 
 		member(server, pid, B, 'reader');
-		expect(inviteMember(pid, B, 'editor')).toBe('member');
+		expect(inviteMember(pid, B, 'editor').status).toBe('member');
 		expect(projectRole(pid, user(B).id)).toBe('editor');
 		expect(server.db.select().from(memberships).where(eq(memberships.projectId, pid)).all()).toHaveLength(1);
 		expect(server.db.select().from(invites).all()).toEqual([]);

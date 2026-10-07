@@ -24,6 +24,7 @@
 	let email = $state('');
 	let role = $state<Role>('editor');
 	let error = $state('');
+	let notice = $state('');
 	let copied = $state(false);
 	let busy = $state(false);
 
@@ -36,6 +37,7 @@
 
 	export function open() {
 		error = '';
+		notice = '';
 		copied = false;
 		dialog.showModal();
 		isOpen = true;
@@ -54,6 +56,7 @@
 	async function call(path: string, method: string, body?: object) {
 		busy = true;
 		error = '';
+		notice = '';
 		const res = await fetch(project.api(path), {
 			method,
 			headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -71,7 +74,13 @@
 	async function invite(e: SubmitEvent) {
 		e.preventDefault();
 		if (!email.trim()) return void (error = 'Enter an email address.');
-		if (await call('/members', 'POST', { email, role })) email = '';
+		const sent = email.trim();
+		const res = await call('/members', 'POST', { email, role });
+		if (!res) return;
+		email = '';
+		// a new invite to an email without an account: Clerk emails a sign-up link, or the owner passes the site on
+		if (res.status === 'invited')
+			notice = res.emailed ? `Invitation emailed to ${sent}.` : `Couldn't email ${sent}; send them the site link to sign up.`;
 	}
 
 	const setRole = (userId: string, r: Role) => call(`/members/${encodeURIComponent(userId)}`, 'PATCH', { role: r });
@@ -141,6 +150,7 @@
 		</form>
 	{/if}
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
+	{#if notice}<p class="notice" role="status">{notice}</p>{/if}
 
 	<h3 id="people-title">People with access</h3>
 	<ul class="people" aria-labelledby="people-title" bind:this={m.root}>
@@ -348,6 +358,10 @@
 	.error {
 		margin: 8px 0 0;
 		color: #f28b82;
+	}
+	.notice {
+		margin: 8px 0 0;
+		color: var(--text-muted);
 	}
 	.people {
 		margin: 0;

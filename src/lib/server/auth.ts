@@ -55,6 +55,25 @@ async function clerkIdentity(id: string): Promise<Identity> {
 	return { id, email, name: u.fullName, avatarUrl: u.hasImage ? u.imageUrl : null };
 }
 
+/** Have Clerk email `email` an invitation to sign up; its link lands on `/sign-in`, whose widget takes Clerk's ticket.
+ *  False with the test sign-in or when Clerk refuses (e.g. the email already has a Clerk account): the pending invite
+ *  stands either way, so a failed email is logged, not thrown. */
+export async function emailInvitation(email: string, origin: string): Promise<boolean> {
+	if (testAuth()) return false;
+	try {
+		await clerkClient().invitations.createInvitation({
+			emailAddress: email,
+			redirectUrl: new URL('/sign-in', process.env.ORIGIN || origin).href,
+			ignoreExisting: true
+		});
+		return true;
+	} catch (e) {
+		const err = e as { errors?: { code?: string; message?: string }[]; message?: string };
+		console.error('Clerk invitation failed', email, err.errors?.map((x) => x.code ?? x.message).join(', ') ?? err.message);
+		return false;
+	}
+}
+
 function cookie(request: Request, name: string): string | undefined {
 	for (const part of request.headers.get('cookie')?.split(';') ?? []) {
 		const [k, ...v] = part.trim().split('=');

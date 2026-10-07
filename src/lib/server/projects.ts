@@ -254,8 +254,9 @@ export function listMembers(pid: string, forOwner: boolean): Members {
 }
 
 /** Invite by email (owner): an existing account gets the named role on its membership (a link membership keeps
- *  `viaLink`), an unknown email a pending invite (role updated when invited again). 422 for the owner's own email. */
-export function inviteMember(pid: string, email: unknown, role: unknown): 'member' | 'invited' {
+ *  `viaLink`), an unknown email a pending invite ('invited' when new, 'updated' when invited again with a new role).
+ *  422 for the owner's own email. */
+export function inviteMember(pid: string, email: unknown, role: unknown): { status: 'member' | 'invited' | 'updated'; email: string } {
 	const r = memberRole(role);
 	const e = typeof email === 'string' ? email.trim().toLowerCase() : '';
 	if (!EMAIL.test(e)) fail(422, 'Enter an email address.');
@@ -263,6 +264,7 @@ export function inviteMember(pid: string, email: unknown, role: unknown): 'membe
 	const u = db().select().from(users).where(eq(users.email, e)).get();
 	if (u && u.id === p.ownerId) fail(422, 'You already own this project.');
 	const now = Date.now();
+	const pending = !u && !!db().select().from(invites).where(and(eq(invites.projectId, pid), eq(invites.email, e))).get();
 	if (u) {
 		db()
 			.insert(memberships)
@@ -278,7 +280,7 @@ export function inviteMember(pid: string, email: unknown, role: unknown): 'membe
 	}
 	broadcast(pid, { type: 'access' });
 	if (u) kick({ userId: u.id, projectId: pid });
-	return u ? 'member' : 'invited';
+	return { status: u ? 'member' : pending ? 'updated' : 'invited', email: e };
 }
 
 /** Change a collaborator's named role (owner); 404 when they aren't a member. */
