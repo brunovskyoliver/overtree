@@ -106,8 +106,8 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Independent Test**: quickstart scenario 7
 
-- [ ] T034 [US4] In `src/lib/components/PdfViewer.svelte` track `{ page, offset, scale }` on scroll (throttled), restore offset on `pagesinit` with an `XYZ` destination (page clamped), and persist/load `overtree:pdfpos:<projectId>` (pass `projectId` from `src/lib/components/PdfPane.svelte`) (research R11)
-- [ ] T035 [US4] Playwright `tests/e2e/pdf-position.spec.ts`: twenty-pages document, scroll to page 5 mid-page, recompile → same page and offset (±5 %); shrink document → last page; reload → same position
+- [X] T034 [US4] In `src/lib/components/PdfViewer.svelte` track `{ page, offset, scale }` on scroll (throttled), restore offset on `pagesinit` with an `XYZ` destination (page clamped), and persist/load `overtree:pdfpos:<projectId>` (pass `projectId` from `src/lib/components/PdfPane.svelte`) (research R11)
+- [X] T035 [US4] Playwright `tests/e2e/pdf-position.spec.ts`: twenty-pages document, scroll to page 5 mid-page, recompile → same page and offset (±5 %); shrink document → last page; reload → same position
 
 ---
 

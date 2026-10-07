@@ -10,9 +10,12 @@
 		compile,
 		onopenat,
 		onsync,
+		projectId,
 		inert = false
 	}: {
 		compile: CompileState;
+		/** the PDF position is remembered per project (PdfViewer) */
+		projectId?: string;
 		onopenat?: (fileId: string, line: number) => void;
 		/** double-click on the PDF (reverse SyncTeX), see PdfViewer */
 		onsync?: (page: number, x: number, y: number) => void;
@@ -82,7 +85,7 @@
 		<!-- stays mounted (and laid out, so pdf.js can measure) under the logs: closing them shows the PDF at once -->
 		<div class="view" class:covered={logsOpen} inert={logsOpen}>
 			{#if compile.pdfUrl}
-				<PdfViewer url={compile.pdfUrl} {dark} {onsync} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
+				<PdfViewer url={compile.pdfUrl} {dark} {onsync} {projectId} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
 			{:else}
 				<p class="empty">Click Recompile or press Ctrl/⌘+Enter to see your PDF.</p>
 			{/if}

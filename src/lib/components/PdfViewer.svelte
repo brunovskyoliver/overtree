@@ -18,7 +18,8 @@
 		pages = $bindable(0),
 		scale = $bindable('page-width'),
 		percent = $bindable(100),
-		onsync
+		onsync,
+		projectId
 	}: {
 		url: string;
 		dark?: boolean;
@@ -28,20 +29,46 @@
 		percent?: number;
 		/** double-click on a page: the point in PDF points from the page's top-left (reverse SyncTeX) */
 		onsync?: (page: number, x: number, y: number) => void;
+		/** remembers the position per project on this device (FR-025) */
+		projectId?: string;
 	} = $props();
 
 	let container: HTMLDivElement;
 	let viewer = $state<PDFViewer>();
 	let shown: PDFDocumentLoadingTask | undefined; // destroy() lives on the loading task in pdf.js 6
-	let keep = { page: 1, scale: 'page-width' }; // position to restore when the next PDF is laid out
+	// Where the reader is (research R11): the page at the top edge of the pane, how far down it the edge is (0–1) and
+	// the zoom. `keep` is restored when the next PDF is laid out; `pos` follows scrolling, also in localStorage.
+	type Pos = { page: number; offset: number; scale: string };
+	// svelte-ignore state_referenced_locally (PdfPane is under the project page, which is keyed on the project)
+	const posKey = projectId && `overtree:pdfpos:${projectId}`;
+	let keep: Pos = { page: 1, offset: 0, scale: 'page-width', ...stored() };
+	let pos = keep;
+	let trackNow = () => {};
+	let restoring = true; // between a setDocument and its pagesinit the scroll position means nothing
+
+	function stored(): Partial<Pos> | undefined {
+		try {
+			const p = posKey && JSON.parse(localStorage.getItem(posKey) ?? 'null');
+			if (p && Number.isInteger(p.page) && typeof p.offset === 'number' && typeof p.scale === 'string') return p;
+		} catch {
+			// unreadable storage: from the top
+		}
+	}
 
 	onMount(() => {
 		const eventBus = new EventBus();
 		const v = new PDFViewer({ container, eventBus });
-		// a new PDF keeps the zoom and the page, clamped to its length (FR-019)
+		// a new PDF keeps the zoom, the page and the offset in it; past its end, the last page (FR-019, FR-025)
 		eventBus.on('pagesinit', () => {
 			v.currentScaleValue = keep.scale;
-			v.currentPageNumber = Math.min(Math.max(keep.page, 1), v.pagesCount);
+			const n = Math.min(Math.max(keep.page, 1), v.pagesCount);
+			const view = v.getPageView(n - 1);
+			if (n === keep.page && keep.offset > 0 && view) {
+				const [, y0, , y1] = view.viewport.viewBox;
+				v.scrollPageIntoView({ pageNumber: n, destArray: [null, { name: 'XYZ' }, null, y1 - keep.offset * (y1 - y0), null] });
+			} else v.currentPageNumber = n;
+			restoring = false;
+			track();
 			pages = v.pagesCount;
 			page = v.currentPageNumber; // no pagechanging when the clamped page is the reset one
 		});
@@ -49,7 +76,31 @@
 		eventBus.on('scalechanging', (e: { scale: number }) => {
 			scale = v.currentScaleValue;
 			percent = Math.round(e.scale * 100);
+			later();
 		});
+
+		const track = () => {
+			clearTimeout(timer);
+			timer = undefined;
+			if (restoring || !v.pagesCount) return;
+			const top = container.getBoundingClientRect().top;
+			for (let i = 0; i < v.pagesCount; i++) {
+				const div = v.getPageView(i)?.div;
+				const r = div?.getBoundingClientRect();
+				if (!div || !r || r.bottom <= top) continue;
+				// in the gap above a page: its top
+				const offset = Math.min(Math.max((top - r.top - div.clientTop) / div.clientHeight, 0), 1);
+				pos = { page: i + 1, offset, scale: v.currentScaleValue };
+				if (posKey) localStorage.setItem(posKey, JSON.stringify(pos));
+				return;
+			}
+		};
+		trackNow = track;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const later = () => (timer ??= setTimeout(track, 150));
+		container.addEventListener('scroll', later, { passive: true });
+		// a reload right after a scroll: save now
+		addEventListener('pagehide', track);
 		// fit modes follow the pane size
 		const resize = new ResizeObserver(() => FITS.includes(v.currentScaleValue) && (v.currentScaleValue = v.currentScaleValue));
 		resize.observe(container);
@@ -102,6 +153,9 @@
 		container.addEventListener('gesturechange', onGestureChange);
 		viewer = v;
 		return () => {
+			container.removeEventListener('scroll', later);
+			removeEventListener('pagehide', track);
+			clearTimeout(timer);
 			container.removeEventListener('dblclick', onDblClick);
 			container.removeEventListener('wheel', onWheel);
 			container.removeEventListener('gesturestart', onGestureStart);
@@ -171,7 +225,9 @@
 				if (stale) return void task.destroy();
 				const old = shown;
 				shown = task;
-				keep = { page, scale };
+				trackNow(); // a scroll in the last 150 ms
+				keep = pos;
+				restoring = true;
 				v.setDocument(doc);
 				void old?.destroy();
 			},

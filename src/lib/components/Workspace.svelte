@@ -124,7 +124,7 @@
 		onExpand={() => (pdfOpen = true)}
 	>
 		<!-- inert while collapsed, like the sidebar -->
-		<PdfPane bind:this={pdfPane} {compile} {onopenat} onsync={reverse} inert={!pdfOpen} />
+		<PdfPane bind:this={pdfPane} {compile} projectId={project.id} {onopenat} onsync={reverse} inert={!pdfOpen} />
 	</Pane>
 </PaneGroup>
 
