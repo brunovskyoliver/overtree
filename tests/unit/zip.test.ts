@@ -4,11 +4,13 @@ import { strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it, vi } from 'vitest';
 import { pathOf } from '../../src/lib/files.ts';
 import { collectProject } from '../../src/lib/server/compile.ts';
-import { createEntry, getMainFileId, listFiles } from '../../src/lib/server/files.ts';
-import { projects } from '../../src/lib/server/schema.ts';
-import { exportZip, importZipAsProject } from '../../src/lib/server/zip.ts';
+import { createEntry, deleteEntry, getMainFileId, listFiles, setText, uploadFile } from '../../src/lib/server/files.ts';
+import { closeVersion, lastVersion, readManifest } from '../../src/lib/server/history.ts';
+import { memberships, projects } from '../../src/lib/server/schema.ts';
+import { exportZip, importZipAsProject, manifestZip } from '../../src/lib/server/zip.ts';
+import * as versionZip from '../../src/routes/api/projects/[pid]/history/[vid]/zip/+server.ts';
 import { readTree, zips } from '../fixtures/projects/zips.ts';
-import { start, status, user } from './helpers.ts';
+import { ev, start, status, user } from './helpers.ts';
 
 // Project zip export/import (research R7, SC-003, SC-007; 005: import creates a project). Each test gets a fresh data dir.
 
@@ -98,5 +100,44 @@ describe('project zip', () => {
 		const pid = importZip(zipSync({ 'main.tex': strToU8('ok'), 'latin.tex': new Uint8Array([0x63, 0x61, 0x66, 0xe9]) }));
 		expect(listFiles(pid).find((f) => f.name === 'latin.tex')).toMatchObject({ kind: 'binary', size: 4 });
 		expect(listFiles(pid).find((f) => f.name === 'main.tex')!.kind).toBe('text');
+	});
+});
+
+describe('version zip (US6, research R7)', () => {
+	it('holds every file of that version byte for byte, empty folders too, whatever changed since', async () => {
+		const server = await start();
+		const o = user().id;
+		const pid = importZip(zips.roundtrip());
+		createEntry(pid, { kind: 'folder', name: 'empty', parentId: null }, o);
+		const v = closeVersion(pid, 'edit')!;
+		const before = paths(pid);
+
+		const all = listFiles(pid);
+		const byName = (name: string) => all.find((f) => f.name === name)!;
+		await setText(byName('main.tex').id, 'changed\n', { userId: o, projectId: pid });
+		await uploadFile(pid, byName('figures').id, 'dot.png', new Uint8Array([9, 9, 9]), true, o);
+		deleteEntry(pid, byName('chapters').id, o);
+		deleteEntry(pid, byName('empty').id, o);
+		closeVersion(pid, 'edit');
+		expect(lastVersion(pid)!.id).not.toBe(v.id);
+
+		const unzipped = unzipSync(manifestZip(readManifest(v.manifestHash)));
+		expect(Object.keys(unzipped).sort()).toEqual(before);
+		expect(unzipped['empty/']).toEqual(new Uint8Array());
+		const files = Object.fromEntries(Object.entries(unzipped).filter(([p]) => !p.endsWith('/')));
+		expect(files).toEqual(MULTI);
+
+		// through the route: a reader downloads it, a stranger doesn't see the project
+		const reader = user('reader@test.local');
+		server.db
+			.insert(memberships)
+			.values({ projectId: pid, userId: reader.id, role: 'reader', viaLink: false, createdAt: Date.now() })
+			.run();
+		const res = await versionZip.GET(ev('reader@test.local', { pid, vid: String(v.id) }) as never);
+		expect(res.status).toBe(200);
+		expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename\*=UTF-8''Imported-\d{4}-\d\d-\d\d%20\d\d-\d\d\.zip$/);
+		expect(unzipSync(new Uint8Array(await res.arrayBuffer()))).toEqual(unzipped);
+		expect(status(() => versionZip.GET(ev('stranger@test.local', { pid, vid: String(v.id) }) as never))).toBe(404);
+		expect(status(() => versionZip.GET(ev('reader@test.local', { pid, vid: '99999' }) as never))).toBe(404);
 	});
 });

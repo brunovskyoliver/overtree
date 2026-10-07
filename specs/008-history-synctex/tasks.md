@@ -130,9 +130,9 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Independent Test**: quickstart scenario 9
 
-- [ ] T040 [US6] Add `manifestZip(manifest)` to `src/lib/server/zip.ts` (folders, text and binary from blobs; shared `zipSync` path with `exportZip`) and route `src/routes/api/projects/[pid]/history/[vid]/zip/+server.ts` (R; `Content-Disposition` with `attrChars`)
-- [ ] T041 [P] [US6] Vitest in `tests/unit/zip.test.ts`: version zip byte-identical per file to that version (text + binary + empty folder); non-member 404; reader 200
-- [ ] T042 [US6] "Download zip" link in `src/lib/components/HistoryDiff.svelte` and a Playwright check in `tests/e2e/history.spec.ts` (download event, unzip, compare one file)
+- [X] T040 [US6] Add `manifestZip(manifest)` to `src/lib/server/zip.ts` (folders, text and binary from blobs; shared `zipSync` path with `exportZip`) and route `src/routes/api/projects/[pid]/history/[vid]/zip/+server.ts` (R; `Content-Disposition` with `attrChars`)
+- [X] T041 [P] [US6] Vitest in `tests/unit/zip.test.ts`: version zip byte-identical per file to that version (text + binary + empty folder); non-member 404; reader 200
+- [X] T042 [US6] "Download zip" link in `src/lib/components/HistoryDiff.svelte` and a Playwright check in `tests/e2e/history.spec.ts` (download event, unzip, compare one file)
 
 ---
 

@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { expect, type Browser, type Page } from '@playwright/test';
+import { strFromU8, unzipSync } from 'fflate';
 import type { HistoryPage } from '../../src/lib/history-types.ts';
 import { colorFor, lightColor } from '../../src/lib/presence.ts';
-import { allow, api, openEditor, projectPath, signInAs, test, USER } from './helpers.ts';
+import { allow, api, openEditor, projectPath, signInAs, test, text, USER } from './helpers.ts';
 
 // US1 "Browse history and compare" (quickstart scenarios 1–2). The test server closes versions after 1.5 s idle
 // (playwright.config.ts), so each burst of typing becomes its own version within a few seconds.
@@ -213,4 +215,23 @@ test('labels: an editor names versions, they survive a reload, a reader gets no 
 	await expect(options).toHaveCount(1);
 	await expect(roptions.nth(1)).not.toContainText('Draft A'); // the reader's open panel follows
 	await reader.context().close();
+});
+
+test('download zip: the project as it was at the selected version (scenario 9)', async ({ page, pid }) => {
+	await openEditor(page, pid);
+	const original = await text(page);
+	await insert(page, 'end', '% after the start\n');
+	await versionBy(page, pid, USER, 2);
+
+	await page.getByRole('button', { name: 'History' }).click();
+	const view = page.getByRole('region', { name: 'History' });
+	await view.getByRole('listbox', { name: 'Versions' }).getByRole('option').nth(1).click();
+	const [download] = await Promise.all([
+		page.waitForEvent('download'),
+		view.getByRole('region', { name: 'Diff' }).getByRole('link', { name: 'Download zip' }).click()
+	]);
+	expect(download.suggestedFilename()).toMatch(/^Untitled project-\d{4}-\d\d-\d\d \d\d-\d\d\.zip$/);
+	const entries = unzipSync(readFileSync(await download.path()));
+	expect(Object.keys(entries)).toEqual(['main.tex']);
+	expect(strFromU8(entries['main.tex'])).toBe(original); // the baseline, without the later edit
 });

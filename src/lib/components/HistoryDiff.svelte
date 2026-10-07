@@ -136,10 +136,13 @@
 			<button type="button" aria-pressed={history.compare === 'current'} onclick={() => history.setCompare('current')}>Compare with current</button>
 			<button type="button" aria-pressed={history.compare === 'previous'} onclick={() => history.setCompare('previous')}>Changes in this version</button>
 		</div>
-		{#if canEdit && diff}
+		{#if diff}
 			<div class="actions">
-				<button type="button" class="action" onclick={labelVersion}>Label…</button>
-				<button type="button" class="action" disabled={history.restoring} onclick={restoreProject}>Restore project</button>
+				<a class="action" href={history.zipUrl(diff.version.id)} download>Download zip</a>
+				{#if canEdit}
+					<button type="button" class="action" onclick={labelVersion}>Label…</button>
+					<button type="button" class="action" disabled={history.restoring} onclick={restoreProject}>Restore project</button>
+				{/if}
 			</div>
 		{/if}
 	</header>
@@ -353,6 +356,8 @@
 		gap: 8px;
 	}
 	.action {
+		display: inline-flex;
+		align-items: center;
 		height: 26px;
 		padding: 0 12px;
 		border: 1px solid var(--border);
@@ -361,6 +366,7 @@
 		color: var(--text);
 		font: inherit;
 		font-size: 13px;
+		text-decoration: none;
 		white-space: nowrap;
 		cursor: pointer;
 	}

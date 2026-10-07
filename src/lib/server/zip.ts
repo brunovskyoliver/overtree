@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { strFromU8, Unzip, UnzipInflate, zipSync, type Zippable } from 'fflate';
 import { kindForName, limits, pathOf, validateName } from '../files.ts';
 import { collectProject } from './compile.ts';
-import { FileError, listFiles, putBlob, type Row } from './files.ts';
+import { FileError, listFiles, putBlob, readBlob, type Row } from './files.ts';
+import { manifestPaths, type Manifest } from './history.ts';
 import { insertProject } from './projects.ts';
 
 // Project zip export and import (research R7).
@@ -16,9 +17,22 @@ export async function exportZip(pid: string): Promise<Uint8Array> {
 	const entries: Zippable = {};
 	for (const f of all) if (f.kind === 'folder') entries[`${pathOf(f.id, all)}/`] = new Uint8Array();
 	for (const { path, data } of (await collectProject(pid)).files) entries[path] = data;
-	// ponytail: built in memory and blocks the event loop while compressing; the streaming `Zip` once projects grow
-	return zipSync(entries, { level: 6 });
+	return zip(entries);
 }
+
+/** The project at a version (research R7): every folder as a `dir/` entry, texts and binaries from their blobs. */
+export function manifestZip(manifest: Manifest): Uint8Array {
+	const paths = manifestPaths(manifest.entries);
+	const entries: Zippable = {};
+	for (const e of manifest.entries) {
+		const path = paths.get(e.id)!;
+		entries[e.kind === 'folder' ? `${path}/` : path] = e.hash ? readBlob(e.hash) : new Uint8Array();
+	}
+	return zip(entries);
+}
+
+// ponytail: built in memory and blocks the event loop while compressing; the streaming `Zip` once projects grow
+const zip = (entries: Zippable) => zipSync(entries, { level: 6 });
 
 /** Names the central directory marks as Unix symlinks; fflate's reader doesn't expose external attributes.
  *  Throws (RangeError or FileError) when there is no readable central directory: not a zip. */

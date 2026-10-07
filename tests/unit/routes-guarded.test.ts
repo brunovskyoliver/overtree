@@ -43,6 +43,8 @@ describe('API routes', () => {
 });
 
 describe('history routes (008)', () => {
+	it('include the version zip', () => expect(handlers.map((h) => h.name)).toContain('GET /api/projects/[pid]/history/[vid]/zip'));
+
 	it.each(handlers.filter((h) => h.method === 'GET' && h.name.includes('/history')))('$name: 200 for a reader', async ({ fn }) => {
 		const { db } = await start();
 		const pid = project();

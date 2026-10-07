@@ -38,6 +38,9 @@ export class History {
 		return `/api/projects/${this.#pid}/history${path}`;
 	}
 
+	/** The project at version `id` as a zip (US6). */
+	zipUrl = (id: number) => this.#url(`/${id}/zip`);
+
 	toggle() {
 		if (this.open) this.close();
 		else {
