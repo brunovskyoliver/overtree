@@ -57,7 +57,7 @@ One feature covering sign-in, site roles, per-user project spaces, sharing with 
 
 | # | Feature | Status | Depends on |
 |---|---------|--------|------------|
-| 008 | Project history, restore, SyncTeX & PDF navigation | in progress | 005 |
+| 008 | Project history, restore, SyncTeX & PDF navigation | done | 005 |
 | 009 | *(merged into 008)* | — | — |
 | 010 | Comments & chat | todo | 005 |
 | 011 | Self-hosting hardening | todo | 005 |
