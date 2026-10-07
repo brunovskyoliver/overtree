@@ -73,3 +73,4 @@ Updated: 2026-10-07
 - main fast-forwarded to 012; deployed to the AI VM. Backup first: `~/overtree-backups/data-20261007-152116-pre012.tgz` on the VM.
 - First build crashed at startup (Dockerfile didn't copy `src/lib/github-types.ts`); site down a few minutes; fixed in the next commit and redeployed. Site 200, migration 0005 applied.
 - GitHub sync is deployed but hidden until the GitHub App env vars are set on the VM.
+- GitHub App `brunovsky-s-overtree` (id 5225774) configured on the VM: `GITHUB_APP_*` in `~/overtree/.env` (backup `.env.bak-pre-github`), client secret also in keychain as agent-secret `overtree/github-app-client-secret`. `GET /app` with the App JWT: 200, contents:write, metadata:read, 0 installations. OAuth round trip (client secret) not yet exercised.
