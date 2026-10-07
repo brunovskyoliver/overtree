@@ -117,10 +117,10 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Independent Test**: quickstart scenario 8
 
-- [ ] T036 [US5] In `src/lib/server/history.ts` add `addLabel` (E; no versionId → close open version then label newest), `renameLabel`/`deleteLabel` (author or owner), validation 1–100 chars, broadcast `history`; routes `src/routes/api/projects/[pid]/history/labels/+server.ts` and `history/labels/[lid]/+server.ts`
-- [ ] T037 [P] [US5] Vitest in `tests/unit/history.test.ts` (labels block): reader 403 on add, other editor 403 on rename/delete, author and owner allowed, label-current creates a version when edits are open, labels-only filter
-- [ ] T038 [US5] UI: "Label…" in the diff header and "Label current version" in the timeline header (E), label chips with rename/delete menu when `canEdit`, "Labels only" toggle in `src/lib/components/HistoryTimeline.svelte` / `HistoryDiff.svelte`
-- [ ] T039 [US5] Playwright `tests/e2e/history.spec.ts` (labels block): editor labels, reload shows it, reader sees no menu, labels-only filter
+- [X] T036 [US5] In `src/lib/server/history.ts` add `addLabel` (E; no versionId → close open version then label newest), `renameLabel`/`deleteLabel` (author or owner), validation 1–100 chars, broadcast `history`; routes `src/routes/api/projects/[pid]/history/labels/+server.ts` and `history/labels/[lid]/+server.ts`
+- [X] T037 [P] [US5] Vitest in `tests/unit/history.test.ts` (labels block): reader 403 on add, other editor 403 on rename/delete, author and owner allowed, label-current creates a version when edits are open, labels-only filter
+- [X] T038 [US5] UI: "Label…" in the diff header and "Label current version" in the timeline header (E), label chips with rename/delete menu when `canEdit`, "Labels only" toggle in `src/lib/components/HistoryTimeline.svelte` / `HistoryDiff.svelte`
+- [X] T039 [US5] Playwright `tests/e2e/history.spec.ts` (labels block): editor labels, reload shows it, reader sees no menu, labels-only filter
 
 ---
 

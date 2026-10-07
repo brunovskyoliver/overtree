@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lastVersion } from '../../src/lib/server/history.ts';
 import { setLink } from '../../src/lib/server/projects.ts';
-import { memberships } from '../../src/lib/server/schema.ts';
+import { memberships, versionLabels } from '../../src/lib/server/schema.ts';
 import { load as shareLoad } from '../../src/routes/share/[token]/+page.server.ts';
 import { hit, project, start, user } from './helpers.ts';
 
@@ -18,7 +18,7 @@ const handlers = Object.entries(routes).flatMap(([file, mod]) =>
 
 const event = (method: string, email: string | null, pid: string) => ({
 	locals: { user: email ? user(email) : null },
-	params: { pid, id: 'x', userId: 'x', email: 'x@test.local', vid: 'x' },
+	params: { pid, id: 'x', userId: 'x', email: 'x@test.local', vid: 'x', lid: 'x' },
 	request: new Request('http://x/', method === 'GET' ? {} : { method, headers: { 'Content-Type': 'application/json' }, body: '{}' }),
 	url: new URL('http://x/')
 });
@@ -51,6 +51,34 @@ describe('history routes (008)', () => {
 		const e = event('GET', 'reader@test.local', pid);
 		e.params.vid = String(lastVersion(pid)!.id);
 		expect((await hit(fn, e)).status).toBe(200);
+	});
+});
+
+describe('label routes (008)', () => {
+	const labels = handlers.filter((h) => h.name.includes('/history/labels'));
+	it('finds them', () =>
+		expect(labels.map((h) => h.name).sort()).toEqual([
+			'DELETE /api/projects/[pid]/history/labels/[lid]',
+			'PATCH /api/projects/[pid]/history/labels/[lid]',
+			'POST /api/projects/[pid]/history/labels'
+		]));
+
+	// a reader neither adds nor changes labels (the label routes check authorship past the project guard)
+	it.each(labels)('$name: 403 for a reader', async ({ method, fn }) => {
+		const { db } = await start();
+		const pid = project();
+		const v = lastVersion(pid)!;
+		const label = db
+			.insert(versionLabels)
+			.values({ projectId: pid, versionId: v.id, name: 'x', userId: user().id, createdAt: 1 })
+			.returning()
+			.get();
+		const reader = user('reader@test.local');
+		db.insert(memberships).values({ projectId: pid, userId: reader.id, role: 'reader', viaLink: false, createdAt: Date.now() }).run();
+		const e = event(method, 'reader@test.local', pid);
+		e.params.lid = String(label.id);
+		e.request = new Request('http://x/', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'y' }) });
+		expect((await hit(fn, e)).status).toBe(403);
 	});
 });
 

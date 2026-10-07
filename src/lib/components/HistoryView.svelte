@@ -26,7 +26,7 @@
 
 <section class="history" aria-label="History" bind:this={section}>
 	<HistoryDiff bind:this={diff} {history} {canEdit} />
-	<HistoryTimeline {history} onopen={() => diff?.focus()} />
+	<HistoryTimeline {history} {canEdit} onopen={() => diff?.focus()} />
 </section>
 
 <style>

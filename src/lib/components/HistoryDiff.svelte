@@ -5,6 +5,7 @@
 	import { lightColor } from '#lib/presence.ts';
 	import Avatar from './Avatar.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import LabelDialog from './LabelDialog.svelte';
 
 	// contracts/ui.md "Changed files" + "Diff": the selected version against the current state or the version
 	// before it. Insertions on the author's color at 20 %, deletions struck through in it (research R13); unchanged
@@ -12,6 +13,7 @@
 	// `canEdit`: the project role allows restoring (per-file rights come with each file's `canRestore`)
 	let { history, canEdit }: { history: History; canEdit: boolean } = $props();
 	let confirm = $state<ConfirmDialog>();
+	let namer = $state<LabelDialog>();
 	const CONTEXT = 3;
 	const NEUTRAL = '#9aa1ad'; // changes without a known author
 
@@ -91,6 +93,16 @@
 		if (ok) await history.restore();
 	}
 
+	function labelVersion() {
+		if (!diff) return;
+		const { id, createdAt } = diff.version;
+		namer?.ask({
+			title: `Label the version of ${dateTime(createdAt)}`,
+			confirmLabel: 'Add label',
+			save: (name) => history.addLabel(name, id)
+		});
+	}
+
 	function jump(f: FileDiff) {
 		document.getElementById(fileAnchor(f))?.scrollIntoView({ block: 'start' });
 	}
@@ -125,7 +137,10 @@
 			<button type="button" aria-pressed={history.compare === 'previous'} onclick={() => history.setCompare('previous')}>Changes in this version</button>
 		</div>
 		{#if canEdit && diff}
-			<button type="button" class="action" disabled={history.restoring} onclick={restoreProject}>Restore project</button>
+			<div class="actions">
+				<button type="button" class="action" onclick={labelVersion}>Label…</button>
+				<button type="button" class="action" disabled={history.restoring} onclick={restoreProject}>Restore project</button>
+			</div>
 		{/if}
 	</header>
 	{#if history.restoreNote}
@@ -191,6 +206,7 @@
 </section>
 
 <ConfirmDialog bind:this={confirm} />
+<LabelDialog bind:this={namer} />
 
 <style>
 	.files {
@@ -331,6 +347,10 @@
 	}
 	.toggle button:focus-visible {
 		outline-offset: -2px;
+	}
+	.actions {
+		display: flex;
+		gap: 8px;
 	}
 	.action {
 		height: 26px;

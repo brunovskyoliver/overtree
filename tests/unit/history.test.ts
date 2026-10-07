@@ -7,6 +7,7 @@ import {
 	closeVersion,
 	IDLE_MS,
 	lastVersion,
+	listVersions,
 	manifestPaths,
 	MAX_OPEN_MS,
 	readManifest,
@@ -15,7 +16,9 @@ import {
 } from '../../src/lib/server/history.ts';
 import { deleteProject } from '../../src/lib/server/projects.ts';
 import { historyLog, memberships, versionLabels, versions } from '../../src/lib/server/schema.ts';
-import { connect, OWNER, project, start, tempDir, user, waitFor, type Started } from './helpers.ts';
+import * as labelsRoute from '../../src/routes/api/projects/[pid]/history/labels/+server.ts';
+import * as labelRoute from '../../src/routes/api/projects/[pid]/history/labels/[lid]/+server.ts';
+import { connect, ev, hit, json, OWNER, project, start, tempDir, user, waitFor, type Started } from './helpers.ts';
 
 // History log, versions and manifests (008 Phase 2, research R1–R3).
 
@@ -206,5 +209,101 @@ describe('versions', () => {
 		for (const t of [historyLog, versions, versionLabels])
 			expect(server.db.select().from(t).where(eq(t.projectId, pid)).all()).toEqual([]);
 		expect(server.db.select().from(versions).where(and(eq(versions.projectId, keep), eq(versions.kind, 'baseline'))).all()).toHaveLength(1);
+	});
+});
+
+describe('labels (US5, research R6)', () => {
+	const R = 'r@test.local';
+	const C = 'c@test.local';
+	async function setupLabels() {
+		const s = await setup();
+		for (const [email, role] of [
+			[R, 'reader'],
+			[C, 'editor']
+		] as const)
+			s.server.db
+				.insert(memberships)
+				.values({ projectId: s.pid, userId: user(email).id, role, viaLink: false, createdAt: Date.now() })
+				.run();
+		return s;
+	}
+	const add = (pid: string, email: string, body: object) => hit(labelsRoute.POST, ev(email, { pid }, json('POST', body)));
+	const rename = (pid: string, lid: number, email: string, name: unknown) =>
+		hit(labelRoute.PATCH, ev(email, { pid, lid: String(lid) }, json('PATCH', { name })));
+	const remove = (pid: string, lid: number, email: string) => hit(labelRoute.DELETE, ev(email, { pid, lid: String(lid) }));
+
+	it('editors add, readers can’t; names are trimmed and 1–100 characters', async () => {
+		const { pid } = await setupLabels();
+		const v = lastVersion(pid)!;
+		expect((await add(pid, R, { versionId: v.id, name: 'Draft' })).status).toBe(403);
+		const res = await add(pid, B, { versionId: v.id, name: '  Draft 1  ' });
+		expect(res).toMatchObject({ status: 201, body: { versionId: v.id, name: 'Draft 1', user: { id: user(B).id }, canEdit: true } });
+		expect((await add(pid, B, { versionId: v.id, name: '   ' })).status).toBe(400);
+		expect((await add(pid, B, { versionId: v.id, name: 'x'.repeat(101) })).status).toBe(400);
+		expect((await add(pid, B, { versionId: v.id, name: 'x'.repeat(100) })).status).toBe(201);
+		expect((await add(pid, B, { versionId: 'one', name: 'x' })).status).toBe(400);
+		expect((await add(pid, B, { versionId: 99999, name: 'x' })).status).toBe(404);
+		// a version of another project
+		const other = project(OWNER, 'Other');
+		expect((await add(pid, OWNER, { versionId: lastVersion(other)!.id, name: 'x' })).status).toBe(404);
+	});
+
+	it('only the author or the owner renames and deletes; canEdit says so', async () => {
+		const { pid } = await setupLabels();
+		const v = lastVersion(pid)!;
+		const { body: label } = await add(pid, B, { versionId: v.id, name: 'Submitted' });
+		expect((await rename(pid, label.id, C, 'Mine now')).status).toBe(403);
+		expect((await remove(pid, label.id, C)).status).toBe(403);
+		expect((await rename(pid, label.id, R, 'Mine now')).status).toBe(403);
+		expect(listVersions(pid, user(C).id).versions[0].labels).toMatchObject([{ name: 'Submitted', canEdit: false }]);
+		expect(listVersions(pid, user().id).versions[0].labels).toMatchObject([{ name: 'Submitted', canEdit: true }]);
+
+		expect(await rename(pid, label.id, B, ' Final ')).toMatchObject({ status: 200, body: { id: label.id, name: 'Final' } });
+		expect((await rename(pid, label.id, B, '')).status).toBe(400);
+		expect(await rename(pid, label.id, OWNER, 'Final 2')).toMatchObject({ status: 200, body: { name: 'Final 2', canEdit: true } });
+		expect((await remove(pid, label.id, OWNER)).status).toBe(204);
+		expect((await remove(pid, label.id, OWNER)).status).toBe(404);
+
+		const { body: second } = await add(pid, B, { versionId: v.id, name: 'Again' });
+		expect((await remove(pid, second.id, B)).status).toBe(204);
+		expect(listVersions(pid, user().id).versions[0].labels).toEqual([]);
+		// a label of another project
+		const other = project(OWNER, 'Other');
+		const { body: foreign } = await add(other, OWNER, { versionId: lastVersion(other)!.id, name: 'x' });
+		expect((await rename(pid, foreign.id, OWNER, 'y')).status).toBe(404);
+	});
+
+	it('labeling the current version closes open edits into a version first, else labels the newest', async () => {
+		const { server, pid, main } = await setupLabels();
+		const first = lastVersion(pid)!;
+		expect((await add(pid, B, { name: 'Nothing new' })).body.versionId).toBe(first.id);
+
+		const b = await connect(server.url, main, B);
+		b.text.insert(0, '% open edit\n');
+		await waitFor(() => log(server, pid).some((r) => r.kind === 'text'));
+		const res = await add(pid, B, { name: 'Before review' });
+		const v = lastVersion(pid)!;
+		expect(v).toMatchObject({ kind: 'edit', authors: JSON.stringify([user(B).id]) });
+		expect(res.body.versionId).toBe(v.id);
+		expect(blobText(readManifest(v.manifestHash).entries.find((e) => e.id === main)!.hash!)).toContain('% open edit');
+	});
+
+	it('the labels-only list skips unlabeled versions', async () => {
+		const { pid } = await setupLabels();
+		const a = closeVersion(pid, 'restore')!;
+		closeVersion(pid, 'restore');
+		const c = closeVersion(pid, 'restore')!;
+		await add(pid, B, { versionId: a.id, name: 'A' });
+		await add(pid, B, { versionId: c.id, name: 'C1' });
+		await add(pid, OWNER, { versionId: c.id, name: 'C2' });
+		const o = user().id;
+		expect(listVersions(pid, o).versions).toHaveLength(4);
+		const only = listVersions(pid, o, { labelsOnly: true });
+		expect(only.versions.map((v) => [v.id, v.labels.map((l) => l.name)])).toEqual([
+			[c.id, ['C1', 'C2']],
+			[a.id, ['A']]
+		]);
+		expect(listVersions(pid, o, { labelsOnly: true, limit: 1 })).toMatchObject({ hasMore: true, versions: [{ id: c.id }] });
+		expect(listVersions(pid, o, { labelsOnly: true, before: c.id }).versions.map((v) => v.id)).toEqual([a.id]);
 	});
 });

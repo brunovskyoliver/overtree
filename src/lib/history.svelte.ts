@@ -1,5 +1,5 @@
 import { blockedBy } from './auth.svelte.ts';
-import type { Compare, HistoryPage, VersionDiff, VersionInfo } from './history-types.ts';
+import type { Compare, HistoryPage, Label, VersionDiff, VersionInfo } from './history-types.ts';
 
 // The History view's state (research R13): the timeline in pages of 50 (newest first), the selected version, its
 // diff and the compare mode. Refetches on the `history` project event while open (research R8); no polling.
@@ -142,6 +142,25 @@ export class History {
 		const text = version ? what : skipped.length ? 'Nothing restored.' : 'Nothing to restore: no differences.';
 		this.restoreNote = { ok: true, text, skipped };
 	}
+
+	/** Adds, renames or deletes a label (US5); null when done, else why not. The list refreshes now (the `history`
+	 *  event refreshes the other clients). */
+	async #label(path: string, method: string, body?: object): Promise<string | null> {
+		const init = body ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { method };
+		const res = await fetch(this.#url(`/labels${path}`), init).catch(() => undefined);
+		if (await blockedBy(res)) return 'Your account is blocked.';
+		if (!res?.ok) {
+			const message = ((await res?.json().catch(() => null)) as { message?: string } | null)?.message;
+			return message ?? 'Couldn’t save the label, try again.';
+		}
+		await this.refresh();
+		return null;
+	}
+
+	/** Labels version `versionId`, or the current state without it (open edits become a version first). */
+	addLabel = (name: string, versionId?: number) => this.#label('', 'POST', { name, versionId });
+	renameLabel = (label: Label, name: string) => this.#label(`/${label.id}`, 'PATCH', { name });
+	deleteLabel = (label: Label) => this.#label(`/${label.id}`, 'DELETE');
 
 	async #loadDiff() {
 		const id = this.selected;

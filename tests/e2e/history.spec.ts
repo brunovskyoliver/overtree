@@ -143,3 +143,74 @@ test('a compile closes a compile-point version; compiling again without edits ad
 	await expect(options).toHaveCount(3, { timeout: 10_000 });
 	await expect(options.nth(0)).not.toContainText('Compiled');
 });
+
+test('labels: an editor names versions, they survive a reload, a reader gets no menu, labels only filters (scenario 8)', async ({
+	browser,
+	page,
+	pid
+}) => {
+	const readerEmail = `reader-${tag()}@test.local`;
+	const reader = await as(browser, readerEmail);
+	await reader.goto('/');
+	expect((await page.request.post(`${api(pid)}/members`, { data: { email: readerEmail, role: 'reader' } })).status()).toBe(201);
+
+	await openEditor(page, pid);
+	await insert(page, 'end', '% before labeling\n');
+	await page.getByRole('button', { name: 'History' }).click();
+	const view = page.getByRole('region', { name: 'History' });
+	const options = view.getByRole('listbox', { name: 'Versions' }).getByRole('option');
+
+	// the current state: the open edit becomes a version and gets the label
+	await view.getByRole('button', { name: 'Label current version' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Label the current version' });
+	await dialog.getByLabel('Label').fill('  Draft A  ');
+	await dialog.getByRole('button', { name: 'Add label' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(options).toHaveCount(2);
+	await expect(options.nth(0).getByRole('button', { name: 'Label Draft A' })).toBeVisible();
+
+	// the selected version from the diff header
+	await options.nth(1).click();
+	await view.getByRole('region', { name: 'Diff' }).getByRole('button', { name: 'Label…' }).click();
+	const named = page.getByRole('dialog', { name: /^Label the version of/ });
+	await named.getByLabel('Label').fill('Start');
+	await named.getByRole('button', { name: 'Add label' }).click();
+	await expect(options.nth(1).getByRole('button', { name: 'Label Start' })).toBeVisible();
+
+	// rename and delete through the chip's menu
+	await options.nth(1).getByRole('button', { name: 'Label Start' }).click();
+	await page.getByRole('menuitem', { name: 'Rename…' }).click();
+	const rename = page.getByRole('dialog', { name: 'Rename label' });
+	await expect(rename.getByLabel('Label')).toHaveValue('Start');
+	await rename.getByLabel('Label').fill('First draft');
+	await rename.getByRole('button', { name: 'Rename' }).click();
+	await expect(options.nth(1).getByRole('button', { name: 'Label First draft' })).toBeVisible();
+
+	// a new edit is no labeled version: labels only hides it
+	await page.getByRole('button', { name: 'History' }).click();
+	await insert(page, 'end', '% unlabeled\n');
+	await page.reload();
+	await page.getByRole('button', { name: 'History' }).click();
+	await expect(options).toHaveCount(3, { timeout: 10_000 });
+	await expect(options.nth(1).getByRole('button', { name: 'Label Draft A' })).toBeVisible();
+	await view.getByRole('checkbox', { name: 'Labels only' }).check();
+	await expect(options).toHaveCount(2);
+	await expect(options.nth(0)).toContainText('Draft A');
+	await expect(options.nth(1)).toContainText('First draft');
+
+	// the reader sees the labels, but no menu and no way to add one
+	await reader.goto(projectPath(pid));
+	await reader.getByRole('button', { name: 'History' }).click();
+	const rview = reader.getByRole('region', { name: 'History' });
+	const roptions = rview.getByRole('listbox', { name: 'Versions' }).getByRole('option');
+	await expect(roptions.nth(1)).toContainText('Draft A');
+	await expect(rview.getByRole('button', { name: /^Label/ })).toHaveCount(0);
+
+	// delete, after a confirmation
+	await options.nth(0).getByRole('button', { name: 'Label Draft A' }).click();
+	await page.getByRole('menuitem', { name: 'Delete' }).click();
+	await page.getByRole('dialog', { name: 'Delete the label “Draft A”?' }).getByRole('button', { name: 'Delete' }).click();
+	await expect(options).toHaveCount(1);
+	await expect(roptions.nth(1)).not.toContainText('Draft A'); // the reader's open panel follows
+	await reader.context().close();
+});

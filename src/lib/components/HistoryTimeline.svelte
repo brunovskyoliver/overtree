@@ -1,17 +1,23 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import type { History } from '#lib/history.svelte.ts';
-	import type { VersionInfo } from '#lib/history-types.ts';
+	import type { Label, VersionInfo } from '#lib/history-types.ts';
 	import Avatar from './Avatar.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
+	import LabelChip from './LabelChip.svelte';
+	import LabelDialog from './LabelDialog.svelte';
 
 	// contracts/ui.md "Timeline": versions newest first in day groups, listbox keyboard (↑/↓ select, Enter opens the
-	// diff), the next page when the end scrolls into view. `onopen`: Enter moves focus to the diff.
-	let { history, onopen }: { history: History; onopen?: () => void } = $props();
+	// diff), the next page when the end scrolls into view. `onopen`: Enter moves focus to the diff. `canEdit`: the
+	// project role may add labels ("Label current version"); renaming and deleting go by each label's `canEdit`.
+	let { history, canEdit, onopen }: { history: History; canEdit: boolean; onopen?: () => void } = $props();
 	const SHOWN_FILES = 3;
 	const MAX_AVATARS = 4;
 
 	let list = $state<HTMLElement>();
 	let end = $state<HTMLElement>();
+	let namer = $state<LabelDialog>();
+	let confirm = $state<ConfirmDialog>();
 
 	const dayKey = (ts: number) => new Date(ts).toDateString();
 	function dayName(ts: number) {
@@ -64,6 +70,23 @@
 		return () => io.disconnect();
 	});
 
+	const labelCurrent = () =>
+		namer?.ask({ title: 'Label the current version', confirmLabel: 'Add label', save: (name) => history.addLabel(name) });
+	const renameLabel = (l: Label) =>
+		namer?.ask({ title: 'Rename label', value: l.name, confirmLabel: 'Rename', save: (name) => history.renameLabel(l, name) });
+
+	async function deleteLabel(l: Label) {
+		const ok = await confirm?.ask({
+			title: `Delete the label “${l.name}”?`,
+			body: 'The version stays in history.',
+			confirmLabel: 'Delete',
+			danger: true
+		});
+		if (!ok) return;
+		const message = await history.deleteLabel(l);
+		if (message) history.error = message;
+	}
+
 	function summary(v: VersionInfo) {
 		const names = v.changed.map((c) => base(c.path));
 		return { shown: names.slice(0, SHOWN_FILES), more: Math.max(0, names.length - SHOWN_FILES) };
@@ -73,6 +96,13 @@
 <section class="timeline" aria-labelledby="history-versions-title">
 	<header>
 		<h2 id="history-versions-title">Versions</h2>
+		{#if canEdit}
+			<button type="button" class="label-current" aria-label="Label current version" title="Label current version" onclick={labelCurrent}>
+				<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"
+					><path d="M1.5 2.5v5l7 7 6-6-7-7h-5z" /><circle cx="4.75" cy="5.25" r="1.1" /></svg
+				>
+			</button>
+		{/if}
 		<label class="filter">
 			<input type="checkbox" checked={history.labelsOnly} onchange={(e) => history.setLabelsOnly(e.currentTarget.checked)} />
 			Labels only
@@ -135,7 +165,7 @@
 								{#if v.labels.length}
 									<div class="labels">
 										{#each v.labels as l (l.id)}
-											<span class="chip" title="{l.name} · {l.user.name}">{l.name}</span>
+											<LabelChip label={l} onrename={renameLabel} ondelete={deleteLabel} />
 										{/each}
 									</div>
 								{/if}
@@ -155,6 +185,9 @@
 	</div>
 </section>
 
+<LabelDialog bind:this={namer} />
+<ConfirmDialog bind:this={confirm} />
+
 <style>
 	.timeline {
 		display: flex;
@@ -168,6 +201,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 8px;
 		height: 38px;
 		padding: 0 12px;
 		border-bottom: 1px solid var(--border);
@@ -177,8 +211,32 @@
 		font-size: 14px;
 		font-weight: 600;
 	}
+	.label-current {
+		display: grid;
+		place-items: center;
+		width: 26px;
+		height: 26px;
+		margin-left: auto;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		background: none;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.label-current svg {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.3;
+		stroke-linejoin: round;
+	}
+	.label-current:hover {
+		background: var(--panel-raised);
+		color: var(--text);
+	}
 	.filter {
 		display: flex;
+		white-space: nowrap;
 		align-items: center;
 		gap: 6px;
 		color: var(--text-muted);
@@ -285,17 +343,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px;
-	}
-	.chip {
-		max-width: 100%;
-		padding: 1px 8px;
-		overflow: hidden;
-		border-radius: 10px;
-		background: #2a3b55;
-		color: #8ab4f8;
-		font-size: 11px;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 	.note {
 		margin: 12px;

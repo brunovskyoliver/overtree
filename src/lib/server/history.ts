@@ -5,7 +5,7 @@ import type { HistoryPage, Label, UserRef, VersionInfo } from '../history-types.
 import { colorFor } from '../presence.ts';
 import { broadcast, projectRole } from './access.ts';
 import { getServer } from './collab.ts';
-import { putBlob, readBlob, type Tx } from './files.ts';
+import { FileError, putBlob, readBlob, type Tx } from './files.ts';
 import { documents, files, historyLog, projects, updates, users, versionLabels, versions, type VersionKind } from './schema.ts';
 
 // Project history (research R1–R3, R8): a never-compacted log of Yjs updates and tree changes with their authors,
@@ -247,6 +247,7 @@ function versionInfos(pid: string, rows: Version[], userId: string): VersionInfo
 	const authors = rows.map((v) => JSON.parse(v.authors) as string[]);
 	const refs = userRefs([...authors.flat(), ...labels.map((l) => l.userId)]);
 	const owner = projectRole(pid, userId) === 'owner';
+	const label = labelInfo(refs, userId, owner);
 	return rows.map((v, i) => ({
 		id: v.id,
 		kind: v.kind,
@@ -255,20 +256,21 @@ function versionInfos(pid: string, rows: Version[], userId: string): VersionInfo
 		authors: authors[i].map((id) => refs.get(id)!),
 		changed: JSON.parse(v.changed) as Changed[],
 		restoredFrom: v.restoredFrom ? (restored.get(v.restoredFrom) ?? null) : null,
-		labels: labels
-			.filter((l) => l.versionId === v.id)
-			.map(
-				(l): Label => ({
-					id: l.id,
-					versionId: l.versionId,
-					name: l.name,
-					user: refs.get(l.userId)!,
-					createdAt: l.createdAt,
-					canEdit: owner || l.userId === userId
-				})
-			)
+		labels: labels.filter((l) => l.versionId === v.id).map(label)
 	}));
 }
+
+/** A label row as the API shows it to `userId`: the author and the owner may rename and delete it (research R6). */
+const labelInfo =
+	(refs: Map<string, UserRef>, userId: string, owner: boolean) =>
+	(l: typeof versionLabels.$inferSelect): Label => ({
+		id: l.id,
+		versionId: l.versionId,
+		name: l.name,
+		user: refs.get(l.userId)!,
+		createdAt: l.createdAt,
+		canEdit: owner || l.userId === userId
+	});
 
 export const PAGE = 50;
 
@@ -312,3 +314,59 @@ export const previousVersion = (v: Version): Version | null =>
 		.get() ?? null;
 
 export const getVersion = (pid: string, v: Version, userId: string): VersionInfo => versionInfos(pid, [v], userId)[0];
+
+// --- labels (research R6) --------------------------------------------------------------------------------------------
+
+export const LABEL_MAX = 100;
+
+function labelName(name: unknown): string {
+	const n = typeof name === 'string' ? name.trim() : '';
+	if (!n || n.length > LABEL_MAX) throw new FileError(400, `A label needs 1–${LABEL_MAX} characters.`);
+	return n;
+}
+
+const showLabel = (pid: string, row: typeof versionLabels.$inferSelect, userId: string): Label =>
+	labelInfo(userRefs([row.userId]), userId, projectRole(pid, userId) === 'owner')(row);
+
+/** Labels version `versionId`, or without it the current state: the open edits are closed into a version first,
+ *  else the newest version gets the label. The caller checks the project role (E). */
+export function addLabel(pid: string, userId: string, { versionId, name }: { versionId?: number; name: unknown }): Label {
+	const n = labelName(name);
+	const v = versionId === undefined ? (closeVersion(pid, 'edit') ?? lastVersion(pid)) : versionRow(pid, versionId);
+	if (!v) throw new FileError(404, 'Version not found.');
+	const row = db()
+		.insert(versionLabels)
+		.values({ projectId: pid, versionId: v.id, name: n, userId, createdAt: Date.now() })
+		.returning()
+		.get();
+	broadcast(pid, { type: 'history' });
+	return showLabel(pid, row, userId);
+}
+
+/** The label `lid` of project `pid` if `userId` may change it: its author or the owner (404 / 403 otherwise). */
+function ownLabel(pid: string, lid: number, userId: string) {
+	const row =
+		Number.isInteger(lid) &&
+		db()
+			.select()
+			.from(versionLabels)
+			.where(and(eq(versionLabels.id, lid), eq(versionLabels.projectId, pid)))
+			.get();
+	if (!row) throw new FileError(404, 'Label not found.');
+	if (row.userId !== userId && projectRole(pid, userId) !== 'owner')
+		throw new FileError(403, 'Only the label’s author or the owner can change it.');
+	return row;
+}
+
+export function renameLabel(pid: string, lid: number, userId: string, name: unknown): Label {
+	ownLabel(pid, lid, userId);
+	const row = db().update(versionLabels).set({ name: labelName(name) }).where(eq(versionLabels.id, lid)).returning().get()!;
+	broadcast(pid, { type: 'history' });
+	return showLabel(pid, row, userId);
+}
+
+export function deleteLabel(pid: string, lid: number, userId: string) {
+	ownLabel(pid, lid, userId);
+	db().delete(versionLabels).where(eq(versionLabels.id, lid)).run();
+	broadcast(pid, { type: 'history' });
+}
