@@ -37,16 +37,20 @@ export type Changed = { id: string; path: string; change: 'added' | 'edited' | '
 // diffs then fall back to plain ones (research R4).
 const FLUSH_MS = 100;
 type LogRow = typeof historyLog.$inferInsert;
-let pending: { db: Db; rows: LogRow[]; timer: ReturnType<typeof setTimeout> } | null = null;
+type Pending = { db: Db; rows: LogRow[]; timer: ReturnType<typeof setTimeout> } | null;
+// On globalThis: server.ts (onChange) and the bundled SvelteKit routes (compile, restore…) each load this module,
+// and a route must flush the rows the socket side buffered.
+const shared = (globalThis.__overtreeHistory ??= { pending: null, open: new Set() });
+const state = shared as { pending: Pending; open: Set<string> };
 
 /** Projects with log rows after their last version: the sweep looks only at these (plus everything at startup). */
-const open = new Set<string>();
+const open = state.open;
 
 /** A Yjs update of a text document (collab.ts onChange), buffered (see FLUSH_MS). */
 export function logText(pid: string, docName: string, userId: string | null | undefined, update: Uint8Array) {
 	const d = db();
-	if (pending && pending.db !== d) flushHistory(); // tests reopen the server in one process
-	pending ??= { db: d, rows: [], timer: setTimeout(flushLater, FLUSH_MS) };
+	if (state.pending && state.pending.db !== d) flushHistory(); // tests reopen the server in one process
+	const pending = (state.pending ??= { db: d, rows: [], timer: setTimeout(flushLater, FLUSH_MS) });
 	pending.rows.push({ projectId: pid, docName, userId: userId ?? null, kind: 'text', update: Buffer.from(update), createdAt: Date.now() });
 	open.add(pid);
 }
@@ -61,9 +65,9 @@ function flushLater() {
 
 /** Writes the buffered text rows, inside `tx` when given (it must belong to the current server's db). */
 export function flushHistory(tx?: Tx) {
-	if (!pending) return;
-	const { db: d, rows, timer } = pending;
-	pending = null;
+	if (!state.pending) return;
+	const { db: d, rows, timer } = state.pending;
+	state.pending = null;
 	clearTimeout(timer);
 	if (!d.$client.open) return;
 	// 7 columns a row: well under SQLite's 32766 bound variables per statement
