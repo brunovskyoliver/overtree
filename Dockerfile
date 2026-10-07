@@ -23,8 +23,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json server.ts ./
 COPY --from=build /app/build ./build
 COPY src/lib/server ./src/lib/server
-# shared modules the unbundled server code imports: file rules (files.ts), user colors (projects.ts)
-COPY src/lib/files.ts src/lib/presence.ts ./src/lib/
+# shared modules the unbundled server code imports: file rules (files.ts), user colors (projects.ts), GitHub sync defaults (github-types.ts)
+COPY src/lib/files.ts src/lib/presence.ts src/lib/github-types.ts ./src/lib/
 COPY drizzle ./drizzle
 # static docker CLI: compiles run as sibling containers through the mounted host socket (research R4)
 COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker
