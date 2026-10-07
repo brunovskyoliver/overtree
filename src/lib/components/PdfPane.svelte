@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
 	import type { SyncBox } from '#lib/synctex.ts';
 	import LogsPanel from './LogsPanel.svelte';
@@ -11,7 +12,8 @@
 		onopenat,
 		onsync,
 		projectId,
-		inert = false
+		inert = false,
+		tools
 	}: {
 		compile: CompileState;
 		/** the PDF position is remembered per project (PdfViewer) */
@@ -20,6 +22,8 @@
 		/** double-click on the PDF (reverse SyncTeX), see PdfViewer */
 		onsync?: (page: number, x: number, y: number) => void;
 		inert?: boolean;
+		/** extra toolbar buttons after Recompile (the PDF window's "←") */
+		tools?: Snippet;
 	} = $props();
 
 	const PDF_KEY = 'overtree:pdf';
@@ -48,6 +52,7 @@
 <section class="pdf" aria-label="PDF preview" {inert}>
 	<div class="bar">
 		<RecompileButton {compile} />
+		{@render tools?.()}
 		<button
 			type="button"
 			class="logs-toggle"

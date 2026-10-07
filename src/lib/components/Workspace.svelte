@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Pane, PaneGroup, PaneResizer } from 'paneforge';
-	import type { Snippet } from 'svelte';
+	import { onMount, untrack, type Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
+	import type { Layout, LayoutMode } from '#lib/layout.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import { syncToCode, syncToPdf } from '#lib/synctex.ts';
 	import FileTree from './FileTree.svelte';
@@ -17,7 +18,8 @@
 		project,
 		activeId,
 		onopen,
-		cursor
+		cursor,
+		layout
 	}: {
 		children: Snippet;
 		outline: Snippet;
@@ -28,6 +30,8 @@
 		onopen?: (id: string) => void;
 		/** the editor's file and line for "→" (SyncTeX); undefined when no text file is open */
 		cursor?: () => { fileId: string; line: number } | undefined;
+		/** the Layout menu's mode (008 research R12) */
+		layout: Layout;
 	} = $props();
 
 	let sidebar = $state<Pane>();
@@ -37,6 +41,34 @@
 
 	const toggle = (pane: Pane | undefined) => (pane?.isCollapsed() ? pane.expand() : pane?.collapse());
 
+	// Layout menu: editor only and the separate window collapse the PDF pane, PDF only hides the rest (CSS below),
+	// side-by-side expands it again. Applied on a choice; at load only for the other modes, so a PDF collapsed with
+	// its tab stays so in side-by-side (paneforge may have missed saving the last change, it debounces 100 ms).
+	onMount(() => {
+		// after paneforge has loaded the stored layout (its effects)
+		const t = setTimeout(() => layout.mode !== 'split' && apply(layout.mode));
+		return () => clearTimeout(t);
+	});
+	let applied = untrack(() => layout.changes);
+	$effect(() => {
+		if (layout.changes === applied) return;
+		applied = layout.changes;
+		const mode = layout.mode;
+		untrack(() => apply(mode));
+	});
+
+	function apply(mode: LayoutMode) {
+		if (!pdf) return;
+		if (mode === 'editor' || mode === 'window') return pdf.collapse();
+		if (pdf.isCollapsed()) pdf.expand(); // to its size before the collapse (paneforge stores it)
+	}
+
+	/** The PDF asks for a source line: PDF only gives way to side-by-side so the editor shows it. */
+	function openAt(fileId: string, line: number) {
+		if (layout.mode === 'pdf') layout.set('split');
+		onopenat?.(fileId, line);
+	}
+
 	// SyncTeX (research R10): against the last compile's PDF; no mapping (stale, edited since, not in the PDF) does nothing
 	let pdfPane = $state<ReturnType<typeof PdfPane>>();
 	const pdfId = $derived(compile.last?.pdfId);
@@ -45,7 +77,8 @@
 	export async function forward() {
 		const at = cursor?.();
 		if (!pdfId || !at) return;
-		if (pdf?.isCollapsed()) pdf.expand();
+		if (layout.mode === 'window') return layout.forward(at.fileId, at.line);
+		if (pdf?.isCollapsed()) pdf.expand(); // in editor only this goes to side-by-side (onExpand)
 		const r = await syncToPdf(project.id, pdfId, at.fileId, at.line);
 		if (r) pdfPane?.showBox(r.page, r.boxes);
 	}
@@ -53,7 +86,7 @@
 	/** Double-click on the PDF or "←": open the source of that spot. */
 	async function reverse(page: number, x: number, y: number) {
 		const r = pdfId && (await syncToCode(project.id, pdfId, page, x, y));
-		if (r) onopenat?.(r.fileId, r.line);
+		if (r) openAt(r.fileId, r.line);
 	}
 
 	function reverseVisible() {
@@ -63,7 +96,7 @@
 </script>
 
 <!-- paneforge stores under `paneforge:<autoSaveId>`, collapsed panes included (FR-018) -->
-<PaneGroup direction="horizontal" autoSaveId="overtree:layout:main" class="workspace">
+<PaneGroup direction="horizontal" autoSaveId="overtree:layout:main" class="workspace layout-{layout.mode}">
 	<Pane
 		id="sidebar"
 		bind:this={sidebar}
@@ -100,19 +133,26 @@
 		>
 			<svg viewBox="0 0 8 12" aria-hidden="true"><path d={sidebarOpen ? 'M6 2 2 6l4 4' : 'm2 2 4 4-4 4'} /></svg>
 		</button>
-		<button
-			type="button"
-			class="collapse right"
-			aria-label={pdfOpen ? 'Collapse PDF' : 'Expand PDF'}
-			aria-expanded={pdfOpen}
-			onclick={() => toggle(pdf)}
-		>
-			<svg viewBox="0 0 8 12" aria-hidden="true"><path d={pdfOpen ? 'm2 2 4 4-4 4' : 'M6 2 2 6l4 4'} /></svg>
-		</button>
-		<!-- on the editor's right rail, above the PDF collapse tab: in the pane, so it takes no width from the layout -->
-		<div class="sync-rail"><SyncStrip enabled={!!pdfId} onforward={forward} onreverse={reverseVisible} /></div>
+		{#if layout.mode !== 'window'}
+			<button
+				type="button"
+				class="collapse right"
+				aria-label={pdfOpen ? 'Collapse PDF' : 'Expand PDF'}
+				aria-expanded={pdfOpen}
+				onclick={() => toggle(pdf)}
+			>
+				<svg viewBox="0 0 8 12" aria-hidden="true"><path d={pdfOpen ? 'm2 2 4 4-4 4' : 'M6 2 2 6l4 4'} /></svg>
+			</button>
+		{/if}
+		<!-- on the editor's right rail, above the PDF collapse tab: in the pane, so it takes no width from the layout;
+		     hidden in editor only, only "→" with the PDF in its own window (← is in that window's toolbar) -->
+		{#if layout.mode === 'split' || layout.mode === 'window'}
+			<div class="sync-rail">
+				<SyncStrip enabled={!!pdfId} onforward={forward} onreverse={layout.mode === 'split' ? reverseVisible : undefined} />
+			</div>
+		{/if}
 	</Pane>
-	<PaneResizer class="handle handle-v" aria-label="Resize PDF" />
+	<PaneResizer class="handle handle-v handle-pdf" aria-label="Resize PDF" />
 	<Pane
 		id="pdf"
 		bind:this={pdf}
@@ -121,10 +161,15 @@
 		collapsible
 		collapsedSize={0}
 		onCollapse={() => (pdfOpen = false)}
-		onExpand={() => (pdfOpen = true)}
+		onExpand={() => {
+			pdfOpen = true;
+			if (layout.mode === 'editor') layout.set('split');
+		}}
 	>
-		<!-- inert while collapsed, like the sidebar -->
-		<PdfPane bind:this={pdfPane} {compile} projectId={project.id} {onopenat} onsync={reverse} inert={!pdfOpen} />
+		<!-- inert while collapsed, like the sidebar; not rendered while the PDF has its own window -->
+		{#if layout.mode !== 'window'}
+			<PdfPane bind:this={pdfPane} {compile} projectId={project.id} onopenat={openAt} onsync={reverse} inert={!pdfOpen} />
+		{/if}
 	</Pane>
 </PaneGroup>
 
@@ -141,6 +186,11 @@
 	}
 	:global(.editor-pane) {
 		position: relative;
+	}
+	/* PDF only: the PDF pane alone takes the whole row; the separate window: no PDF pane to drag out */
+	:global(.workspace.layout-pdf > :not([data-pane-id='pdf'])),
+	:global(.workspace.layout-window > .handle-pdf) {
+		display: none;
 	}
 
 	/* drag handles: gray bar with grip dots, like the reference */

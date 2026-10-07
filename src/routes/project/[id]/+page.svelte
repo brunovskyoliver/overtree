@@ -11,6 +11,7 @@
 	import Workspace from '#lib/components/Workspace.svelte';
 	import { CompileState } from '#lib/compile.svelte.ts';
 	import { History } from '#lib/history.svelte.ts';
+	import { Layout } from '#lib/layout.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { Project } from '#lib/project.svelte.ts';
 	import { Session, type Peer } from '#lib/session.svelte.ts';
@@ -72,6 +73,11 @@
 		view.focus();
 	}
 
+	// Layout menu and the separate PDF window (008 research R12): its double-clicks open the source here
+	const layout = new Layout(project.id, (fileId, line) => void openAt(fileId, line));
+	layout.mirror(compile);
+	onMount(() => () => layout.destroy());
+
 	let workspace = $state<ReturnType<typeof Workspace>>();
 	/** The editor's file and cursor line, for SyncTeX's "→". */
 	function cursor() {
@@ -125,6 +131,7 @@
 		onjump={jumpTo}
 		offline={!ended && session.offline}
 		history={project.details && !ended ? { on: history.open, toggle: () => history.toggle() } : undefined}
+		layout={project.details && !ended ? layout : undefined}
 	/>
 	{#if ended}
 		<!-- contracts/ui.md "Other pages": the project closed under the user (FR-036) -->
@@ -154,6 +161,7 @@
 					{project}
 					onopenat={openAt}
 					{cursor}
+					{layout}
 					activeId={project.active}
 					onopen={(id) => project.openFile(id)}
 				>

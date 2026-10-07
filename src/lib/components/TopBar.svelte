@@ -1,9 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { auth, signOut } from '#lib/auth.svelte.ts';
+	import type { Layout } from '#lib/layout.svelte.ts';
 	import { Menu } from '#lib/menu.svelte.ts';
 	import type { Peer } from '#lib/session.svelte.ts';
 	import Avatar from './Avatar.svelte';
+	import LayoutMenu from './LayoutMenu.svelte';
 
 	// contracts/ui.md "Top bar": brand link left, project title centre, page controls and the account menu right.
 	// `project`: the editor's title; the owner (onrename set) edits it in place, others see text.
@@ -11,6 +13,7 @@
 	// `onshare`: the green "Share" button (editor page) opening the Share dialog
 	// `peers`: the others in the project (avatars, `onjump` goes to their cursor); `offline`: the socket dropped
 	// `history`: the History toggle (008 contracts/ui.md), pressed while the History view is on
+	// `layout`: the Layout menu (008 research R12)
 	let {
 		title,
 		right,
@@ -19,7 +22,8 @@
 		peers = [],
 		onjump,
 		offline = false,
-		history
+		history,
+		layout
 	}: {
 		title?: Snippet;
 		right?: Snippet;
@@ -29,6 +33,7 @@
 		onjump?: (peer: Peer) => void;
 		offline?: boolean;
 		history?: { on: boolean; toggle: () => void };
+		layout?: Layout;
 	} = $props();
 	const MAX_PEERS = 5;
 
@@ -152,6 +157,9 @@
 		{/if}
 		{#if offline}
 			<span class="offline" role="status">Offline, reconnecting…</span>
+		{/if}
+		{#if layout}
+			<LayoutMenu {layout} />
 		{/if}
 		{#if history}
 			<button type="button" class="history" aria-pressed={history.on} onclick={history.toggle}>

@@ -142,10 +142,10 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Independent Test**: quickstart scenario 10
 
-- [ ] T043 [US7] Create `src/lib/layout.svelte.ts` (mode in `overtree:layout-mode`, `window.open`, closed-window polling, `BroadcastChannel('overtree:pdf:<pid>')` messages per research R12) and `src/lib/components/LayoutMenu.svelte` (menuitemradio items, popup-blocked notice) in `src/lib/components/TopBar.svelte`
-- [ ] T044 [US7] Apply modes in `src/lib/components/Workspace.svelte` (collapse/expand panes; window mode hides the PDF pane; strip placement per contracts/ui.md); main page posts `compiled` and `forward` messages and handles `open-at`
-- [ ] T045 [US7] Create `src/routes/project/[id]/pdf/+page.svelte` (+ `+page.ts` disabling SSR like the project page): own `CompileState`, `PdfPane`, ← button and double-click posting `open-at`, reacts to `compiled` and `forward`, `hello`/`bye`
-- [ ] T046 [US7] Playwright `tests/e2e/layout-menu.spec.ts`: each mode, reload keeps it; separate window via `context.waitForEvent('page')`, recompile in main updates it, double-click in it moves the main editor cursor, closing it returns to side-by-side; with `window.open` stubbed to return null the popup-blocked notice shows and the mode stays (US7 #4)
+- [X] T043 [US7] Create `src/lib/layout.svelte.ts` (mode in `overtree:layout-mode`, `window.open`, closed-window polling, `BroadcastChannel('overtree:pdf:<pid>')` messages per research R12) and `src/lib/components/LayoutMenu.svelte` (menuitemradio items, popup-blocked notice) in `src/lib/components/TopBar.svelte`
+- [X] T044 [US7] Apply modes in `src/lib/components/Workspace.svelte` (collapse/expand panes; window mode hides the PDF pane; strip placement per contracts/ui.md); main page posts `compiled` and `forward` messages and handles `open-at`
+- [X] T045 [US7] Create `src/routes/project/[id]/pdf/+page.svelte` (+ `+page.ts` disabling SSR like the project page): own `CompileState`, `PdfPane`, ← button and double-click posting `open-at`, reacts to `compiled` and `forward`, `hello`/`bye`
+- [X] T046 [US7] Playwright `tests/e2e/layout-menu.spec.ts`: each mode, reload keeps it; separate window via `context.waitForEvent('page')`, recompile in main updates it, double-click in it moves the main editor cursor, closing it returns to side-by-side; with `window.open` stubbed to return null the popup-blocked notice shows and the mode stays (US7 #4)
 
 ---
 

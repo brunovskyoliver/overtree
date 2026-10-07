@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The narrow strip between the editor and the PDF (contracts/ui.md "Sync strip", research R10).
-	let { enabled, onforward, onreverse }: { enabled: boolean; onforward: () => void; onreverse: () => void } = $props();
+	// no `onreverse`: only "→" (the PDF is in its own window, which has "←")
+	let { enabled, onforward, onreverse }: { enabled: boolean; onforward: () => void; onreverse?: () => void } = $props();
 </script>
 
 <div class="sync">
@@ -13,9 +14,11 @@
 	>
 		<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8M7 3l3 3-3 3" /></svg>
 	</button>
-	<button type="button" aria-label="Go to code location" title={enabled ? 'Go to code location' : 'Compile first'} disabled={!enabled} onclick={onreverse}>
-		<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M10 6H2M5 3 2 6l3 3" /></svg>
-	</button>
+	{#if onreverse}
+		<button type="button" aria-label="Go to code location" title={enabled ? 'Go to code location' : 'Compile first'} disabled={!enabled} onclick={onreverse}>
+			<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M10 6H2M5 3 2 6l3 3" /></svg>
+		</button>
+	{/if}
 </div>
 
 <style>
