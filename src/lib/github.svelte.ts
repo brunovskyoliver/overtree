@@ -1,5 +1,5 @@
 import { blockedBy } from './auth.svelte.ts';
-import type { GitHubAccountInfo, GitHubBranches, GitHubRepos, GitHubStatus, GitHubSyncResult } from './github-types.ts';
+import type { GitHubAccountInfo, GitHubBranches, GitHubPreview, GitHubRepos, GitHubStatus, GitHubSyncResult } from './github-types.ts';
 
 // Browser side of GitHub sync (012 contracts/http-api.md, ui.md): the project's link status (refetched on `github`
 // project events), the user's connection and repositories, and the actions. Every action resolves to an error
@@ -73,6 +73,12 @@ export class GitHub {
 		const [owner, repo] = fullName.split('/');
 		const res = await fetch(`/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`).catch(() => undefined);
 		return res?.ok ? ((await res.json()) as GitHubBranches) : errorOf(res);
+	}
+
+	/** What the first sync of a `pending` link would do (owner), or the error. */
+	async preview(): Promise<GitHubPreview | GitHubResult> {
+		const res = await fetch(this.#api('/preview')).catch(() => undefined);
+		return res?.ok ? ((await res.json()) as GitHubPreview) : errorOf(res);
 	}
 
 	/** One request; a status in the answer replaces ours. */

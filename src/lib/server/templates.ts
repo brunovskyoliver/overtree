@@ -132,3 +132,8 @@ export function latexEscape(s: string): string {
 /** The template's `main.tex` with `title` in `\title{}` (the letter class has none: unchanged). */
 export const templateText = (template: Template, title: string): string =>
 	TEXTS[template].replace('\\title{Untitled project}', () => `\\title{${latexEscape(title)}}`);
+
+/** Whether `text` is a template's starter `main.tex`, as created for `title` or with the default title: an untouched
+ *  new project (012 "projectEmpty": GitHub import may replace it). */
+export const isStarterText = (text: string, title: string): boolean =>
+	TEMPLATES.some((t) => text === templateText(t, title) || text === TEXTS[t]);

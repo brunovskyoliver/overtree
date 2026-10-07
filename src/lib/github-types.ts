@@ -71,6 +71,26 @@ export type GitHubStatus = {
 	runs?: GitHubRun[];
 };
 
+/** `GET /api/projects/:pid/github/preview`: what the first sync would do (FR-008). Each list is sorted and capped at
+ *  500 paths; `truncated` when one was longer. */
+export type GitHubPreview = {
+	/** null: empty branch or repository */
+	head: string | null;
+	/** offers "Import from repository" (FR-009) */
+	projectEmpty: boolean;
+	/** in both, different content: GitHub's copy will be replaced */
+	overwrite: string[];
+	/** in both, identical */
+	same: string[];
+	/** project only */
+	addToGitHub: string[];
+	/** GitHub only, not ignored: pulled into the project */
+	addToProject: string[];
+	/** matched by the "not pulled" patterns: stays on GitHub only */
+	githubOnly: string[];
+	truncated: boolean;
+};
+
 /** `GET /api/github/account` */
 export type GitHubAccountInfo =
 	| { connected: false; installUrl: string }

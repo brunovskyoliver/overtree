@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { DEFAULT_IGNORE, type GitHubRepoInfo } from '#lib/github-types.ts';
+	import { DEFAULT_IGNORE, type GitHubPreview, type GitHubRepoInfo } from '#lib/github-types.ts';
 	import type { GitHub } from '#lib/github.svelte.ts';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	// 012 contracts/ui.md "Settings dialog": connect (step 1), pick a repository and branch (step 2), finish the first
-	// sync (a short step 3 until US5 brings the preview) and the linked settings (step 4). The owner manages; other
-	// members see where the project syncs to.
+	// sync after a preview of what it does, or import into an empty project (step 3, US5), and the linked settings
+	// (step 4). The owner manages; other members see where the project syncs to.
 	let { github, email }: { github: GitHub; email: string } = $props();
 
 	let dialog: HTMLDialogElement;
@@ -21,6 +21,11 @@
 	let branchList = $state<string[]>([]);
 	let branch = $state('');
 	let branchesLoading = $state(false);
+
+	// step 3: the preview of the link being set up (repo@branch), reloaded when that changes
+	let preview = $state<GitHubPreview | null>(null);
+	let previewError = $state('');
+	let previewFor = '';
 
 	// step 4
 	let changing = $state(false);
@@ -50,6 +55,36 @@
 		'owner-changed': 'Needs attention: the new owner has to confirm the link',
 		pending: 'Finish setup'
 	};
+
+	const PREVIEW_GROUPS = [
+		{ key: 'overwrite', label: 'Will be overwritten on GitHub', open: true },
+		{ key: 'addToGitHub', label: 'Will be added to GitHub', open: false },
+		{ key: 'addToProject', label: 'Will be added to this project', open: true },
+		{ key: 'githubOnly', label: 'Stays on GitHub only', open: false },
+		{ key: 'same', label: 'Identical', open: false }
+	] as const;
+
+	$effect(() => {
+		const key = isOpen && loaded && owner && link?.state === 'pending' ? `${link.repo}@${link.branch}` : '';
+		if (key === previewFor) return;
+		previewFor = key;
+		preview = null;
+		previewError = '';
+		if (key) void loadPreview(key);
+	});
+
+	async function loadPreview(key = previewFor) {
+		previewError = '';
+		const r = await github.preview();
+		if (key !== previewFor) return;
+		if ('head' in r) preview = r;
+		else previewError = r.error ?? '';
+	}
+
+	/** Sync now (`merge`) or Import from repository (`import`); a failure shows a fresh preview with the reason. */
+	async function finishSetup(mode: 'merge' | 'import') {
+		if (!(await run(() => github.confirm(mode)))) await loadPreview();
+	}
 
 	/** `changeBranch`: start with the branch picker of a linked project (the popover's "Choose branch"). */
 	export async function open(opts: { changeBranch?: boolean } = {}) {
@@ -268,19 +303,49 @@
 			</p>
 		{/if}
 		{#if link.state === 'pending'}
-			<!-- step 3, short until US5's preview -->
+			<!-- step 3: what the first sync does -->
 			<p>
 				Linked to <a href={link.url} target="_blank" rel="noopener noreferrer">{link.repo}</a> on <strong>{link.branch}</strong>. Nothing has
 				synced yet.
 			</p>
-			<p class="muted">
-				Sync now merges both sides: where a file exists in both, this project’s version goes to GitHub; files only on GitHub are added to
-				this project. Files matching the “not pulled” patterns stay on GitHub only.
-			</p>
 			{#if link.error}<p class="error" role="alert">{link.error}</p>{/if}
+			{#if preview}
+				{#if !preview.head}
+					<p class="muted">The branch is empty. Sync now puts this project’s files on it.</p>
+				{:else}
+					<p class="muted">Sync now does this. Files in both places take this project’s version.</p>
+				{/if}
+				<div class="preview" aria-label="First sync preview" role="group">
+					{#each PREVIEW_GROUPS as g (g.key)}
+						{#if preview[g.key].length}
+							<details open={g.open}>
+								<summary>{g.label} <span class="count">{preview[g.key].length}</span></summary>
+								<ul>
+									{#each preview[g.key] as path (path)}<li><code>{path}</code></li>{/each}
+								</ul>
+							</details>
+						{/if}
+					{/each}
+					{#if PREVIEW_GROUPS.every((g) => !preview![g.key].length)}<p class="muted">Neither side has files yet.</p>{/if}
+				</div>
+				{#if preview.truncated}<p class="hint">Long lists show their first 500 files.</p>{/if}
+				{#if preview.projectEmpty && preview.head}
+					<p class="hint">
+						This project is still empty: Import from repository makes the branch’s files this project’s files (except the “not pulled” ones).
+					</p>
+				{/if}
+			{:else if previewError}
+				<p class="error" role="alert">{previewError}</p>
+				<p class="hint"><button type="button" class="link-button" onclick={() => loadPreview()}>Try again</button></p>
+			{:else}
+				<p class="muted" role="status">Comparing with GitHub…</p>
+			{/if}
 			<div class="buttons">
 				<button type="button" disabled={github.busy} onclick={cancelSetup}>Cancel</button>
-				<button type="button" class="primary" disabled={github.busy || !connected} onclick={() => run(() => github.confirm('merge'))}>Sync now</button>
+				{#if preview?.projectEmpty && preview.head}
+					<button type="button" disabled={github.busy || !connected} onclick={() => finishSetup('import')}>Import from repository</button>
+				{/if}
+				<button type="button" class="primary" disabled={github.busy || !connected || !preview} onclick={() => finishSetup('merge')}>Sync now</button>
 			</div>
 		{:else}
 			<!-- step 4 -->
@@ -526,6 +591,39 @@
 	}
 	.patterns {
 		margin-top: 16px;
+	}
+	.preview {
+		max-height: 280px;
+		overflow-y: auto;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 4px 0;
+	}
+	.preview details + details {
+		border-top: 1px solid var(--border);
+	}
+	.preview summary {
+		padding: 6px 10px;
+		cursor: pointer;
+		font-weight: 600;
+	}
+	.preview .count {
+		margin-left: 4px;
+		color: var(--text-muted);
+		font-weight: 400;
+	}
+	.preview ul {
+		margin: 0 0 6px;
+		padding: 0 10px 0 28px;
+		list-style: disc;
+	}
+	.preview li {
+		overflow-wrap: anywhere;
+		font-size: 12px;
+		line-height: 1.6;
+	}
+	.preview > p {
+		margin: 6px 10px;
 	}
 	.patterns label {
 		display: block;

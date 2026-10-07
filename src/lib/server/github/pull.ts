@@ -70,7 +70,7 @@ const decode = (bytes: Buffer): string | null => {
 };
 
 /** `fn` over `items`, at most BATCH at a time. */
-async function inBatches<T>(items: T[], fn: (item: T) => Promise<void>) {
+export async function inBatches<T>(items: T[], fn: (item: T) => Promise<void>) {
 	for (let i = 0; i < items.length; i += BATCH) await Promise.all(items.slice(i, i + BATCH).map(fn));
 }
 

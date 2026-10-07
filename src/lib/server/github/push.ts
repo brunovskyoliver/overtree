@@ -40,7 +40,7 @@ const isRefRace = (e: unknown) => e instanceof GitHubError && e.status === 422;
 const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** The newest history log id of the project, after flushing the buffered rows: what this push covers. */
-function logWatermark(pid: string): number {
+export function logWatermark(pid: string): number {
 	flushHistory();
 	return db().select({ id: max(historyLog.id) }).from(historyLog).where(eq(historyLog.projectId, pid)).get()?.id ?? 0;
 }

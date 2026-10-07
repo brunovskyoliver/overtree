@@ -22,6 +22,12 @@ test('the owner connects GitHub and links a repository from the dialog (US1)', a
 	await dialog.getByRole('button', { name: 'Link repository' }).click();
 
 	await expect(dialog.getByText('Nothing has synced yet.')).toBeVisible();
+	// the preview (US5): what Sync now does, Import offered for this still blank project
+	const preview = dialog.getByRole('group', { name: 'First sync preview' });
+	await expect(preview.getByText('Will be added to GitHub')).toBeVisible();
+	await expect(preview.locator('details', { hasText: 'Will be added to this project' }).getByText('README.md')).toBeVisible();
+	await expect(preview.getByText('Will be overwritten on GitHub')).toHaveCount(0);
+	await expect(dialog.getByRole('button', { name: 'Import from repository' })).toBeVisible();
 	// the top bar indicator replaces the GitHub button once linked (US4)
 	await expect(page.locator('#github-status')).toHaveAttribute('data-state', 'pending');
 	await dialog.getByRole('button', { name: 'Sync now' }).click();
@@ -146,5 +152,34 @@ test('the indicator shows the sync state; Push now with a title; readers only lo
 	await expect(popover.getByText(/temporary problem/).first()).toBeVisible();
 	await expect(popover.getByText(/^Retrying at /)).toBeVisible();
 	await fake('clearFailures');
+	await page.request.delete(`/api/projects/${pid}/github`);
+});
+
+test('an empty project imports a repository from the preview (US5)', async ({ page, pid }) => {
+	const FAKE = 'http://127.0.0.1:4175';
+	const fake = async (helper: string, ...args: unknown[]) => (await page.request.post(`${FAKE}/_fake/${helper}`, { data: { args } })).json();
+
+	await page.goto(`/api/github/connect?return=${encodeURIComponent(`/project/${pid}`)}`);
+	await expect(page).toHaveURL(new RegExp(`/project/${pid}$`));
+	const repos = await (await page.request.get('/api/github/repos')).json();
+	const installationId = repos.accounts.find((a: { login: string }) => a.login === 'octo').installationId;
+	const name = `import-${Date.now()}`;
+	const files = { 'main.tex': '\\documentclass{article}\n\\begin{document}Imported\\end{document}\n', 'refs.bib': '@book{x}\n', 'main.pdf': '%PDF' };
+	const { id: repoId } = await fake('addRepo', { name, installation: installationId, files });
+	expect((await page.request.put(`/api/projects/${pid}/github`, { data: { installationId, repoId, branch: 'main' } })).status()).toBe(200);
+
+	await openEditor(page);
+	await page.locator('#github-status').click();
+	await page.getByRole('dialog', { name: 'GitHub sync' }).getByRole('button', { name: 'Settings…' }).click();
+	const dialog = page.locator('dialog[aria-labelledby="github-title"]');
+	const preview = dialog.getByRole('group', { name: 'First sync preview' });
+	await preview.getByText('Stays on GitHub only').click();
+	await expect(preview.getByText('main.pdf')).toBeVisible();
+	await dialog.getByRole('button', { name: 'Import from repository' }).click();
+	await expect(dialog.getByRole('button', { name: 'Unlink' })).toBeVisible();
+	await expect(page.getByRole('treeitem', { name: 'refs.bib' })).toBeVisible();
+	await expect(page.getByRole('treeitem', { name: 'main.pdf' })).toHaveCount(0);
+	await expect.poll(() => text(page)).toContain('Imported');
+	await expect(page.locator('#github-status')).toHaveAttribute('data-state', 'in-sync');
 	await page.request.delete(`/api/projects/${pid}/github`);
 });

@@ -1,15 +1,21 @@
-import { desc, eq } from 'drizzle-orm';
-import type { GitHubLinkInfo, GitHubRun, GitHubState, GitHubStatus, GitHubSyncResult, MergeNote } from '../../github-types.ts';
+import { randomUUID } from 'node:crypto';
+import { desc, eq, inArray } from 'drizzle-orm';
+import { kindForName, limits, validateName } from '../../files.ts';
+import type { GitHubLinkInfo, GitHubPreview, GitHubRun, GitHubState, GitHubStatus, GitHubSyncResult, MergeNote } from '../../github-types.ts';
 import { broadcast, canEdit, projectRole } from '../access.ts';
 import { getServer } from '../collab.ts';
-import { fail } from '../files.ts';
-import { githubLinks, githubRuns, users } from '../schema.ts';
+import { editText, fail, FileError, putBlob, textUpdate } from '../files.ts';
+import { closeVersion, currentText } from '../history.ts';
+import { getProject } from '../projects.ts';
+import { applyTree, type TreePlan } from '../restore.ts';
+import { files, githubLinks, githubRuns, updates, users } from '../schema.ts';
+import { isStarterText } from '../templates.ts';
 import { branchExists, branchHead, branchPath, checkAccess, findRepo, getAccount, repoPath, type Link } from './accounts.ts';
 import { gh, GitHubError, installationToken } from './api.ts';
 import { githubConfig } from './config.ts';
 import { DEFAULT_IGNORE, ignoreFilter, projectFiles, writeBase, type BaseMap } from './paths.ts';
-import { branchGone } from './pull.ts';
-import { TITLE_MAX } from './push.ts';
+import { branchGone, inBatches } from './pull.ts';
+import { logWatermark, TITLE_MAX } from './push.ts';
 import { hasUnpushed, isSyncing, requestSync, type SyncKind } from './sync.ts';
 
 // A project's repository link (012 FR-005–010, data-model "github_links", research R7, R12): status for members,
@@ -22,6 +28,7 @@ const PATTERN_MAX = 200;
 const CONFIRM_WAIT_MS = 60_000;
 const SYNC_WAIT_MS = 30_000; // manual push/pull and create-branch answer 202 after this
 const RUNS_SHOWN = 20;
+const PREVIEW_MAX = 500;
 
 export const getLink = (pid: string): Link | null => db().select().from(githubLinks).where(eq(githubLinks.projectId, pid)).get() ?? null;
 
@@ -270,36 +277,110 @@ async function firstBase(link: Link): Promise<{ head: string | null; base: BaseM
 	return { head, base: head ? await treeBase(token, link, head) : {} };
 }
 
+type Blob = { path: string; sha: string; size?: number };
+
+/** `head`'s commit (first message line, author) and the files of its tree. */
+async function headTree(token: string, link: Link, head: string) {
+	const commit = await gh<{ tree: { sha: string }; author: { name: string } | null; message: string }>(
+		token,
+		'GET',
+		`/repos/${repoPath(link.repo)}/git/commits/${head}`
+	);
+	// ponytail: a truncated tree (over 100 000 entries) is not handled
+	const tree = await gh<{ tree: (Blob & { type: string })[] }>(token, 'GET', `/repos/${repoPath(link.repo)}/git/trees/${commit.tree.sha}?recursive=1`);
+	const blobs: Blob[] = tree.tree.filter((e) => e.type === 'blob').map(({ path, sha, size }) => ({ path, sha, size }));
+	return { author: commit.author?.name ?? 'Unknown', message: commit.message.split('\n')[0], blobs };
+}
+
 /** `head`'s tree entries for the non-ignored paths that also exist in the project (see firstBase). */
 async function treeBase(token: string, link: Link, head: string): Promise<BaseMap> {
 	const base: BaseMap = {};
-	const commit = await gh<{ tree: { sha: string } }>(token, 'GET', `/repos/${repoPath(link.repo)}/git/commits/${head}`);
-	// ponytail: a truncated tree (over 100 000 entries) is not handled
-	const tree = await gh<{
-		tree: { path: string; type: string; sha: string }[];
-	}>(token, 'GET', `/repos/${repoPath(link.repo)}/git/trees/${commit.tree.sha}?recursive=1`);
-	const blobs = tree.tree.filter((e) => e.type === 'blob');
+	const { blobs } = await headTree(token, link, head);
 	const project = projectFiles(link.projectId);
 	const ignored = ignoreFilter(JSON.parse(link.ignore) as string[], [...blobs.map((e) => e.path), ...project.keys()]);
 	for (const e of blobs) if (!ignored(e.path) && project.has(e.path)) base[e.path] = { sha: e.sha };
 	return base;
 }
 
-/** `POST …/github/confirm` with `merge` (T020; `import` is Phase 7): sets the first-sync base, makes the link
- *  `active` and requests the first pull and push (trigger `link`), waiting up to 60 s for them. A GitHub failure
- *  keeps the link `pending` with the reason in `error`. */
-export async function confirmLink(pid: string, mode: unknown) {
+/** Whether the project is empty for an import (FR-009): no files, or only the root `main.tex` a template created,
+ *  still with the starter text (a new blank project). Folders count as content. */
+export function isProjectEmpty(pid: string): boolean {
+	const rows = db()
+		.select({ id: files.id, parentId: files.parentId, name: files.name, kind: files.kind })
+		.from(files)
+		.where(eq(files.projectId, pid))
+		.all();
+	if (!rows.length) return true;
+	const [only] = rows;
+	if (rows.length > 1 || only.kind !== 'text' || only.parentId !== null || only.name !== 'main.tex') return false;
+	return isStarterText(currentText(only.id), getProject(pid)?.title ?? '');
+}
+
+/** `GET …/github/preview` (owner, link `pending`; FR-008): what confirming with `merge` does, from the same
+ *  comparison: GitHub's head tree against the project's files by git blob SHA, with the "not pulled" patterns over
+ *  both sides. Paths only in the project that match a pattern are neither pushed nor listed. */
+export async function preview(pid: string): Promise<GitHubPreview> {
 	const link = need(pid);
-	if (mode !== 'merge') fail(422, 'Unknown mode.');
 	if (link.status !== 'pending') fail(409, 'The link is already set up.');
+	const token = await installationToken(link.installationId);
+	const { head } = await branchHead(token, link.repo, link.branch);
+	const blobs = head ? (await headTree(token, link, head)).blobs : [];
+	const project = projectFiles(pid);
+	const ignored = ignoreFilter(JSON.parse(link.ignore) as string[], [...blobs.map((e) => e.path), ...project.keys()]);
+	const lists = { overwrite: [] as string[], same: [] as string[], addToGitHub: [] as string[], addToProject: [] as string[], githubOnly: [] as string[] };
+	for (const e of blobs) {
+		if (ignored(e.path)) lists.githubOnly.push(e.path);
+		else if (!project.has(e.path)) lists.addToProject.push(e.path);
+		else lists[project.get(e.path)!.sha() === e.sha ? 'same' : 'overwrite'].push(e.path);
+	}
+	const onGitHub = new Set(blobs.map((e) => e.path));
+	for (const path of project.keys()) if (!onGitHub.has(path) && !ignored(path)) lists.addToGitHub.push(path);
+	let truncated = false;
+	const cap = (l: string[]) => {
+		if (l.length > PREVIEW_MAX) truncated = true;
+		return l.sort().slice(0, PREVIEW_MAX);
+	};
+	return {
+		head,
+		projectEmpty: isProjectEmpty(pid),
+		overwrite: cap(lists.overwrite),
+		same: cap(lists.same),
+		addToGitHub: cap(lists.addToGitHub),
+		addToProject: cap(lists.addToProject),
+		githubOnly: cap(lists.githubOnly),
+		truncated
+	};
+}
+
+/** A failed first sync: the link stays `pending` with the reason (contracts confirm). */
+function setupFailed(pid: string, e: unknown) {
+	if (!(e instanceof GitHubError || e instanceof FileError)) return;
+	db().update(githubLinks).set({ error: e.message, updatedAt: Date.now() }).where(eq(githubLinks.projectId, pid)).run();
+	changed(pid);
+}
+
+/** `POST …/github/confirm` (owner, link `pending`). `merge` (T020): sets the first-sync base, makes the link `active`
+ *  and requests the first pull and push (trigger `link`), waiting up to 60 s for them. `import` (FR-009): the
+ *  branch's files become the project's (see importRepo). A failure keeps the link `pending` with the reason in
+ *  `error`. */
+export async function confirmLink(pid: string, mode: unknown, userId: string | null = null) {
+	const link = need(pid);
+	if (mode !== 'merge' && mode !== 'import') fail(422, 'Unknown mode.');
+	if (link.status !== 'pending') fail(409, 'The link is already set up.');
+	if (mode === 'import') {
+		if (!isProjectEmpty(pid)) fail(409, 'Only an empty project can import a repository.');
+		try {
+			return await importRepo(link, userId);
+		} catch (e) {
+			setupFailed(pid, e);
+			throw e;
+		}
+	}
 	let first: Awaited<ReturnType<typeof firstBase>>;
 	try {
 		first = await firstBase(link);
 	} catch (e) {
-		if (e instanceof GitHubError) {
-			db().update(githubLinks).set({ error: e.message, updatedAt: Date.now() }).where(eq(githubLinks.projectId, pid)).run();
-			changed(pid);
-		}
+		setupFailed(pid, e);
 		throw e;
 	}
 	db()
@@ -324,6 +405,157 @@ export async function confirmLink(pid: string, mode: unknown) {
 		})(),
 		new Promise((r) => (timer = setTimeout(r, CONFIRM_WAIT_MS)))
 	]).finally(() => clearTimeout(timer));
+}
+
+/** UTF-8 text, byte for byte (a BOM stays), or null. */
+const decodeText = (bytes: Buffer): string | null => {
+	try {
+		return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+	} catch {
+		return null;
+	}
+};
+
+/** `confirm` with `import` (FR-009, US5 #2): the branch head's non-ignored files become the project's files (texts
+ *  editable, others as blobs; over the upload limit or with a name Overtree can't use: skipped and noted, like a
+ *  pull), the main file is root `main.tex` or else the first root `.tex` with `\documentclass`, and the base is the
+ *  head, so the project is in sync with it. The starter `main.tex` of a blank project takes the repository's
+ *  `main.tex` text in place (its open editors keep their document), or goes. One `github` version, one `import` run. */
+async function importRepo(link: Link, userId: string | null) {
+	const pid = link.projectId;
+	const startedAt = Date.now();
+	const token = await installationToken(link.installationId);
+	const { head } = await branchHead(token, link.repo, link.branch);
+	if (!head) fail(409, `The branch “${link.branch}” has no files to import.`);
+	const { author, message, blobs } = await headTree(token, link, head!);
+	const ignored = ignoreFilter(JSON.parse(link.ignore) as string[], blobs.map((e) => e.path));
+	const capBytes = limits.uploadMaxFileMb * 1024 * 1024;
+	const notes: MergeNote['files'] = [];
+
+	// the tree: folders as needed (keys lower-case, names are unique case-insensitively)
+	const folders = new Map<string, string>();
+	const taken = new Set<string>();
+	const plan: TreePlan = { creates: [], moves: [], binaries: [], deletes: new Set(), main: undefined };
+	const wanted: (Blob & { id: string; parentId: string | null; name: string })[] = [];
+	const folderFor = (dir: string[]): string | null | undefined => {
+		let parentId: string | null = null;
+		for (let i = 0; i < dir.length; i++) {
+			const key = dir.slice(0, i + 1).join('/').toLowerCase();
+			if (taken.has(key)) return undefined; // a file is in the way
+			let id = folders.get(key);
+			if (!id) {
+				id = randomUUID();
+				folders.set(key, id);
+				plan.creates.push({ id, parentId, name: dir[i], kind: 'folder', hash: null, size: null });
+			}
+			parentId = id;
+		}
+		return parentId;
+	};
+	for (const e of [...blobs].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))) {
+		if (ignored(e.path)) continue;
+		const parts = e.path.split('/');
+		const key = e.path.toLowerCase();
+		if (parts.some((s) => validateName(s, []) !== null) || taken.has(key) || folders.has(key)) {
+			notes.push({ path: e.path, reason: 'skipped-name' });
+			continue;
+		}
+		if ((e.size ?? 0) > capBytes) {
+			notes.push({ path: e.path, reason: 'skipped-size' });
+			continue;
+		}
+		const parentId = folderFor(parts.slice(0, -1));
+		if (parentId === undefined) {
+			notes.push({ path: e.path, reason: 'skipped-name' });
+			continue;
+		}
+		taken.add(key);
+		wanted.push({ ...e, id: randomUUID(), parentId, name: parts.at(-1)! });
+	}
+	if (!wanted.length) fail(409, `The branch “${link.branch}” has no files Overtree can import.`);
+	if (plan.creates.length + wanted.length > limits.projectMaxFiles) fail(413, `A project can have at most ${limits.projectMaxFiles} files.`);
+
+	const fetched = new Map<string, Buffer>();
+	await inBatches(wanted, async (e) => {
+		const blob = await gh<{ content: string }>(token, 'GET', `/repos/${repoPath(link.repo)}/git/blobs/${e.sha}`);
+		fetched.set(e.path, Buffer.from(blob.content.replace(/\n/g, ''), 'base64'));
+	});
+	// someone may have started writing meanwhile
+	if (!isProjectEmpty(pid)) fail(409, 'Only an empty project can import a repository.');
+	const starter = db().select({ id: files.id }).from(files).where(eq(files.projectId, pid)).get();
+
+	const base: BaseMap = {};
+	const newTexts: { id: string; text: string }[] = [];
+	let starterText: string | null = null;
+	const rootTex: { id: string; name: string; text: string }[] = [];
+	for (const e of wanted) {
+		const bytes = fetched.get(e.path)!;
+		if (bytes.length > capBytes) {
+			notes.push({ path: e.path, reason: 'skipped-size' });
+			continue;
+		}
+		const text = kindForName(e.name) === 'text' ? decodeText(bytes) : null;
+		base[e.path] = { sha: e.sha, hash: putBlob(bytes) };
+		if (text === null) {
+			plan.creates.push({ id: e.id, parentId: e.parentId, name: e.name, kind: 'binary', hash: base[e.path].hash!, size: bytes.length });
+			continue;
+		}
+		if (starter && e.path === 'main.tex') {
+			e.id = starter.id; // the starter document takes the repository's text
+			starterText = text;
+		} else {
+			plan.creates.push({ id: e.id, parentId: e.parentId, name: e.name, kind: 'text', hash: null, size: null });
+			newTexts.push({ id: e.id, text });
+		}
+		if (e.parentId === null && /\.tex$/i.test(e.name)) rootTex.push({ id: e.id, name: e.name, text });
+	}
+	if (starter && starterText === null) plan.deletes.add(starter.id);
+	plan.main = (rootTex.find((t) => t.name === 'main.tex') ?? rootTex.find((t) => t.text.includes('\\documentclass')))?.id ?? null;
+
+	// new documents' first state before the tree lists them (as in a pull or a zip import)
+	const now = Date.now();
+	if (newTexts.length) db().insert(updates).values(newTexts.map((t) => ({ docName: t.id, update: textUpdate(t.text), createdAt: now }))).run();
+	try {
+		applyTree(pid, null, plan);
+	} catch (e) {
+		if (newTexts.length) db().delete(updates).where(inArray(updates.docName, newTexts.map((t) => t.id))).run();
+		throw e;
+	}
+	if (starter && starterText !== null) {
+		const conn = await getServer().hocuspocus.openDirectConnection(starter.id, {});
+		try {
+			await conn.transact((doc) => editText(doc.getText('content'), starterText!));
+		} finally {
+			await conn.disconnect();
+		}
+	}
+	const source = { commits: [{ sha: head!, author, message }], notes };
+	closeVersion(pid, 'github', { source });
+	const note: MergeNote | null = notes.length ? { at: now, commit: head!, files: notes } : null;
+	const watermark = logWatermark(pid); // the import is logged as the system: nothing to push
+	const finishedAt = Date.now();
+	db().transaction((tx) => {
+		tx.update(githubLinks)
+			.set({
+				status: 'active',
+				baseCommit: head,
+				baseFiles: writeBase(base),
+				watermark,
+				pendingPush: false,
+				failCount: 0,
+				nextAttemptAt: null,
+				error: null,
+				note: note && JSON.stringify(note),
+				lastPullAt: finishedAt,
+				updatedAt: finishedAt
+			})
+			.where(eq(githubLinks.projectId, pid))
+			.run();
+		tx.insert(githubRuns)
+			.values({ projectId: pid, kind: 'import', trigger: 'link', userId, result: 'pulled', commit: head, error: null, startedAt, finishedAt })
+			.run();
+	});
+	changed(pid);
 }
 
 /** `POST …/github/create-branch` (owner, T040): the linked branch is gone (`needs-access` with branchGone). Creates it
