@@ -194,3 +194,13 @@ test('an empty project imports a repository from the preview (US5)', async ({ pa
 	await expect(page.locator('#github-status')).toHaveAttribute('data-state', 'in-sync');
 	expect((await page.request.delete(`/api/projects/${pid}/github`, { headers: { origin: new URL(page.url()).origin } })).status()).toBe(204);
 });
+
+test('signed out, GitHub coming back to the callback leads to sign-in, not a JSON error', async ({ browser }) => {
+	const ctx = await browser.newContext();
+	const res = await ctx.request.get('/api/github/callback?installation_id=1&setup_action=install', { maxRedirects: 0 });
+	expect(res.status()).toBe(303);
+	expect(res.headers().location).toBe(`/sign-in?redirect=${encodeURIComponent('/api/github/callback?installation_id=1&setup_action=install')}`);
+	// a plain API route still answers JSON
+	expect((await ctx.request.get('/api/github/account', { maxRedirects: 0 })).status()).toBe(401);
+	await ctx.close();
+});

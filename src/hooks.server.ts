@@ -7,11 +7,15 @@ import { authenticateRequest } from '#lib/server/auth.ts';
 const isPublic = (path: string) =>
 	path === '/sign-in' || path === '/blocked' || path.startsWith('/share/') || path.startsWith('/_app/') || path === '/robots.txt';
 
+const isNavigation = (path: string) => path === '/api/github/connect' || path === '/api/github/callback';
+
 const see = (location: string) => new Response(null, { status: 303, headers: { location } });
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const path = event.url.pathname;
-	const api = path.startsWith('/api/');
+	// GitHub's connect and callback (012) are top-level browser visits, not fetches: they get the page treatment
+	// (Clerk's handshake when the short-lived session token expired while on GitHub, sign-in when signed out)
+	const api = path.startsWith('/api/') && !isNavigation(path);
 	const auth = await authenticateRequest(event.request);
 	// Clerk's handshake refreshes the session cookie through a redirect; an API call gets a 401 and the client retries
 	if (auth && 'redirect' in auth && !api) return auth.redirect;
