@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { EditorView } from '@codemirror/view';
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { auth, onSignOut, watchSession } from '#lib/auth.svelte.ts';
 	import Editor from '#lib/components/Editor.svelte';
@@ -46,6 +46,24 @@
 	compile.load();
 	$effect(() => {
 		compile.canConfigure = project.details?.permissions.canEdit !== false;
+	});
+	// The PDF follows the focused document: a .tex other than the main one with its own \documentclass is compiled
+	// and shown on its own; any other text file (a chapter, a .bib) shows the main document. Non-text tabs keep the
+	// PDF as it is. Decided once the tab has synced: before that its text is empty.
+	$effect(() => {
+		const h = editor;
+		const main = project.mainFileId;
+		if (!h) return;
+		const decide = () =>
+			untrack(() => {
+				if (editor !== h) return;
+				const name = project.files.find((f) => f.id === h.fileId)?.name.toLowerCase() ?? '';
+				const own = h.fileId !== main && name.endsWith('.tex') && /^[^%\n]*\\documentclass/m.test(h.view.state.doc.toString());
+				void compile.setRoot(own ? h.fileId : null);
+			});
+		if (h.provider.isSynced) return void decide();
+		h.provider.on('synced', decide);
+		return () => h.provider.off('synced', decide);
 	});
 
 	/** Open a file in a tab and hand its synced editor over; undefined when it isn't a text tab or the user

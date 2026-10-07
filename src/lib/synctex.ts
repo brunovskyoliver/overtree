@@ -38,14 +38,14 @@ export async function syncWith<T>(compile: CompileState, ask: (pdfId: string) =>
 	return next && next !== pdfId ? ask(next) : 'stale';
 }
 
-/** Where `line` of `fileId` is in the PDF `pdfId` (the last compile's). */
-export function syncToPdf(projectId: string, pdfId: string, fileId: string, line: number) {
-	const q = new URLSearchParams({ pdfId, fileId, line: String(line) });
+/** Where `line` of `fileId` is in the PDF `pdfId` (the last compile's; `root`: a standalone document's). */
+export function syncToPdf(projectId: string, pdfId: string, fileId: string, line: number, root?: string | null) {
+	const q = new URLSearchParams({ pdfId, fileId, line: String(line), ...(root && { root }) });
 	return get<SyncPdf>(`/api/projects/${projectId}/compile/sync/code?${q}`);
 }
 
 /** Which project file and line produced the point (x, y) of `page` in the PDF `pdfId`. */
-export function syncToCode(projectId: string, pdfId: string, page: number, x: number, y: number) {
-	const q = new URLSearchParams({ pdfId, page: String(page), x: String(x), y: String(y) });
+export function syncToCode(projectId: string, pdfId: string, page: number, x: number, y: number, root?: string | null) {
+	const q = new URLSearchParams({ pdfId, page: String(page), x: String(x), y: String(y), ...(root && { root }) });
 	return get<SyncCode>(`/api/projects/${projectId}/compile/sync/pdf?${q}`);
 }

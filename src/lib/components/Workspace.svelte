@@ -82,14 +82,14 @@
 		if (!pdfId || !at) return;
 		if (layout.mode === 'window') return layout.forward(at.fileId, at.line);
 		if (pdf?.isCollapsed()) pdf.expand(); // in editor only this goes to side-by-side (onExpand)
-		const r = await syncWith(compile, (id) => syncToPdf(project.id, id, at.fileId, at.line));
+		const r = await syncWith(compile, (id) => syncToPdf(project.id, id, at.fileId, at.line, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
 		else if (r) await pdfPane?.showBox(r.page, r.boxes);
 	}
 
 	/** Double-click on the PDF or "←": open the source of that spot. */
 	async function reverse(page: number, x: number, y: number) {
-		const r = await syncWith(compile, (id) => syncToCode(project.id, id, page, x, y));
+		const r = await syncWith(compile, (id) => syncToCode(project.id, id, page, x, y, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
 		else if (r) openAt(r.fileId, r.line);
 	}

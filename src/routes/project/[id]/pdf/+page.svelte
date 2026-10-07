@@ -32,7 +32,7 @@
 
 	// SyncTeX as in Workspace: a stale PDF is reloaded and asked again, else "Recompile to sync"
 	async function forward(fileId: string, line: number) {
-		const r = await syncWith(compile, (id) => syncToPdf(project.id, id, fileId, line));
+		const r = await syncWith(compile, (id) => syncToPdf(project.id, id, fileId, line, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
 		else if (r) await pane?.showBox(r.page, r.boxes);
 	}
@@ -40,7 +40,7 @@
 	const openAt = (fileId: string, line: number) => channel.post({ type: 'open-at', fileId, line });
 
 	async function reverse(n: number, x: number, y: number) {
-		const r = await syncWith(compile, (id) => syncToCode(project.id, id, n, x, y));
+		const r = await syncWith(compile, (id) => syncToCode(project.id, id, n, x, y, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
 		else if (r) openAt(r.fileId, r.line);
 	}

@@ -16,6 +16,8 @@ export class CompileState {
 	stopOnFirstError = $state(false);
 	/** the compiler is a project setting: readers see it but can't change it (FR-037); set by the page */
 	canConfigure = $state(true);
+	/** the standalone .tex shown and compiled instead of the main document (the focused one); null: the main one */
+	root = $state<string | null>(null);
 	readonly #base: string;
 	#pending = false;
 	#provider: () => HocuspocusProvider | undefined;
@@ -33,12 +35,29 @@ export class CompileState {
 		}
 	}
 
+	/** `?root=` for a standalone document; `extra` goes first */
+	#q(root: string | null | undefined, extra: Record<string, string> = {}) {
+		const q = new URLSearchParams({ ...extra, ...(root && { root }) }).toString();
+		return q ? `?${q}` : '';
+	}
+
+	/** The PDF of the shown result (its own root, so a mirrored result in the PDF window loads the right one). */
 	get pdfUrl() {
-		return this.last?.pdfId ? `${this.#base}/output.pdf?id=${this.last.pdfId}` : undefined;
+		return this.last?.pdfId ? `${this.#base}/output.pdf${this.#q(this.last.rootId, { id: this.last.pdfId })}` : undefined;
 	}
 
 	get logUrl() {
-		return `${this.#base}/output.log`;
+		return `${this.#base}/output.log${this.#q(this.last?.rootId)}`;
+	}
+
+	/** Show and compile `root` (null: the main document): its last result, or a first compile when it has none. */
+	async setRoot(root: string | null) {
+		if (root === this.root) return;
+		clearTimeout(this.#timer);
+		this.root = root;
+		this.last = null;
+		await this.load();
+		if (this.root === root && root && !this.last) await this.compile();
 	}
 
 	setOption(name: keyof Options, value: boolean) {
@@ -65,8 +84,9 @@ export class CompileState {
 	}
 
 	async load() {
-		const res = await fetch(this.#base);
-		if (!res.ok) return;
+		const root = this.root;
+		const res = await fetch(`${this.#base}${this.#q(root)}`);
+		if (!res.ok || this.root !== root) return; // switched documents meanwhile
 		({ compiler: this.compiler, last: this.last } = await res.json());
 	}
 
@@ -84,12 +104,15 @@ export class CompileState {
 				// ponytail: gives up after 5 s (offline) and compiles the server's text
 				const until = Date.now() + 5000;
 				while (this.#provider()?.hasUnsyncedChanges && Date.now() < until) await new Promise((r) => setTimeout(r, 20));
+				const root = this.root;
 				try {
 					const res = await fetch(this.#base, {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ stopOnFirstError: this.stopOnFirstError })
+						body: JSON.stringify({ stopOnFirstError: this.stopOnFirstError, ...(root && { root }) })
 					});
+					// another document is shown by now: its own result (load or compile) fills `last`
+					if (this.root !== root) continue;
 					if (res.ok) this.last = await res.json();
 					else this.#requestFailed(res.status);
 				} catch (err) {

@@ -7,7 +7,7 @@ import type { Compiler, CompileResult, CompileStatus, LogEntry } from '../compil
 import { pathOf } from '../files.ts';
 import { parseLog } from '../log-parser.ts';
 import { getServer } from './collab.ts';
-import { fileOr404, getMainFileId, getText, listFiles, readBlob } from './files.ts';
+import { fail, fileOr404, getMainFileId, getText, listFiles, readBlob } from './files.ts';
 import { compileSettings } from './schema.ts';
 
 const ENGINE_FLAG: Record<Compiler, string> = { pdflatex: '-pdf', xelatex: '-xelatex', lualatex: '-lualatex' };
@@ -195,9 +195,9 @@ export function tarProject(files: ProjectFile[]): Buffer {
 	return Buffer.concat(blocks);
 }
 
-/** Every file of the project at its path (text from Yjs, binary from its blob), the main document's path and
- *  the ids of the text files by path. */
-export async function collectProject(pid: string) {
+/** Every file of the project at its path (text from Yjs, binary from its blob), the path of the document to compile
+ *  (`root`, else the main document) and the ids of the text files by path. */
+export async function collectProject(pid: string, root: string | null = null) {
 	const all = listFiles(pid);
 	const files: ProjectFile[] = [];
 	const paths = new Map<string, string>();
@@ -207,19 +207,30 @@ export async function collectProject(pid: string) {
 		if (f.kind === 'text') paths.set(path, f.id);
 		files.push({ path, data: f.kind === 'text' ? Buffer.from(await getText(f.id)) : readBlob(fileOr404(pid, f.id).hash!) });
 	}
-	const mainId = getMainFileId(pid);
+	const mainId = root ?? getMainFileId(pid);
 	return { files, mainPath: mainId ? pathOf(mainId, all) : null, paths };
+}
+
+/** The document a compile request is about: null for the main document (also when `root` names it), else a .tex
+ *  file of the project compiled on its own (a standalone document next to the main one). 404 for anything else. */
+export function compileRoot(pid: string, root: unknown): string | null {
+	if (root === undefined || root === null || root === '' || root === getMainFileId(pid)) return null;
+	if (typeof root !== 'string') fail(400, 'root must be a file id.');
+	const f = fileOr404(pid, root as string);
+	if (f.kind !== 'text' || !f.name.toLowerCase().endsWith('.tex')) fail(404, 'Not a .tex file.');
+	return root as string;
 }
 
 export const NO_MAIN = 'No main document. Right-click a .tex file and choose Set as main document.';
 
-/** Download name of the PDF: the main document's name with `.pdf`. */
-export function pdfName(pid: string) {
-	const id = getMainFileId(pid);
+/** Download name of the PDF: the compiled document's name with `.pdf`. */
+export function pdfName(pid: string, root: string | null = null) {
+	const id = root ?? getMainFileId(pid);
 	return `${id ? fileOr404(pid, id).name.replace(/\.[^.]*$/, '') : 'main'}.pdf`;
 }
 
-export const compileDir = (pid: string) => join(getServer().dataDir, 'compile', pid);
+/** Output of the main document; a standalone root's goes under `roots/<file id>`. */
+export const compileDir = (pid: string, root: string | null = null) => join(getServer().dataDir, 'compile', pid, ...(root ? ['roots', root] : []));
 
 export function getCompiler(pid: string): Compiler {
 	const row = getServer().db.select().from(compileSettings).where(eq(compileSettings.project, pid)).get();
@@ -234,28 +245,29 @@ export function setCompiler(pid: string, compiler: Compiler) {
 		.run();
 }
 
-export function getLastResult(pid: string): CompileResult | null {
+export function getLastResult(pid: string, root: string | null = null): CompileResult | null {
 	try {
-		return JSON.parse(readFileSync(join(compileDir(pid), 'result.json'), 'utf8'));
+		return JSON.parse(readFileSync(join(compileDir(pid, root), 'result.json'), 'utf8'));
 	} catch {
 		return null;
 	}
 }
 
 type Opts = { stopOnFirstError: boolean };
-// Coalescing per project (research R6): one compile runs, at most one is queued behind it; later callers join the
+// Coalescing per project and root document (research R6): one compile runs, at most one is queued behind it; later callers join the
 // queued one with their options.
 // ponytail: compiles are unbounded across projects (one container per compiling project); feature 011 adds a cap
 const coalesce = new Map<string, { running?: Promise<CompileResult>; queued?: Promise<CompileResult>; queuedOpts: Opts }>();
 
-export function compileProject(pid: string, opts: Opts): Promise<CompileResult> {
-	let state = coalesce.get(pid);
-	if (!state) coalesce.set(pid, (state = { queuedOpts: opts }));
+export function compileProject(pid: string, opts: Opts, root: string | null = null): Promise<CompileResult> {
+	const key = `${pid}:${root ?? ''}`;
+	let state = coalesce.get(key);
+	if (!state) coalesce.set(key, (state = { queuedOpts: opts }));
 	const s = state;
 	const start = (o: Opts) =>
-		(s.running = compileOnce(pid, o).finally(() => {
+		(s.running = compileOnce(pid, o, root).finally(() => {
 			s.running = undefined;
-			if (!s.queued) coalesce.delete(pid);
+			if (!s.queued) coalesce.delete(key);
 		}));
 	if (!s.running) return start(opts);
 	s.queuedOpts = opts;
@@ -266,21 +278,21 @@ export function compileProject(pid: string, opts: Opts): Promise<CompileResult> 
 	return (s.queued ??= s.running.then(next, next));
 }
 
-async function compileOnce(pid: string, { stopOnFirstError }: Opts): Promise<CompileResult> {
+async function compileOnce(pid: string, { stopOnFirstError }: Opts, root: string | null): Promise<CompileResult> {
 	const id = randomUUID();
 	const startedAt = Date.now();
 	const compiler = getCompiler(pid);
-	const { files, mainPath, paths } = await collectProject(pid);
+	const { files, mainPath, paths } = await collectProject(pid, root);
 	const r: RunResult = mainPath ? await runCompile({ files, mainPath, compiler, stopOnFirstError }) : { status: 'failure', message: NO_MAIN };
 
-	const dir = compileDir(pid);
+	const dir = compileDir(pid, root);
 	mkdirSync(dir, { recursive: true });
 	// temp file + rename: a reader never sees a half-written file
 	const write = (name: string, data: string | Buffer) => {
 		writeFileSync(join(dir, `${name}.tmp`), data);
 		renameSync(join(dir, `${name}.tmp`), join(dir, name));
 	};
-	const previous = getLastResult(pid);
+	const previous = getLastResult(pid, root);
 	if (r.pdf) {
 		write('output.pdf', r.pdf);
 		// sync.json: the compile-time paths of the synctex inputs, so navigation survives later renames (research R9)
@@ -302,7 +314,8 @@ async function compileOnce(pid: string, { stopOnFirstError }: Opts): Promise<Com
 		durationMs: Date.now() - startedAt,
 		pdfId: r.pdf ? id : previous?.pdfId,
 		entries: r.log && mainPath ? parseLog(r.log, posix.basename(mainPath)).map((e) => resolveEntry(e, mainPath, paths)) : [],
-		message: r.message
+		message: r.message,
+		rootId: root
 	};
 	write('result.json', JSON.stringify(result));
 	return result;

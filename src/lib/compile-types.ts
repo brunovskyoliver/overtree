@@ -28,4 +28,5 @@ export type CompileResult = {
 	pdfId?: string; // id of the compile whose PDF is currently stored (this one or an earlier one)
 	entries: LogEntry[];
 	message?: string; // human text for timeout/oom/unavailable/failure
+	rootId?: string | null; // the standalone .tex compiled instead of the main document; null/absent: the main one
 };

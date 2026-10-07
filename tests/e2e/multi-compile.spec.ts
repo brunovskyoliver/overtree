@@ -71,6 +71,9 @@ test('another .tex becomes main from the menu, survives a reload and is compiled
 	await expect(row(page, 'main.tex')).toBeVisible();
 	await page.reload();
 	await expect(row(page, 'other.tex, main document')).toBeVisible();
+	// the focused tab is still the old main.tex, a document of its own: the PDF shows it until the new main is opened
+	await expect(viewer(page).locator('.page').first()).toContainText('INTRO-MARKER', { timeout: 15_000 });
+	await row(page, 'other.tex, main document').click();
 
 	expect((await compile(page)).status).toBe('success');
 	await expect(viewer(page).locator('.page').first()).toContainText('OTHER-MARKER', { timeout: 10_000 });

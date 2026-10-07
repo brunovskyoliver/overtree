@@ -51,6 +51,7 @@ export function mirrorCompile(compile: CompileState, post: (m: PdfMessage) => vo
 	});
 	return (last: CompileResult) => {
 		seen = last.id;
+		compile.root = last.rootId ?? null; // the window's own reloads (a stale sync) ask for the same document
 		compile.last = last;
 	};
 }

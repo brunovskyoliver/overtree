@@ -141,12 +141,12 @@ const MAX_CACHED = 4;
 const cache = new Map<string, Promise<SyncIndex | null>>();
 
 /** The parsed synctex of the project's last PDF, or null when `pdfId` isn't that PDF or there is no synctex. */
-export function loadIndex(pid: string, pdfId: string): Promise<SyncIndex | null> {
-	const key = `${pid}:${pdfId}`;
+export function loadIndex(pid: string, pdfId: string, root: string | null = null): Promise<SyncIndex | null> {
+	const key = `${pid}:${root ?? ''}:${pdfId}`;
 	let entry = cache.get(key);
 	if (entry) cache.delete(key); // re-insert: most recently used last
 	entry ??= (async () => {
-		const dir = compileDir(pid);
+		const dir = compileDir(pid, root);
 		try {
 			const sync: SyncJson = JSON.parse(await readFile(join(dir, 'sync.json'), 'utf8'));
 			if (sync.pdfId !== pdfId) return null;
