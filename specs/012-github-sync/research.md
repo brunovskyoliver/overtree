@@ -11,7 +11,7 @@ All decisions below resolve the open points of the Technical Context in [plan.md
 ## R2. Which repositories a user may link
 
 - **Decision**: The picker lists `GET /user/installations` → for each, `GET /user/installations/{id}/repositories` with the **user** token. GitHub returns only repositories that are both in the installation and accessible to the user; each has `permissions.push`. Only `push: true` repositories are offered (FR-006). On link the server re-checks with `GET /repos/{owner}/{repo}` (user token) and stores the `installation_id`.
-- **Owner still allowed?** Before a sync, if the last check is older than 1 h, the server re-runs `GET /repos/{owner}/{repo}` with the owner's user token (refreshing it if needed). A 401/refresh failure → `needs-reconnect`; 403/404 or `push: false` → `needs-access`. This stops syncing when the owner revokes the App on GitHub or loses org access (US1 #6, edge cases) even though installation tokens would still work.
+- **Owner still allowed?** Before a sync, if the last check is older than 1 h, the server re-runs `GET /repositories/{repo_id}` with the owner's user token (follows renames and transfers) (refreshing it if needed). A 401/refresh failure → `needs-reconnect`; 403/404 or `push: false` → `needs-access`. This stops syncing when the owner revokes the App on GitHub or loses org access (US1 #6, edge cases) even though installation tokens would still work.
 - **Alternatives**: trusting the installation alone — keeps pushing after the owner leaves the organization; rejected.
 
 ## R3. GitHub client: `@octokit/auth-app` + `fetch`
@@ -66,7 +66,8 @@ All decisions below resolve the open points of the Technical Context in [plan.md
   6. **Tree changes** (added/deleted/renamed files, binaries): applied in one DB transaction with the same helpers restore uses (create/move/delete rows, blobs via `putBlob`), then `logTree(pid, null)` and `broadcast('tree')`. A file deleted on GitHub but changed in Overtree since base → kept, noted. A binary changed on both sides → Overtree's kept, noted. Folders are created as needed; folders emptied by a GitHub delete are removed.
   7. `closeVersion(pid, 'github', { github: { commits, notes } })` records the "Merged from GitHub" version (FR-021); the commits come from `GET /repos/{o}/{r}/compare/{base}...{H}` (SHA, author name, message; first 20).
   8. `base := { commit: H, files: GitHub's filtered tree }`, base texts stored as blobs (R7). Overtree-side changes not yet on GitHub stay unpushed: the next push sends them.
-- **Base texts**: the base text for diff3 is the base blob's content, kept locally (`base.files[path].hash` → Overtree blob store) so a merge needs no extra API call for the base.
+- **Base texts**: the base text for diff3 is the base blob's content, kept locally (`base.files[path].hash` → Overtree blob store) so a merge needs no extra API call for the base. Entries from the first sync carry only `sha`; their base text is fetched from GitHub when a merge needs it.
+- **First sync** (confirm `merge`): base := head with the tree entries of paths that exist in the project. Project content wins where both exist, GitHub-only paths are pulled, identical paths need nothing.
 - **Rationale**: diff3 gives real conflict detection (US3 #4), and doing it on the server inside one Yjs transaction keeps Principle I (the only write path is a Yjs update through Hocuspocus). Plain CRDT replay of GitHub's change onto a forked doc was considered: it merges silently even on overlap (interleaved characters) and needs the exact Yjs state at the base commit, which history only has at version boundaries.
 - **Library**: `node-diff3` (MIT, no dependencies) for `diff3Merge`, line-based.
 - **Alternatives**: last-writer-wins (contradicts the user's 2: C answer); conflict markers without the `%` (breaks compiles).
@@ -77,13 +78,13 @@ All decisions below resolve the open points of the Technical Context in [plan.md
   - `baseCommit` — the GitHub commit both sides last agreed on (after a push: the pushed commit; after a pull: `H`);
   - `baseFiles` — blob hash of a JSON map `path → { sha, hash? }` for the synced paths at `baseCommit` (`hash` = Overtree blob of text files, for diff3);
   - `watermark` — the `history_log.id` up to which Overtree's changes are on GitHub.
-  - **Unpushed** = a `history_log` row with `id > watermark` and `userId IS NOT NULL` exists (a cheap indexed query). Pull writes are logged with `userId = null`, so they don't count. The push itself still compares SHAs, so a false "unpushed" never creates an empty commit (FR-014).
+  - **Unpushed** = `pending_push` is set, or a `history_log` row with `id > watermark` and `userId IS NOT NULL` exists (a cheap indexed query). A pull sets `pending_push` when its result differs from GitHub's head (overlap markers, kept files), because those writes are logged as system edits. Pull writes are logged with `userId = null`, so they don't count. The push itself still compares SHAs, so a false "unpushed" never creates an empty commit (FR-014).
 - **Co-authors** = distinct `userId` of those rows (FR-015, R9).
 - **Restart**: all of the above is in SQLite (FR-023).
 
 ## R8. Path filters
 
-- **Decision**: one pattern list per link (`ignore`, JSON array of globs, owner-editable, FR-020) with the defaults from the spec. Pattern matching uses `node:path`'s `matchesGlob` (built in since Node 22.5; if it still warns as experimental on the image's Node 24, use `picomatch` instead). The special default `<compile-output-pdf>` means "`X.pdf` when `X.tex` is in the same folder" and is evaluated against the union of both trees. Filtered paths are excluded from pull **and** push (FR-013), so GitHub's copy is never touched. Overtree's compile output lives outside the project tree (`data/compile/<pid>`), so it is never a candidate anyway.
+- **Decision**: one pattern list per link (`ignore`, JSON array of globs, owner-editable, FR-020) with the defaults from the spec. Pattern matching uses `node:path`'s `matchesGlob` (built in since Node 22.5; if it still warns as experimental on the image's Node 24, use `picomatch` instead). The special default `<compile-output-pdf>` means "`X.pdf` when `X.tex` is in the same folder" and is evaluated against the union of both trees. Filtered paths are excluded from pull **and** push, on both sides of every comparison including the stored base (FR-013), so GitHub's copy is never touched. Overtree's compile output lives outside the project tree (`data/compile/<pid>`), so it is never a candidate anyway.
 - **Paths Overtree can't hold** (names failing `validateName`, `..`, over limits): skipped and listed in the note.
 - **Empty folders**: git has none; an empty Overtree folder isn't pushed (ponytail: documented, no `.gitkeep`).
 

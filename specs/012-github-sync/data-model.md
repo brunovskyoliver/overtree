@@ -32,6 +32,7 @@ Deleted on "Disconnect" (and when the user is deleted). Links using it move to `
 | base_commit | text null | last commit both sides agree on; null until the first sync |
 | base_files | text null | blob hash of JSON `{ [path]: { sha: string; hash?: string } }` |
 | watermark | integer not null default 0 | `history_log.id` covered by GitHub (R7) |
+| pending_push | integer (bool) not null default 0 | set by a pull whose result differs from GitHub's head (overlap markers, kept-deleted, kept-binary); cleared by a successful push |
 | last_push_at, last_pull_at, last_check_at | integer null | ms |
 | fail_count | integer not null default 0 | backoff exponent |
 | next_attempt_at | integer null | retry time while `failing` |
@@ -82,6 +83,6 @@ No schema change. Pull writes are logged with `userId = null` (system), which is
 
 ## Derived values (not stored)
 
-- **Unpushed**: `exists(history_log where project_id = ? and id > link.watermark and user_id is not null)`.
+- **Unpushed**: `link.pending_push` or `exists(history_log where project_id = ? and id > link.watermark and user_id is not null)`.
 - **Co-authors of a push**: distinct `user_id` of those rows, joined to `users` for name and email.
 - **Display state** (FR-025): `syncing` (run in progress) · `failed` (`failing`) · `needs-reconnect` · `needs-access` · `owner-changed` · `pending` · `unpushed` · `in-sync`.
