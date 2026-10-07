@@ -87,6 +87,16 @@
 		if (message) history.error = message;
 	}
 
+	// `github` versions (012 contracts/ui.md "History timeline"): GitHub's commit authors instead of avatars
+	const NOTE = {
+		overlap: 'overlapping edits',
+		'kept-deleted': 'kept, deleted on GitHub',
+		'kept-binary': 'kept Overtree’s version',
+		'skipped-name': 'not pulled: name',
+		'skipped-size': 'not pulled: too large'
+	};
+	const commitAuthors = (v: VersionInfo) => [...new Set(v.github?.commits.map((c) => c.author) ?? [])];
+
 	function summary(v: VersionInfo) {
 		const names = v.changed.map((c) => base(c.path));
 		return { shown: names.slice(0, SHOWN_FILES), more: Math.max(0, names.length - SHOWN_FILES) };
@@ -143,14 +153,42 @@
 											><title>Compiled</title><path d="M4 2.5v11l9-5.5z" /></svg
 										>
 									{/if}
+									{#if v.kind === 'github'}
+										<svg class="icon gh" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"
+											><path
+												d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+											/></svg
+										>
+										<span class="gh-title">Merged from GitHub</span>
+									{/if}
 									<span class="authors">
+										{#if v.kind === 'github'}
+											{@const names = commitAuthors(v)}
+											<span class="gh-authors" title={names.join(', ')}>{names.join(', ')}</span>
+										{:else}
 										{#each v.authors.slice(0, MAX_AVATARS) as a (a.id)}
 											<span class="author" title={a.name}><Avatar name={a.name} avatarUrl={a.avatarUrl} color={a.color} size={20} /></span>
 										{/each}
 										{#if v.authors.length > MAX_AVATARS}<span class="more-authors">+{v.authors.length - MAX_AVATARS}</span>{/if}
 										<span class="sr">{v.authors.length ? `By ${v.authors.map((a) => a.name).join(', ')}` : ''}</span>
+										{/if}
 									</span>
 								</div>
+								{#if v.github?.commits.length}
+									{@const c = v.github.commits[0]}
+									<div class="detail" title={c.message}>
+										{c.message} <code class="sha">{c.sha.slice(0, 7)}</code>{#if v.github.commits.length > 1}<span class="muted">
+												and {v.github.commits.length - 1} more {v.github.commits.length === 2 ? 'commit' : 'commits'}</span
+											>{/if}
+									</div>
+								{/if}
+								{#if v.github?.notes.length}
+									<div class="labels">
+										{#each v.github.notes as n (n.path)}
+											<span class="warn" title="{n.path}: {NOTE[n.reason]}">{base(n.path)}: {NOTE[n.reason]}</span>
+										{/each}
+									</div>
+								{/if}
 								{#if v.kind === 'baseline' && !v.authors.length}
 									<div class="detail">Start of history</div>
 								{/if}
@@ -338,6 +376,32 @@
 	}
 	.restore {
 		color: #fbbc04;
+	}
+	.gh {
+		fill: var(--text);
+	}
+	.gh-title {
+		font-size: 12px;
+		font-weight: 500;
+	}
+	.gh-authors {
+		overflow: hidden;
+		max-width: 140px;
+		color: var(--text-muted);
+		font-size: 12px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.sha {
+		color: var(--text-muted);
+		font-size: 11px;
+	}
+	.warn {
+		padding: 1px 6px;
+		border-radius: 8px;
+		background: rgba(251, 188, 4, 0.15);
+		color: #fbbc04;
+		font-size: 11px;
 	}
 	.labels {
 		display: flex;

@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { openEditor, test, USER } from './helpers.ts';
+import { openEditor, test, text, USER } from './helpers.ts';
 
 // 012 GitHub sync against the fake GitHub (playwright.config.ts: user `octo` with `octo/thesis` and `octo/paper`).
 
@@ -36,4 +36,41 @@ test('the owner connects GitHub and links a repository from the dialog (US1)', a
 	await confirm.getByRole('button', { name: 'Unlink' }).click();
 	await expect(dialog.getByRole('button', { name: 'Link repository' })).toBeVisible();
 	expect((await (await page.request.get(`/api/projects/${pid}/github`)).json()).link).toBeNull();
+});
+
+test('a GitHub commit reaches two open editors and history shows "Merged from GitHub" (US3)', async ({ page, pid, browser }) => {
+	const FAKE = 'http://127.0.0.1:4175';
+	const fake = async (helper: string, ...args: unknown[]) => (await page.request.post(`${FAKE}/_fake/${helper}`, { data: { args } })).json();
+
+	// connected through the fake's OAuth (redirects end on the project), a fresh repository linked and confirmed
+	await page.goto(`/api/github/connect?return=${encodeURIComponent(`/project/${pid}`)}`);
+	await expect(page).toHaveURL(new RegExp(`/project/${pid}$`));
+	const repos = await (await page.request.get('/api/github/repos')).json();
+	const installationId = repos.accounts.find((a: { login: string }) => a.login === 'octo').installationId;
+	const name = `pull-${Date.now()}`;
+	const { id: repoId } = await fake('addRepo', { name, installation: installationId, files: { 'README.md': '# Pull\n' } });
+	expect((await page.request.put(`/api/projects/${pid}/github`, { data: { installationId, repoId, branch: 'main' } })).status()).toBe(200);
+	expect((await page.request.post(`/api/projects/${pid}/github/confirm`, { data: { mode: 'merge' } })).status()).toBe(200);
+	const onGitHub = await fake('head', `octo/${name}`, 'main');
+	expect(onGitHub).toBeTruthy();
+
+	await openEditor(page);
+	const other = await browser.newContext();
+	const second = await other.newPage();
+	await openEditor(second, pid);
+
+	const seed = await text(page);
+	const changed = seed.replace('\\section{Introduction}', '\\section{Introduction from GitHub}');
+	expect(changed).not.toBe(seed);
+	await fake('commitFiles', `octo/${name}`, 'main', { 'main.tex': changed }, { name: 'Octo Cat', email: 'octo@example.com' }, 'Rename the introduction');
+
+	// within the pull interval (1.5 s in the test server) both editors have it, no reload
+	for (const p of [page, second]) await expect.poll(() => text(p), { timeout: 10_000 }).toBe(changed);
+	await expect(page.getByRole('treeitem', { name: 'README.md' })).toBeVisible();
+
+	await page.getByRole('button', { name: 'History' }).click();
+	const view = page.getByRole('region', { name: 'History' });
+	await expect(view.getByRole('option').filter({ hasText: 'Merged from GitHub' }).first()).toBeVisible();
+	await expect(view.getByText('Rename the introduction')).toBeVisible();
+	await other.close();
 });

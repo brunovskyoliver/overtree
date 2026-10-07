@@ -6,7 +6,7 @@ import { checkAccess, userToken } from '../../src/lib/server/github/accounts.ts'
 import { open } from '../../src/lib/server/github/crypto.ts';
 import { getLink } from '../../src/lib/server/github/links.ts';
 import { readBase } from '../../src/lib/server/github/paths.ts';
-import { githubAccounts, githubRuns, memberships, users } from '../../src/lib/server/schema.ts';
+import { files as filesTable, githubAccounts, githubRuns, memberships, users } from '../../src/lib/server/schema.ts';
 import * as accountRoute from '../../src/routes/api/github/account/+server.ts';
 import * as callbackRoute from '../../src/routes/api/github/callback/+server.ts';
 import * as connectRoute from '../../src/routes/api/github/connect/+server.ts';
@@ -292,14 +292,15 @@ describe('link (FR-005–007)', () => {
 		expect(link.baseCommit).toBe(head);
 		const files = s.g.files(s.thesis, 'main');
 		expect(files.get('main.tex')!.toString()).not.toBe('from GitHub\n');
-		// GitHub-only and "not pulled" files are left alone (refs.bib arrives with Phase 5's pull)
+		// the first pull brings GitHub-only files in although head equals the base commit; "not pulled" ones stay out
 		expect(files.get('refs.bib')!.toString()).toBe('@book{x}\n');
 		expect(files.get('main.pdf')!.toString()).toBe('pdf');
+		expect(s.server.db.select().from(filesTable).all().map((f) => f.name).sort()).toEqual(['main.tex', 'refs.bib']);
 		const base = readBase(link);
-		expect(Object.keys(base)).toEqual(['main.tex']);
+		expect(Object.keys(base)).toEqual(['main.tex', 'refs.bib']);
 		expect(base['main.tex'].hash).toBeDefined();
 		const runs = s.server.db.select().from(githubRuns).all();
-		expect(runs.map((r) => `${r.kind}:${r.trigger}:${r.result}`)).toEqual(['pull:link:noop', 'push:link:pushed']);
+		expect(runs.map((r) => `${r.kind}:${r.trigger}:${r.result}`)).toEqual(['pull:link:pulled', 'push:link:pushed']);
 		// once set up, confirm refuses
 		expect((await call(confirmRoute.POST as Handler, OWNER, { method: 'POST', params: { pid: s.pid }, body: { mode: 'merge' } })).status).toBe(409);
 	});

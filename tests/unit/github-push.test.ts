@@ -293,16 +293,19 @@ describe('what a push contains (US2 #5, #7, FR-013)', () => {
 		neverForced(s);
 	});
 
-	it('a GitHub edit to a tracked file fails the push as a conflict until pulls exist (Phase 4)', async () => {
+	it('a GitHub edit to a tracked file: the push merges it first, then commits on top (US2 #7)', async () => {
 		const s = await setup();
-		s.g.commitFiles(s.thesis, 'main', { 'main.tex': 'edited on GitHub\n' });
-		await setText(s.main, 'edited in Overtree\n', ctx(s));
-		const r = await requestSync(s.pid, { kind: 'push', trigger: 'manual' });
-		expect(r.result).toBe('failed');
-		expect(fileOnGitHub(s, 'main.tex')).toBe('edited on GitHub\n');
-		expect(getLink(s.pid)).toMatchObject({ status: 'failing', failCount: 1 });
-		expect(getLink(s.pid)!.nextAttemptAt! - Date.now()).toBeGreaterThan(50_000);
-		expect(hasUnpushed(getLink(s.pid)!)).toBe(true);
+		await setText(s.main, 'a\nb\nc\n', ctx(s));
+		await requestSync(s.pid, { kind: 'push', trigger: 'manual' });
+		const theirs = s.g.commitFiles(s.thesis, 'main', { 'main.tex': 'a\nb\nC on GitHub\n' });
+		await setText(s.main, 'A in Overtree\nb\nc\n', ctx(s));
+		expect((await requestSync(s.pid, { kind: 'push', trigger: 'manual' })).result).toBe('pushed');
+		const head = s.g.head(s.thesis, 'main')!;
+		expect(s.g.commit(s.thesis, head)!.parents).toEqual([theirs]);
+		expect(fileOnGitHub(s, 'main.tex')).toBe('A in Overtree\nb\nC on GitHub\n');
+		expect(getLink(s.pid)).toMatchObject({ status: 'active', baseCommit: head });
+		expect(hasUnpushed(getLink(s.pid)!)).toBe(false);
+		neverForced(s);
 	});
 
 	it('an empty repository gets the project: Contents API seed, then the rest in one commit', async () => {

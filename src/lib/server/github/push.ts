@@ -93,7 +93,7 @@ type Content = { kind: 'text' | 'binary'; bytes: Buffer; sha: string; hash: stri
  *  entry's when unchanged, else the text stored now. */
 const storedHash = (c: Content, prev?: BaseMap[string]) => c.hash ?? (prev?.sha === c.sha && prev.hash ? prev.hash : putBlob(c.bytes));
 
-/** Pushes project `pid` (research R4): pulls while GitHub's head isn't the base, then one commit with every added,
+/** Pushes project `pid` (research R4): pulls (merges) while GitHub's head isn't the base, then one commit with every added,
  *  changed and deleted non-ignored path; nothing changed → `noop` (FR-014). On success the base becomes the pushed
  *  state and the watermark the log id read before building. Throws GitHubError. */
 export async function push(pid: string, opts: PushOptions): Promise<PushResult> {

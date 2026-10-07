@@ -112,7 +112,8 @@ const reset = {
 	failCount: 0,
 	nextAttemptAt: null,
 	error: null,
-	note: null
+	note: null,
+	lastPullAt: null // the first pull after confirming diffs the whole tree (pull.ts)
 };
 
 /** Links project `pid` to a repository through the owner's connection (FR-005–007, contracts PUT): the repository
@@ -144,7 +145,6 @@ export async function linkRepo(
 		branch,
 		ignore: JSON.stringify(ignore),
 		lastPushAt: null,
-		lastPullAt: null,
 		lastCheckAt: now,
 		updatedAt: now,
 		...reset

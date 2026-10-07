@@ -164,6 +164,13 @@ async function run(pid: string, req: SyncRequest): Promise<SyncResult> {
 		setLink(pid, { status: 'active', failCount: 0, nextAttemptAt: null, error: null });
 	} catch (e) {
 		if (!serverOpen() || !getLink(pid)) return { result: 'failed', error: 'The sync stopped.' };
+		// a pull found the branch history rewritten and set the link back to `pending` (T036): it stays there
+		const after = getLink(pid)!;
+		if (after.status === 'pending') {
+			result = { result: 'failed', error: after.error ?? 'The link needs to be confirmed again.' };
+			record(pid, req, startedAt, result);
+			return result;
+		}
 		if (!(e instanceof GitHubError)) console.error('GitHub sync failed', e);
 		const err = e instanceof GitHubError ? e : new GitHubError(0, 'retry', 'Overtree could not sync with GitHub; it retries.');
 		if (err.reason === 'retry' || err.reason === 'conflict') {
