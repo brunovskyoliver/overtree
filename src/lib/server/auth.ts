@@ -2,7 +2,20 @@ import { createClerkClient, verifyToken, type ClerkClient } from '@clerk/backend
 import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import { getServer } from './collab.ts';
 import type { Tx } from './files.ts';
-import { historyLog, invites, memberships, overrides, projects, settings, users, versionLabels, versions } from './schema.ts';
+import {
+	githubAccounts,
+	githubLinks,
+	githubRuns,
+	historyLog,
+	invites,
+	memberships,
+	overrides,
+	projects,
+	settings,
+	users,
+	versionLabels,
+	versions
+} from './schema.ts';
 
 // Authentication (research R2–R5): Clerk sessions on HTTP and WebSocket, the test bypass, the user mirror and the
 // sign-up policy. Loaded unbundled by server.ts in production: no SvelteKit imports here.
@@ -168,6 +181,10 @@ function moveUser(tx: Tx, from: User, to: string) {
 	tx.update(overrides).set({ userId: to }).where(eq(overrides.userId, from.id)).run();
 	tx.update(historyLog).set({ userId: to }).where(eq(historyLog.userId, from.id)).run();
 	tx.update(versionLabels).set({ userId: to }).where(eq(versionLabels.userId, from.id)).run();
+	// the GitHub connection is the person's, not the Clerk id's: it moves along (012 data-model)
+	tx.update(githubAccounts).set({ userId: to }).where(eq(githubAccounts.userId, from.id)).run();
+	tx.update(githubLinks).set({ userId: to }).where(eq(githubLinks.userId, from.id)).run();
+	tx.update(githubRuns).set({ userId: to }).where(eq(githubRuns.userId, from.id)).run();
 	tx.update(versions)
 		.set({ authors: sql`replace(${versions.authors}, ${JSON.stringify(from.id)}, ${JSON.stringify(to)})` })
 		.where(sql`${versions.authors} like ${'%' + JSON.stringify(from.id) + '%'}`)

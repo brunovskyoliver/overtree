@@ -12,6 +12,8 @@ import {
 	compileSettings,
 	documents,
 	files,
+	githubLinks,
+	githubRuns,
 	historyLog,
 	invites,
 	memberships,
@@ -74,7 +76,8 @@ export function renameProject(pid: string, title: unknown) {
 }
 
 /** A copy owned by `ownerId` titled "Copy of <title>" (cut to 120 characters): new file ids, the same blobs, each
- *  text document's current text as one stored update, the same main file and compiler, no members. */
+ *  text document's current text as one stored update, the same main file and compiler, no members and no GitHub
+ *  link (012 edge case: two projects pushing to one branch would fight). */
 export async function duplicateProject(pid: string, ownerId: string): Promise<string> {
 	const p = getProject(pid) ?? fail(404, 'Project not found.');
 	const all = db().select().from(files).where(eq(files.projectId, pid)).all();
@@ -154,7 +157,7 @@ export function joinByLink(token: string, userId: string): string | null {
 }
 
 /** Delete a project and everything in it (T023): files, Yjs documents and updates, history, memberships, invites,
- *  overrides and compile settings in one transaction, then the compile output; open editors get `deleted` and are kicked.
+ *  overrides, compile settings and the GitHub link with its runs in one transaction, then the compile output; open editors get `deleted` and are kicked.
  *  404 for an unknown project. Blobs stay (content-addressed, maybe shared: files.ts putBlob). */
 export function deleteProject(pid: string) {
 	db().transaction((tx) => {
@@ -169,6 +172,9 @@ export function deleteProject(pid: string) {
 		tx.delete(memberships).where(eq(memberships.projectId, pid)).run();
 		tx.delete(invites).where(eq(invites.projectId, pid)).run();
 		tx.delete(compileSettings).where(eq(compileSettings.project, pid)).run();
+		// the link and its runs only; nothing on GitHub changes (012 FR-010)
+		tx.delete(githubRuns).where(eq(githubRuns.projectId, pid)).run();
+		tx.delete(githubLinks).where(eq(githubLinks.projectId, pid)).run();
 		flushHistory(tx); // buffered rows of this project land before they go, not after (FK)
 		tx.delete(historyLog).where(eq(historyLog.projectId, pid)).run();
 		tx.delete(versionLabels).where(eq(versionLabels.projectId, pid)).run();

@@ -8,6 +8,11 @@ export type UserRef = { id: string; name: string; avatarUrl: string | null; colo
 
 export type Label = { id: number; versionId: number; name: string; user: UserRef; createdAt: number; canEdit: boolean };
 
+/** Why a file of a GitHub pull wasn't merged cleanly (012 data-model `MergeNote`). */
+export type MergeReason = 'overlap' | 'kept-deleted' | 'kept-binary' | 'skipped-name' | 'skipped-size';
+/** What a `github` version merged (012 data-model `versions.source`): the first 20 commits, the noted files. */
+export type GitHubSource = { commits: { sha: string; author: string; message: string }[]; notes: { path: string; reason: MergeReason }[] };
+
 export type ChangedFile = { id: string; path: string; change: 'added' | 'edited' | 'deleted' | 'renamed'; from?: string };
 
 /** `Version` in the contract (the server's `Version` is the table row). */
@@ -20,6 +25,7 @@ export type VersionInfo = {
 	changed: ChangedFile[];
 	restoredFrom: { id: number; createdAt: number } | null;
 	labels: Label[];
+	github?: GitHubSource; // `github` versions only
 };
 
 /** `userId`: who inserted (`+`) or deleted (`-`) the run; null when unknown and always for `=`. */

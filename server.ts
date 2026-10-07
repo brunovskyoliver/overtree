@@ -3,11 +3,18 @@ import { createServer } from 'node:http';
 import { limits } from './src/lib/files.ts';
 import { authConfigProblem } from './src/lib/server/auth.ts';
 import { attachCollab } from './src/lib/server/collab.ts';
+import { githubConfigProblem } from './src/lib/server/github/config.ts';
 
 // research R4: the test sign-in can never run in production, and without it Clerk is the only way in
 const authProblem = authConfigProblem();
 if (authProblem) {
 	console.error(`Overtree: ${authProblem}`);
+	process.exit(1);
+}
+// 012 FR-004: GitHub sync is all or nothing; a half-configured App would fail later, per request
+const githubProblem = githubConfigProblem();
+if (githubProblem) {
+	console.error(`Overtree: ${githubProblem}`);
 	process.exit(1);
 }
 

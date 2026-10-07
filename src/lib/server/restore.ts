@@ -256,6 +256,67 @@ function conflicts(pid: string, p: Plan): string[] {
 	return [...out];
 }
 
+/** The tree part of a plan (restore, and pulls from GitHub, 012 T012). */
+export type TreePlan = Pick<Plan, 'moves' | 'binaries' | 'deletes' | 'main'> & { creates: Omit<Create, 'tid'>[] };
+
+/** Applies `p`'s creates, moves, binary changes, deletes and main file in one transaction (413 over the project's
+ *  file limit), logged as one tree change by `actor` (null: system), then kicks open editors of deleted texts and
+ *  broadcasts `tree`. False when `p` changes nothing in the tree (texts are the caller's). */
+export function applyTree(pid: string, actor: string | null, p: TreePlan): boolean {
+	const tree = p.creates.length + p.moves.length + p.binaries.length + p.deletes.size > 0 || p.main !== undefined;
+	if (!tree) return false;
+	const deletedTexts: string[] = [];
+	db().transaction((tx) => {
+		const count = tx.select({ id: files.id }).from(files).where(eq(files.projectId, pid)).all().length;
+		if (count - p.deletes.size + p.creates.length > limits.projectMaxFiles)
+			fail(413, `A project can have at most ${limits.projectMaxFiles} files.`);
+		const now = Date.now();
+		for (const c of p.creates)
+			tx.insert(files)
+				.values({
+					id: c.id,
+					projectId: pid,
+					parentId: c.parentId,
+					name: c.name,
+					kind: c.kind,
+					hash: c.hash,
+					size: c.size,
+					createdAt: now,
+					updatedAt: now
+				})
+				.run();
+		for (const m of p.moves) tx.update(files).set({ parentId: m.parentId, name: m.name, updatedAt: now }).where(eq(files.id, m.id)).run();
+		for (const b of p.binaries) tx.update(files).set({ hash: b.hash, size: b.size, updatedAt: now }).where(eq(files.id, b.id)).run();
+		if (p.deletes.size) {
+			const doomed = [...p.deletes];
+			deletedTexts.push(
+				...tx
+					.select({ id: files.id })
+					.from(files)
+					.where(and(inArray(files.id, doomed), eq(files.kind, 'text')))
+					.all()
+					.map((r) => r.id)
+			);
+			tx.delete(overrides).where(inArray(overrides.fileId, doomed)).run();
+			tx.delete(files).where(inArray(files.id, doomed)).run(); // one statement: the parent FK is checked at its end
+			tx.delete(documents).where(inArray(documents.name, deletedTexts)).run();
+			tx.delete(updates).where(inArray(updates.docName, deletedTexts)).run();
+			tx.update(projects)
+				.set({ mainFileId: null })
+				.where(and(eq(projects.id, pid), inArray(projects.mainFileId, doomed)))
+				.run();
+		}
+		if (p.main !== undefined) tx.update(projects).set({ mainFileId: p.main }).where(eq(projects.id, pid)).run();
+		logTree(pid, actor, tx);
+	});
+	touchProject(pid);
+	// open editors of removed files get kicked, as on delete (files.ts deleteEntry)
+	for (const t of deletedTexts) getServer().hocuspocus.closeConnections(t);
+	broadcast(pid, { type: 'tree' });
+	if (p.moves.length) kickOverridden(pid);
+	return true;
+}
+
 /** Restore project `pid` (or only file `fileId`) to version `vid` as `userId`; the project role is the caller's
  *  check (E). `version` is the new `restore` version, null when nothing changed; `skipped` lists the paths left
  *  as they are (whole project only; a single file is refused with 403 instead). */
@@ -279,58 +340,7 @@ export async function restoreVersion(
 	}
 	if (fileId !== undefined && p.skipped.size) fail(403, 'You don’t have edit access to this file.');
 
-	const tree = p.creates.length + p.moves.length + p.binaries.length + p.deletes.size > 0 || p.main !== undefined;
-	const deletedTexts: string[] = [];
-	if (tree) {
-		db().transaction((tx) => {
-			const count = tx.select({ id: files.id }).from(files).where(eq(files.projectId, pid)).all().length;
-			if (count - p.deletes.size + p.creates.length > limits.projectMaxFiles)
-				fail(413, `A project can have at most ${limits.projectMaxFiles} files.`);
-			const now = Date.now();
-			for (const c of p.creates)
-				tx.insert(files)
-					.values({
-						id: c.id,
-						projectId: pid,
-						parentId: c.parentId,
-						name: c.name,
-						kind: c.kind,
-						hash: c.hash,
-						size: c.size,
-						createdAt: now,
-						updatedAt: now
-					})
-					.run();
-			for (const m of p.moves) tx.update(files).set({ parentId: m.parentId, name: m.name, updatedAt: now }).where(eq(files.id, m.id)).run();
-			for (const b of p.binaries) tx.update(files).set({ hash: b.hash, size: b.size, updatedAt: now }).where(eq(files.id, b.id)).run();
-			if (p.deletes.size) {
-				const doomed = [...p.deletes];
-				deletedTexts.push(
-					...tx
-						.select({ id: files.id })
-						.from(files)
-						.where(and(inArray(files.id, doomed), eq(files.kind, 'text')))
-						.all()
-						.map((r) => r.id)
-				);
-				tx.delete(overrides).where(inArray(overrides.fileId, doomed)).run();
-				tx.delete(files).where(inArray(files.id, doomed)).run(); // one statement: the parent FK is checked at its end
-				tx.delete(documents).where(inArray(documents.name, deletedTexts)).run();
-				tx.delete(updates).where(inArray(updates.docName, deletedTexts)).run();
-				tx.update(projects)
-					.set({ mainFileId: null })
-					.where(and(eq(projects.id, pid), inArray(projects.mainFileId, doomed)))
-					.run();
-			}
-			if (p.main !== undefined) tx.update(projects).set({ mainFileId: p.main }).where(eq(projects.id, pid)).run();
-			logTree(pid, userId, tx);
-		});
-		touchProject(pid);
-		// open editors of removed files get kicked, as on delete (files.ts deleteEntry)
-		for (const t of deletedTexts) getServer().hocuspocus.closeConnections(t);
-		broadcast(pid, { type: 'tree' });
-		if (p.moves.length) kickOverridden(pid);
-	}
+	const tree = applyTree(pid, userId, p);
 	// live in open editors; collaborators' undo managers don't track it (research R5)
 	for (const t of p.texts) await setText(t.id, t.text, { userId, projectId: pid });
 

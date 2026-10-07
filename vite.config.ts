@@ -3,6 +3,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 import { authConfigProblem } from './src/lib/server/auth.ts';
 import { attachCollab } from './src/lib/server/collab.ts';
+import { githubConfigProblem } from './src/lib/server/github/config.ts';
 
 export default defineConfig({
 	plugins: [
@@ -25,6 +26,8 @@ export default defineConfig({
 					if (process.env.NODE_ENV === 'production' && process.env.OVERTREE_TEST_AUTH === '1') throw new Error(problem);
 					server.config.logger.warn(`Overtree: ${problem}`);
 				}
+				const githubProblem = githubConfigProblem();
+				if (githubProblem && !process.env.VITEST) server.config.logger.warn(`Overtree: ${githubProblem}`);
 				if (server.httpServer && !process.env.VITEST) attachCollab(server.httpServer as import('node:http').Server);
 			}
 		}

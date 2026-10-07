@@ -4,7 +4,15 @@ import { PUBLIC_CLERK_PUBLISHABLE_KEY, PUBLIC_TEST_HOOKS } from '$app/env/public
 // Browser side of sign-in (research R1, R4): Clerk's SDK, loaded lazily, or the test cookie when test hooks are on.
 
 /** `GET /api/me` (contracts/http-api.md). */
-export type Me = { id: string; email: string; name: string; avatarUrl: string | null; role: 'admin' | 'user'; color: string };
+export type Me = {
+	id: string;
+	email: string;
+	name: string;
+	avatarUrl: string | null;
+	role: 'admin' | 'user';
+	color: string;
+	github: { configured: true } | null; // 012: null hides every GitHub control
+};
 
 export const TEST_COOKIE = 'overtree-test-user';
 

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, exists, gt, inArray, lt, max, min, notExists, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { FileKind } from '../files.ts';
-import type { HistoryPage, Label, UserRef, VersionInfo } from '../history-types.ts';
+import type { GitHubSource, HistoryPage, Label, UserRef, VersionInfo } from '../history-types.ts';
 import { colorFor } from '../presence.ts';
 import { broadcast, canEdit, projectRole, type Role } from './access.ts';
 import { getServer } from './collab.ts';
@@ -197,11 +197,16 @@ export const lastVersion = (pid: string, tx: Tx = db()): Version | null =>
 	tx.select().from(versions).where(eq(versions.projectId, pid)).orderBy(desc(versions.id)).limit(1).get() ?? null;
 
 /** Closes the project's open log rows into a version, in one transaction; null when there is nothing to close.
- *  Empty versions only for `restore` and for a project's first (`baseline`) version. Authors are the distinct users
+ *  Empty versions only for `restore` and for a project's first (`baseline`) version (never for `github`: a pull
+ *  that changed nothing is no version, 012 FR-021). `source`: what a `github` version merged. Authors are the distinct users
  *  of the covered rows only: a compile requester adds nothing. Broadcasts `history` when a version was added.
  *  Text is read in the same turn as the watermark; an update applied but not yet logged (onChange runs right after
  *  the doc applies it) lands in the next version (research R3). */
-export function closeVersion(pid: string, kind: VersionKind, { restoredFrom }: { restoredFrom?: number } = {}): Version | null {
+export function closeVersion(
+	pid: string,
+	kind: VersionKind,
+	{ restoredFrom, source }: { restoredFrom?: number; source?: GitHubSource } = {}
+): Version | null {
 	const version = db().transaction((tx) => {
 		ensureBaselines(pid, tx); // flushes the buffered rows first
 		const prev = lastVersion(pid, tx);
@@ -228,6 +233,7 @@ export function closeVersion(pid: string, kind: VersionKind, { restoredFrom }: {
 				authors: JSON.stringify([...new Set(rows.flatMap((r) => (r.userId ? [r.userId] : [])))]),
 				changed: JSON.stringify(changedFiles(prevManifest, manifest)),
 				restoredFrom: restoredFrom ?? null,
+				source: source ? JSON.stringify(source) : null,
 				startedAt: rows[0]?.createdAt ?? now,
 				createdAt: now
 			})
@@ -309,7 +315,8 @@ function versionInfos(pid: string, rows: Version[], userId: string): VersionInfo
 		authors: authors[i].map((id) => refs.get(id)!),
 		changed: JSON.parse(v.changed) as Changed[],
 		restoredFrom: v.restoredFrom ? (restored.get(v.restoredFrom) ?? null) : null,
-		labels: labels.filter((l) => l.versionId === v.id).map(label)
+		labels: labels.filter((l) => l.versionId === v.id).map(label),
+		...(v.source ? { github: JSON.parse(v.source) as GitHubSource } : {})
 	}));
 }
 
