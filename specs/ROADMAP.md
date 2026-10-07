@@ -61,6 +61,7 @@ One feature covering sign-in, site roles, per-user project spaces, sharing with 
 | 009 | *(merged into 008)* | — | — |
 | 010 | Comments & chat | todo | 005 |
 | 011 | Self-hosting hardening | todo | 005 |
+| 012 | GitHub repository sync | done | 008 |
 
 ### 008 Project history, restore, SyncTeX & PDF navigation
 One feature covering both parts below. Former rows 008 and 009 are bundled here.
@@ -75,11 +76,14 @@ Select text and add a comment; comments anchor to Yjs relative positions so they
 ### 011 Self-hosting hardening
 Production Docker Compose with a full TeX Live image, data volume layout, documented backup/restore (SQLite online backup + blob directory), health check, structured logs, rate limits on auth and compile, compile queue with a concurrency cap, upload size limits, HTTPS behind a reverse proxy (Caddy example), and an upgrade path for database migrations.
 
+### 012 GitHub repository sync
+Two-way sync between a project and one branch of a GitHub repository through a GitHub App. Each user connects their own GitHub account; the owner links the project to a repository they can push to, after a preview of what the first sync does (or imports the repository into a blank project). Overtree pushes one commit per working session (after everyone leaves, during long sessions, or with Push now and an optional title), with the changed files in the message and `Co-authored-by` trailers for everyone whose edits it carries; never a force push. GitHub's commits are pulled on open, every few minutes while open and with Pull now, and merged into the live documents with diff3 (overlapping edits keep both sides between `%` markers), recorded as "Merged from GitHub" versions in history. "Not pulled" patterns keep the repository's own CI output (`.github/`, build files, PDFs compiled from a `.tex`) out of the project and untouched on GitHub. A status button in the top bar shows the sync state, failures with retries and backoff, and the fix for lost access, a deleted branch or an ownership transfer. Off unless the instance configures the App.
+
 ## Later / not planned yet
 
 - Visual (rich-text) editor mode
 - Track changes / review mode
-- Git or GitHub sync, Dropbox sync
+- Dropbox sync
 - Spell checking and grammar
 - Reference manager integrations (Zotero, Mendeley)
 - AI writing assistant

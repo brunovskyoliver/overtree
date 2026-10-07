@@ -124,6 +124,40 @@ Every member can browse history. Editors can **Restore this file** or **Restore 
 
 The e2e server shortens them to 1.5 s, 10 s and 0.5 s.
 
+## GitHub sync
+
+Optional: a project can sync both ways with one branch of a GitHub repository. Each user connects their own GitHub account (separate from how they sign in to Overtree); the project owner links the project to a repository they can push to. Edits made in Overtree go up as ordinary commits, never force-pushed; commits made on GitHub (the web editor, a laptop clone, a CI workflow) are merged into the open documents, and History shows them as "Merged from GitHub". Without the variables below there is no GitHub UI at all.
+
+**Set up a GitHub App** (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App; under an organization for a shared instance):
+
+1. **Homepage URL**: your Overtree URL. **Callback URL** and **Setup URL**: `<overtree>/api/github/callback` (e.g. `https://tex.example.org/api/github/callback`).
+2. Tick **Request user authorization (OAuth) during installation** and **Redirect on update**. Leave **Expire user authorization tokens** on; Overtree refreshes them.
+3. **Webhook**: untick **Active**. Overtree polls instead, so the server needs no inbound access from GitHub.
+4. **Repository permissions**: **Contents** read and write, **Metadata** read-only (it's mandatory). Nothing else, no account permissions. Overtree never writes `.github/`, so it doesn't need the Workflows permission.
+5. **Where can this GitHub App be installed?** "Only on this account" for yourself, "Any account" if other people's accounts or organizations should install it.
+6. Create it, then **Generate a new client secret** and **Generate a private key** (a `.pem` download).
+
+Then set the five `GITHUB_APP_*` variables (all or none; the server refuses to start with only some) and restart. In a project the owner opens **GitHub** in the top bar → **Connect GitHub**, installs the App on the repositories it may use, picks a repository and branch, and checks the preview before the first sync.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `GITHUB_APP_ID` | unset | The App's numeric ID (the App's settings page). Unset turns GitHub sync off. |
+| `GITHUB_APP_SLUG` | required with it | The App's URL name (`github.com/apps/<slug>`), for the install links. |
+| `GITHUB_APP_CLIENT_ID` | required with it | The App's client ID (`Iv…`). |
+| `GITHUB_APP_CLIENT_SECRET` | required with it | The client secret generated above. |
+| `GITHUB_APP_PRIVATE_KEY` | required with it | The private key PEM; one line with literal `\n` works too. |
+| `GITHUB_API_URL` / `GITHUB_URL` | `https://api.github.com` / `https://github.com` | Other endpoints (GitHub Enterprise Server, the tests' fake GitHub). |
+
+Tokens are stored encrypted on the server and never sent to the browser or written to logs. A user who disconnects or revokes the App on GitHub stops every link they made until they reconnect.
+
+**When it syncs.** Opening a project pulls; while it is open the server pulls every 2 minutes. Overtree pushes once per working session: 2 minutes after the last person closes the project, with one commit for everything changed (a pull goes first, so GitHub's commits are merged rather than overwritten). In sessions longer than 30 minutes it also pushes when there are unpushed changes and a history version closed since the last push. Editors and the owner can **Push now** (optionally with a commit title) and **Pull now** from the status button in the top bar; readers only see the status. Only one sync runs per project at a time. Failures retry after 1, 2, 4 … up to 60 minutes; lost access ("needs reconnect", "needs access", a deleted branch) waits for the owner. After a restart, unpushed changes are pushed and the rest pulled.
+
+**Commits.** The commit title is `Update a.tex and 2 more files` (or the custom title), the body lists the changed files, and each Overtree user whose edits are in the commit gets a `Co-authored-by: Name <email>` trailer with **their Overtree account email**. That puts collaborators' email addresses in the repository's history, visible to anyone who can read it. Users without an email are named in the body instead. The first push to an **empty** repository makes two commits: GitHub refuses the normal commit API until a repository has one, so Overtree adds the first file with the Contents API and the rest in a normal commit on top.
+
+**Not pulled.** Each link has a list of patterns for files that are neither pulled into the project nor pushed (owner: GitHub dialog → **Settings…**). The defaults are `.github/**`, LaTeX build files (`*.aux`, `*.log`, `*.bbl`, `*.synctex.gz`, …) and `<compile-output-pdf>`: a PDF with a `.tex` of the same name next to it. So a repository whose own workflow compiles the LaTeX and commits the PDFs works as it is: the workflow's commits are seen, nothing comes into the project, and Overtree never changes or deletes those files on GitHub. A PDF without a matching `.tex` (an uploaded figure) syncs like any file. Adding a pattern later doesn't delete matching files on either side.
+
+**Linking an existing repository.** Before the first sync the dialog shows what it will do: which GitHub files get overwritten by the project's version, which files are added on either side, which stay on GitHub only, and which are identical. A new, still blank project can instead **Import from repository**: the branch's files (except the "not pulled" ones) become the project, the main document is the root `main.tex`, else the first root `.tex` with `\documentclass`, and the usual upload limits apply.
+
 ## PDF navigation and layout
 
 - **SyncTeX**: the strip between the editor and the PDF has **→** (go to the cursor's place in the PDF, also **Ctrl/⌘+Alt+J** in the editor) and **←** (open the source of the visible part of the PDF). Forward search scrolls the PDF and highlights the lines for a second; double-clicking a spot in the PDF opens its source file at that line. Both need a compiled PDF (the arrows say "Compile first" until then) and work for readers. After edits without a recompile, they use the last compile's positions.

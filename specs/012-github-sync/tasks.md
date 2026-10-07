@@ -140,11 +140,11 @@ description: "Task list for feature 012: GitHub repository sync"
 
 ## Phase 8: Polish & cross-cutting
 
-- [ ] T048 [P] `tests/unit/github.smoke.test.ts`, skipped unless `GITHUB_SMOKE=1`: with a real installation token, push to `GITHUB_SMOKE_REPO`, add a commit via the API (workflow stand-in adding a PDF), pull, assert nothing pulled; uses a throwaway branch `overtree-smoke-<timestamp>` and deletes it afterwards (quickstart.md)
-- [ ] T049 [P] README.md: "GitHub sync" section (what it does, GitHub App setup steps and permissions from quickstart.md, env table, how sync timing works, that `Co-authored-by` exposes collaborators' emails in the repository)
-- [ ] T050 [P] Grep the server for token leaks: no `console.*` with token values, `GitHubError` messages token-free; add `tests/unit/github-sync.test.ts` assertion that captured logs during a failing run contain no token (SC-006)
-- [ ] T051 Run `pnpm check`, `pnpm test`, `pnpm exec playwright test github --project=chromium`; fix failures
-- [ ] T052 Add row 012 "GitHub repository sync" to `specs/ROADMAP.md` (Phase 3 table, status `done` when landing, paragraph with the feature description) and remove "Git or GitHub sync" from "Later / not planned yet"
+- [X] T048 [P] `tests/unit/github.smoke.test.ts`, skipped unless `GITHUB_SMOKE=1`: with a real installation token, push to `GITHUB_SMOKE_REPO`, add a commit via the API (workflow stand-in adding a PDF), pull, assert nothing pulled; uses a throwaway branch `overtree-smoke-<timestamp>` and deletes it afterwards (quickstart.md)
+- [X] T049 [P] README.md: "GitHub sync" section (what it does, GitHub App setup steps and permissions from quickstart.md, env table, how sync timing works, that `Co-authored-by` exposes collaborators' emails in the repository)
+- [X] T050 [P] Grep the server for token leaks: no `console.*` with token values, `GitHubError` messages token-free; add `tests/unit/github-sync.test.ts` assertion that captured logs during a failing run contain no token (SC-006)
+- [X] T051 Run `pnpm check`, `pnpm test`, `pnpm exec playwright test github --project=chromium`; fix failures
+- [X] T052 Add row 012 "GitHub repository sync" to `specs/ROADMAP.md` (Phase 3 table, status `done` when landing, paragraph with the feature description) and remove "Git or GitHub sync" from "Later / not planned yet"
 
 ---
 

@@ -289,4 +289,29 @@ describe('no tokens in status or logs (SC-006)', () => {
 		expect(text).not.toMatch(TOKEN_RE);
 		for (const t of secrets) expect(text).not.toContain(t);
 	});
+
+	it('a GitHub reply or network error that echoes a token never reaches the link error, the runs or the logs (T050)', async () => {
+		const logged: unknown[] = [];
+		for (const m of ['log', 'warn', 'error', 'info'] as const) vi.spyOn(console, m).mockImplementation((...a) => void logged.push(...a));
+		const s = await setup();
+		await setText(s.main, 'y\n', ctx(s));
+		const leaked = 'ghs_0123456789abcdefLEAKED';
+		const real = globalThis.fetch;
+		const toGitHub = (url: unknown) => String(url instanceof Request ? url.url : url).startsWith(s.g.url);
+		const spy = vi.spyOn(globalThis, 'fetch');
+		spy.mockImplementationOnce((url, init) =>
+			toGitHub(url) ? Promise.resolve(Response.json({ message: `Bad credentials for ${leaked}` }, { status: 500 })) : real(url, init)
+		);
+		await requestSync(s.pid, { kind: 'push', trigger: 'manual' });
+		expect(getLink(s.pid)!.error).toContain('[token]');
+		spy.mockImplementationOnce((url, init) => (toGitHub(url) ? Promise.reject(new TypeError(`fetch failed: Bearer ${leaked}`)) : real(url, init)));
+		await requestSync(s.pid, { kind: 'push', trigger: 'manual' });
+		spy.mockRestore();
+		const stored = JSON.stringify([getLink(s.pid), runs(s), (await hit(linkRoute.GET, ev(OWNER, { pid: s.pid }))).body]);
+		const text = logged.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join('\n');
+		for (const out of [stored, text]) {
+			expect(out).not.toContain(leaked);
+			expect(out).not.toMatch(TOKEN_RE);
+		}
+	});
 });
