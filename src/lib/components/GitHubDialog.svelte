@@ -395,7 +395,7 @@
 	dialog {
 		width: 540px;
 		max-width: calc(100vw - 32px);
-		padding: 16px 20px 20px;
+		padding: 20px 24px 24px;
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		background: var(--panel);
@@ -409,7 +409,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		margin-bottom: 8px;
+		gap: 12px;
+		margin-bottom: 12px;
 	}
 	h2 {
 		margin: 0;
