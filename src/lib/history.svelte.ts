@@ -24,6 +24,9 @@ export class History {
 	diff = $state<VersionDiff | null>(null);
 	diffLoading = $state(false);
 	diffError = $state<string | null>(null);
+	restoring = $state(false);
+	/** After a restore: what it did, or why it failed (shown in the diff header). */
+	restoreNote = $state<{ ok: boolean; text: string; skipped: string[] } | null>(null);
 	#diffSeq = 0;
 	#listSeq = 0;
 
@@ -100,6 +103,7 @@ export class History {
 	select(id: number) {
 		if (this.selected === id && this.diff?.version.id === id) return;
 		this.selected = id;
+		this.restoreNote = null;
 		this.#loadDiff();
 	}
 
@@ -107,6 +111,36 @@ export class History {
 		if (this.compare === c) return;
 		this.compare = c;
 		this.#loadDiff();
+	}
+
+	/** Restore the selected version: one file (`fileId`) or the whole project (US2). The new version and the tree
+	 *  arrive as `history` and `tree` events. */
+	async restore(fileId?: string) {
+		const id = this.selected;
+		if (id === null || this.restoring) return;
+		this.restoring = true;
+		this.restoreNote = null;
+		const init = {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(fileId ? { fileId } : {})
+		};
+		const res = await fetch(this.#url(`/${id}/restore`), init).catch(() => undefined);
+		this.restoring = false;
+		if (await blockedBy(res)) return;
+		if (!res?.ok) {
+			const message = ((await res?.json().catch(() => null)) as { message?: string } | null)?.message;
+			this.restoreNote = {
+				ok: false,
+				text: message ?? 'Couldn’t restore, try again.',
+				skipped: []
+			};
+			return;
+		}
+		const { version, skipped }: { version: VersionInfo | null; skipped: string[] } = await res.json();
+		const what = fileId ? 'File restored.' : 'Project restored.';
+		const text = version ? what : skipped.length ? 'Nothing restored.' : 'Nothing to restore: no differences.';
+		this.restoreNote = { ok: true, text, skipped };
 	}
 
 	async #loadDiff() {

@@ -75,11 +75,11 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Independent Test**: quickstart scenarios 3–5
 
-- [ ] T023 [US2] Create `src/lib/server/restore.ts`: `planRestore(pid, manifest, userId, onlyFileId?)` (moves/renames back, edits, recreations with new ids folders-first, deletions, main file; each change checked with `fileRoles`), `restoreFile` (403 when not allowed), `restoreProject` (skip and report) — seal open version, apply (texts via `setText` with restorer context, binaries by hash, tree with `logTree`), `closeVersion(pid,'restore',{ userId, restoredFrom })`, broadcast `tree` (research R5)
-- [ ] T024 [US2] Route `src/routes/api/projects/[pid]/history/[vid]/restore/+server.ts` (POST, E; body `{ fileId? }` → `{ version, skipped }`)
-- [ ] T025 [P] [US2] Vitest `tests/unit/restore.test.ts`: single file restore; project restore with add/delete/rename/binary/main file; history untouched (old versions still listed); restore version kind and `restoredFrom`; reader 403; editor with read-only override: single file 403, project restore skips and lists it; owner never restricted; concurrent live doc receives the text
-- [ ] T026 [US2] UI in `src/lib/components/HistoryDiff.svelte` / `HistoryView.svelte`: "Restore this file" when `canRestore`, "Restore project" (E) with `ConfirmDialog`, notice listing skipped paths, errors shown inline; hidden for readers
-- [ ] T027 [US2] Playwright `tests/e2e/restore.spec.ts`: restore file seen live by second context without reload, Ctrl+Z there doesn't undo it; project restore recreates deleted file and reverts rename; reader sees no restore buttons; editor with read-only override gets skipped list
+- [X] T023 [US2] Create `src/lib/server/restore.ts`: `planRestore(pid, manifest, userId, onlyFileId?)` (moves/renames back, edits, recreations with new ids folders-first, deletions, main file; each change checked with `fileRoles`), `restoreFile` (403 when not allowed), `restoreProject` (skip and report) — seal open version, apply (texts via `setText` with restorer context, binaries by hash, tree with `logTree`), `closeVersion(pid,'restore',{ userId, restoredFrom })`, broadcast `tree` (research R5)
+- [X] T024 [US2] Route `src/routes/api/projects/[pid]/history/[vid]/restore/+server.ts` (POST, E; body `{ fileId? }` → `{ version, skipped }`)
+- [X] T025 [P] [US2] Vitest `tests/unit/restore.test.ts`: single file restore; project restore with add/delete/rename/binary/main file; history untouched (old versions still listed); restore version kind and `restoredFrom`; reader 403; editor with read-only override: single file 403, project restore skips and lists it; owner never restricted; concurrent live doc receives the text
+- [X] T026 [US2] UI in `src/lib/components/HistoryDiff.svelte` / `HistoryView.svelte`: "Restore this file" when `canRestore`, "Restore project" (E) with `ConfirmDialog`, notice listing skipped paths, errors shown inline; hidden for readers
+- [X] T027 [US2] Playwright `tests/e2e/restore.spec.ts`: restore file seen live by second context without reload, Ctrl+Z there doesn't undo it; project restore recreates deleted file and reverts rename; reader sees no restore buttons; editor with read-only override gets skipped list
 
 **Checkpoint**: MVP complete (history + restore)
 

@@ -4,11 +4,14 @@
 	import type { FileDiff, Segment, UserRef } from '#lib/history-types.ts';
 	import { lightColor } from '#lib/presence.ts';
 	import Avatar from './Avatar.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	// contracts/ui.md "Changed files" + "Diff": the selected version against the current state or the version
 	// before it. Insertions on the author's color at 20 %, deletions struck through in it (research R13); unchanged
 	// runs keep 3 lines of context around changes, the rest behind "Show N unchanged lines".
-	let { history }: { history: History } = $props();
+	// `canEdit`: the project role allows restoring (per-file rights come with each file's `canRestore`)
+	let { history, canEdit }: { history: History; canEdit: boolean } = $props();
+	let confirm = $state<ConfirmDialog>();
 	const CONTEXT = 3;
 	const NEUTRAL = '#9aa1ad'; // changes without a known author
 
@@ -78,6 +81,16 @@
 			: []
 	);
 
+	async function restoreProject() {
+		if (!diff) return;
+		const ok = await confirm?.ask({
+			title: `Restore the whole project to ${dateTime(diff.version.createdAt)}?`,
+			body: 'Changes after it stay in history.',
+			confirmLabel: 'Restore project'
+		});
+		if (ok) await history.restore();
+	}
+
 	function jump(f: FileDiff) {
 		document.getElementById(fileAnchor(f))?.scrollIntoView({ block: 'start' });
 	}
@@ -111,7 +124,23 @@
 			<button type="button" aria-pressed={history.compare === 'current'} onclick={() => history.setCompare('current')}>Compare with current</button>
 			<button type="button" aria-pressed={history.compare === 'previous'} onclick={() => history.setCompare('previous')}>Changes in this version</button>
 		</div>
+		{#if canEdit && diff}
+			<button type="button" class="action" disabled={history.restoring} onclick={restoreProject}>Restore project</button>
+		{/if}
 	</header>
+	{#if history.restoreNote}
+		{@const note = history.restoreNote}
+		<div class="restore-note" class:error={!note.ok} role={note.ok ? 'status' : 'alert'}>
+			<p>{note.text}</p>
+			{#if note.skipped.length}
+				<p>Skipped (read-only for you):</p>
+				<ul aria-label="Skipped files">
+					{#each note.skipped as path (path)}<li>{path}</li>{/each}
+				</ul>
+			{/if}
+			<button type="button" class="dismiss" aria-label="Dismiss" onclick={() => (history.restoreNote = null)}>×</button>
+		</div>
+	{/if}
 	{#if legend.length}
 		<ul class="legend" aria-label="Authors">
 			{#each legend as id (id)}
@@ -138,6 +167,9 @@
 						<span class="path">{f.path}</span>
 						{#if f.oldPath}<span class="from">renamed from {f.oldPath}</span>{/if}
 						<span class="badge {f.change}">{f.change}</span>
+						{#if f.canRestore}
+							<button type="button" class="action" disabled={history.restoring} onclick={() => history.restore(f.id)}>Restore this file</button>
+						{/if}
 					</header>
 					{#if f.kind === 'binary'}
 						<p class="binary">{binaryNote(f)}</p>
@@ -157,6 +189,8 @@
 		{/if}
 	</div>
 </section>
+
+<ConfirmDialog bind:this={confirm} />
 
 <style>
 	.files {
@@ -297,6 +331,54 @@
 	}
 	.toggle button:focus-visible {
 		outline-offset: -2px;
+	}
+	.action {
+		height: 26px;
+		padding: 0 12px;
+		border: 1px solid var(--border);
+		border-radius: 13px;
+		background: var(--panel-raised);
+		color: var(--text);
+		font: inherit;
+		font-size: 13px;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.action:hover:not(:disabled) {
+		background: #3a4252;
+	}
+	.action:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.restore-note {
+		position: relative;
+		padding: 6px 36px 6px 12px;
+		border-bottom: 1px solid var(--border);
+		background: #23402a;
+		font-size: 13px;
+	}
+	.restore-note.error {
+		background: #4a2a2a;
+		color: #f28b82;
+	}
+	.restore-note p {
+		margin: 2px 0;
+	}
+	.restore-note ul {
+		margin: 2px 0;
+		padding-left: 18px;
+		font-family: var(--font-mono);
+	}
+	.dismiss {
+		position: absolute;
+		top: 4px;
+		right: 8px;
+		border: 0;
+		background: none;
+		color: inherit;
+		font-size: 16px;
+		cursor: pointer;
 	}
 	.legend {
 		display: flex;

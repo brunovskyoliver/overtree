@@ -5,7 +5,7 @@
 
 	// contracts/ui.md "History view": changed files | diff | timeline over the editor and PDF (research R13). The
 	// editor stays mounted underneath (its providers stay connected); Escape leaves history.
-	let { history }: { history: History } = $props();
+	let { history, canEdit }: { history: History; canEdit: boolean } = $props();
 	let diff = $state<HistoryDiff>();
 	let section = $state<HTMLElement>();
 
@@ -25,7 +25,7 @@
 <svelte:window {onkeydown} />
 
 <section class="history" aria-label="History" bind:this={section}>
-	<HistoryDiff bind:this={diff} {history} />
+	<HistoryDiff bind:this={diff} {history} {canEdit} />
 	<HistoryTimeline {history} onopen={() => diff?.focus()} />
 </section>
 

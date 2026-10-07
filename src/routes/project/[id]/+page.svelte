@@ -137,7 +137,7 @@
 			<!-- the History view covers the workspace; the editor stays mounted (hidden, inert) so its providers stay
 			     connected and the tabs come back as they were (008 research R13) -->
 			{#if history.open}
-				<div class="history-layer"><HistoryView {history} /></div>
+				<div class="history-layer"><HistoryView {history} canEdit={project.details?.permissions.canEdit ?? false} /></div>
 			{/if}
 			<div class="work" class:hidden={history.open} inert={history.open}>
 				<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
