@@ -25,7 +25,7 @@ type Repo = {
 type Auth = { kind: 'user'; login: string } | { kind: 'installation'; id: number } | null;
 type Reply = { status: number; body?: unknown; location?: string };
 
-export type FakeRequest = { method: string; path: string; auth: 'user' | 'installation' | 'app' | null };
+export type FakeRequest = { method: string; path: string; auth: 'user' | 'installation' | 'app' | null; body?: Record<string, unknown> };
 export type FileMap = Record<string, string | Buffer | null>;
 
 const sha1 = (data: Buffer) => createHash('sha1').update(data).digest('hex');
@@ -527,6 +527,31 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 			return { status: 201, body: refJson(r, branch) };
 		}
 
+		// Contents API, create only (the first file of an empty repository, 012 T024): one commit on `branch` (default
+		// branch when absent); on an empty repository it creates the branch
+		if (method === 'PUT' && (m = rest.match(/^\/contents\/(.+)$/))) {
+			const path = m[1].split('/').map(decodeURIComponent).join('/');
+			if (typeof body.message !== 'string') return fail(422, 'Invalid request.\n\n"message" wasn\'t supplied.');
+			if (typeof body.content !== 'string') return fail(422, 'Invalid request.\n\n"content" wasn\'t supplied.');
+			const branch = typeof body.branch === 'string' ? body.branch : r.defaultBranch;
+			const head = r.refs.get(branch);
+			if (!head && !empty) return fail(404, `Branch ${branch} not found`);
+			if (head && fake.files(r, head).has(path) && typeof body.sha !== 'string') return fail(422, 'Invalid request.\n\n"sha" wasn\'t supplied.');
+			const bot = { name: 'overtree-test[bot]', email: 'overtree-test[bot]@users.noreply.github.test' };
+			let sha: string;
+			try {
+				sha = fake.commitFiles(r, branch, { [path]: Buffer.from(body.content, 'base64') }, bot, body.message);
+			} catch (e) {
+				return fail(422, (e as Error).message);
+			}
+			const blob = walk(r, get(r, sha, 'commit')!.commit.tree).find((e) => e.path === path)!;
+			const size = get(r, blob.sha, 'blob')!.data.length;
+			return {
+				status: 201,
+				body: { content: { name: path.split('/').at(-1), path, sha: blob.sha, size, type: 'file' }, commit: gitCommitJson(r, sha) }
+			};
+		}
+
 		// git data; GitHub refuses all of it on a repository without commits
 		if (rest.startsWith('/git/') && empty) return isEmpty();
 		if (method === 'POST' && rest === '/git/blobs') {
@@ -672,7 +697,12 @@ export function fakeGitHub(options: { clientId?: string; clientSecret?: string; 
 		}
 
 		const auth = authenticate(req.headers.authorization);
-		requests.push({ method, path: pathname, auth: auth === 'bad' || auth === null ? null : auth === 'app' ? 'app' : auth.kind });
+		requests.push({
+			method,
+			path: pathname,
+			auth: auth === 'bad' || auth === null ? null : auth === 'app' ? 'app' : auth.kind,
+			...(raw && method !== 'GET' ? { body } : {})
+		});
 		const failure = failures.shift();
 		if (failure !== undefined) return send(res, fail(failure, `fake failure ${failure}`));
 		send(res, await route(method, pathname, searchParams, body, req.headers.authorization));

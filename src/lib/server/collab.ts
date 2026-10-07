@@ -6,6 +6,8 @@ import * as Y from 'yjs';
 import { canEdit, fileRole, projectRole, type ConnectionContext } from './access.ts';
 import { authenticateToken } from './auth.ts';
 import { openDb } from './db.ts';
+import { githubConfig } from './github/config.ts';
+import { presence, startSync } from './github/sync.ts';
 import { logText, sweep, SWEEP_MS } from './history.ts';
 import { touchProject } from './projects.ts';
 import { documents, files, updates } from './schema.ts';
@@ -52,6 +54,9 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 		touchProject(pid);
 	};
 
+	const githubPresence = (documentName: string) =>
+		presence(documentName.slice(PRESENCE.length), hocuspocus.documents.get(documentName)?.getConnections().length ?? 0);
+
 	const hocuspocus = new Hocuspocus<ConnectionContext>({
 		debounce: 500,
 		maxDebounce: 2000,
@@ -73,6 +78,16 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 			if (!file || !role) throw forbidden();
 			connectionConfig.readOnly = !canEdit(role);
 			return { userId: user.id, projectId: file.projectId };
+		},
+
+		// GitHub sync presence (012 R5): `connected` runs after the connection is registered on the document and
+		// `onDisconnect` after it is removed, so the count is right in both; `onConnect` runs before authentication,
+		// too early. Readers count too. getConnections() leaves out server-side direct connections.
+		async connected({ documentName }) {
+			if (isPresence(documentName) && githubConfig()) githubPresence(documentName);
+		},
+		async onDisconnect({ documentName }) {
+			if (isPresence(documentName) && githubConfig()) githubPresence(documentName);
 		},
 
 		// Runs before Hocuspocus attaches its own update listener, so nothing here reaches onChange.
@@ -150,6 +165,9 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 		}
 	}, SWEEP_MS);
 	sweeper.unref();
+
+	// GitHub sync (012 FR-023): startup pushes/pulls and the scheduler, which stops with this db like the sweeper
+	if (githubConfig()) startSync();
 
 	return { hocuspocus, wss, db };
 }

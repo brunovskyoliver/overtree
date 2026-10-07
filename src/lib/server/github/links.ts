@@ -1,15 +1,14 @@
-import { and, eq, gt, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { GitHubLinkInfo, GitHubState, GitHubStatus, MergeNote } from '../../github-types.ts';
 import { broadcast, canEdit, projectRole } from '../access.ts';
 import { getServer } from '../collab.ts';
 import { fail } from '../files.ts';
-import { flushHistory } from '../history.ts';
-import { githubLinks, githubRuns, historyLog, users } from '../schema.ts';
-import { branchExists, branchPath, findRepo, type Link } from './accounts.ts';
+import { githubLinks, githubRuns, users } from '../schema.ts';
+import { branchExists, branchHead, branchPath, findRepo, repoPath, type Link } from './accounts.ts';
 import { gh, GitHubError, installationToken } from './api.ts';
 import { githubConfig } from './config.ts';
 import { DEFAULT_IGNORE, ignoreFilter, projectFiles, writeBase, type BaseMap } from './paths.ts';
-import { isSyncing, requestSync } from './sync.ts';
+import { hasUnpushed, isSyncing, requestSync } from './sync.ts';
 
 // A project's repository link (012 FR-005–010, data-model "github_links", research R7, R12): status for members,
 // link/patch/unlink/confirm for the owner. Route guards check the role; these check the link's own rules.
@@ -29,19 +28,6 @@ function need(pid: string): Link {
 }
 
 const changed = (pid: string) => broadcast(pid, { type: 'github' });
-
-/** Edits by people (not pulls, which log as the system) since GitHub last got the project, or a pull result that
- *  differs from GitHub's head (data-model "Derived values"). */
-export function hasUnpushed(link: Pick<Link, 'projectId' | 'watermark' | 'pendingPush'>): boolean {
-	if (link.pendingPush) return true;
-	flushHistory();
-	return !!db()
-		.select({ id: historyLog.id })
-		.from(historyLog)
-		.where(and(eq(historyLog.projectId, link.projectId), gt(historyLog.id, link.watermark), isNotNull(historyLog.userId)))
-		.limit(1)
-		.get();
-}
 
 /** What the top bar shows (FR-025, data-model "Display state"). */
 export function displayState(link: Link): GitHubState {
@@ -206,25 +192,12 @@ export function unlink(pid: string) {
 	changed(pid);
 }
 
-const repoPath = (repo: string) => repo.split('/').map(encodeURIComponent).join('/');
-
-/** The branch's head commit, or null for an empty repository or a branch that doesn't exist (yet). */
-async function headCommit(token: string, repo: string, branch: string): Promise<string | null> {
-	try {
-		const ref = await gh<{ object: { sha: string } }>(token, 'GET', `/repos/${repoPath(repo)}/git/ref/heads/${branchPath(branch)}`);
-		return ref.object.sha;
-	} catch (e) {
-		if (e instanceof GitHubError && (e.status === 404 || e.status === 409)) return null;
-		throw e;
-	}
-}
-
 /** The first-sync base (T020): GitHub's head with its tree entries (SHA only, no `hash`: no base text yet) restricted
  *  to non-ignored paths that also exist in the project. Diffing against it, project files win where both exist,
  *  GitHub-only files are pulled and identical files stay untouched (FR-008). */
 async function firstBase(link: Link): Promise<{ head: string | null; base: BaseMap }> {
 	const token = await installationToken(link.installationId);
-	const head = await headCommit(token, link.repo, link.branch);
+	const { head } = await branchHead(token, link.repo, link.branch);
 	const base: BaseMap = {};
 	if (!head) return { head, base };
 	const commit = await gh<{ tree: { sha: string } }>(token, 'GET', `/repos/${repoPath(link.repo)}/git/commits/${head}`);

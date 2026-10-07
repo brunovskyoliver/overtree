@@ -183,6 +183,22 @@ export async function findRepo(userId: string, installationId: number, repoId: n
 const seg = (s: string) => encodeURIComponent(s);
 export const branchPath = (branch: string) => branch.split('/').map(seg).join('/');
 
+/** `owner/name` as a URL path. */
+export const repoPath = (repo: string) => repo.split('/').map(seg).join('/');
+
+/** The branch's head commit (`head` null: the branch doesn't exist; `empty`: the repository has no commits, where
+ *  GitHub refuses every Git Data call with 409 "Git Repository is empty."). */
+export async function branchHead(token: string, repo: string, branch: string): Promise<{ head: string | null; empty: boolean }> {
+	try {
+		const ref = await gh<{ object: { sha: string } }>(token, 'GET', `/repos/${repoPath(repo)}/git/ref/heads/${branchPath(branch)}`);
+		return { head: ref.object.sha, empty: false };
+	} catch (e) {
+		if (e instanceof GitHubError && e.status === 404) return { head: null, empty: false };
+		if (e instanceof GitHubError && e.status === 409) return { head: null, empty: true };
+		throw e;
+	}
+}
+
 /** The first 100 branches of `owner/repo` and its default branch (an empty repository has none). */
 export async function branches(userId: string, owner: string, repo: string): Promise<GitHubBranches> {
 	const token = await userToken(userId);

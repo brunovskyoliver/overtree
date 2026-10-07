@@ -33,8 +33,8 @@ declare global {
 	var __overtreeServer: { hocuspocus: Hocuspocus; db: Db; dataDir: string } | undefined;
 	// history.ts state shared by server.ts' copy and the bundled routes' copy (008 history log buffer)
 	var __overtreeHistory: { pending: unknown; open: Set<string> } | undefined;
-	// GitHub sync state shared the same way (012): token refreshes in flight, sync requests (sync.ts)
-	var __overtreeGitHub: { refreshing: Map<string, Promise<string>>; sync: Map<string, unknown> } | undefined;
+	// GitHub sync state shared the same way (012): token refreshes in flight, run queues and open sessions (sync.ts)
+	var __overtreeGitHub: { refreshing: Map<string, Promise<string>>; sync: Map<string, unknown>; sessions?: Map<string, unknown> } | undefined;
 }
 
 export {};

@@ -6,8 +6,7 @@ import { checkAccess, userToken } from '../../src/lib/server/github/accounts.ts'
 import { open } from '../../src/lib/server/github/crypto.ts';
 import { getLink } from '../../src/lib/server/github/links.ts';
 import { readBase } from '../../src/lib/server/github/paths.ts';
-import { requestedSyncs } from '../../src/lib/server/github/sync.ts';
-import { githubAccounts, memberships, users } from '../../src/lib/server/schema.ts';
+import { githubAccounts, githubRuns, memberships, users } from '../../src/lib/server/schema.ts';
 import * as accountRoute from '../../src/routes/api/github/account/+server.ts';
 import * as callbackRoute from '../../src/routes/api/github/callback/+server.ts';
 import * as connectRoute from '../../src/routes/api/github/connect/+server.ts';
@@ -277,35 +276,46 @@ describe('link (FR-005–007)', () => {
 		expect(draft.body.link).toMatchObject({ branch: 'draft', state: 'pending' });
 	});
 
-	it('confirm (merge) sets the first-sync base and requests the first sync (T020)', async () => {
+	it('confirm (merge) sets the first-sync base and runs the first sync (T020)', async () => {
 		const s = await setup();
 		await connectGitHub();
 		await linkThesis(s);
-		const writes = () => s.g.requests.filter((r) => r.method !== 'GET' && !r.path.startsWith('/login/') && !r.path.endsWith('/access_tokens'));
+		const before = s.g.head(s.thesis, 'main')!;
 		const res = await call(confirmRoute.POST as Handler, OWNER, { method: 'POST', params: { pid: s.pid }, body: { mode: 'merge' } });
 		expect(res.status).toBe(200);
 		expect(res.body.link.state).not.toBe('pending');
 		const link = getLink(s.pid)!;
 		expect(link.status).toBe('active');
-		expect(link.baseCommit).toBe(s.g.head(s.thesis, 'main'));
-		// only paths in both: refs.bib comes from GitHub, the workflow and the PDF are not pulled
+		// the first push: one commit on top of GitHub's head, the project's main.tex wins
+		const head = s.g.head(s.thesis, 'main')!;
+		expect(s.g.commit(s.thesis, head)!.parents).toEqual([before]);
+		expect(link.baseCommit).toBe(head);
+		const files = s.g.files(s.thesis, 'main');
+		expect(files.get('main.tex')!.toString()).not.toBe('from GitHub\n');
+		// GitHub-only and "not pulled" files are left alone (refs.bib arrives with Phase 5's pull)
+		expect(files.get('refs.bib')!.toString()).toBe('@book{x}\n');
+		expect(files.get('main.pdf')!.toString()).toBe('pdf');
 		const base = readBase(link);
 		expect(Object.keys(base)).toEqual(['main.tex']);
-		expect(base['main.tex'].hash).toBeUndefined();
-		expect(requestedSyncs(s.pid).map((r) => `${r.kind}:${r.trigger}`)).toEqual(['pull:link', 'push:link']);
-		expect(writes()).toEqual([]);
+		expect(base['main.tex'].hash).toBeDefined();
+		const runs = s.server.db.select().from(githubRuns).all();
+		expect(runs.map((r) => `${r.kind}:${r.trigger}:${r.result}`)).toEqual(['pull:link:noop', 'push:link:pushed']);
 		// once set up, confirm refuses
 		expect((await call(confirmRoute.POST as Handler, OWNER, { method: 'POST', params: { pid: s.pid }, body: { mode: 'merge' } })).status).toBe(409);
 	});
 
-	it('confirm on an empty repository leaves no base commit', async () => {
+	it('confirm on an empty repository creates the branch with the project (Contents API seed + one commit)', async () => {
 		const s = await setup();
 		await connectGitHub();
 		await call(linkRoute.PUT as Handler, OWNER, { method: 'PUT', params: { pid: s.pid }, body: { installationId: s.inst.id, repoId: s.empty.id, branch: 'main' } });
 		expect((await call(confirmRoute.POST as Handler, OWNER, { method: 'POST', params: { pid: s.pid }, body: { mode: 'merge' } })).status).toBe(200);
 		const link = getLink(s.pid)!;
-		expect(link).toMatchObject({ status: 'active', baseCommit: null });
-		expect(readBase(link)).toEqual({});
+		const head = s.g.head(s.empty, 'main');
+		expect(link).toMatchObject({ status: 'active', baseCommit: head });
+		expect([...s.g.files(s.empty, 'main').keys()]).toEqual(['main.tex']);
+		expect(Object.keys(readBase(link))).toEqual(['main.tex']);
+		// a project with one file needs only the seed commit
+		expect(s.g.requests.filter((r) => r.method === 'PUT' && r.path.includes('/contents/'))).toHaveLength(1);
 	});
 
 	it('unlink deletes nothing on GitHub (FR-010)', async () => {
