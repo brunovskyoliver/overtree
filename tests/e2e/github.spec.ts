@@ -3,7 +3,18 @@ import { allow, api, openEditor, signInAs, test, text, USER } from './helpers.ts
 
 // 012 GitHub sync against the fake GitHub (playwright.config.ts: user `octo` with `octo/thesis` and `octo/paper`).
 
-test('the owner connects GitHub and links a repository from the dialog (US1)', async ({ page, pid }) => {
+test('the owner connects GitHub and links a repository from the dialog (US1)', async ({ page, pid, baseURL }) => {
+	// The app server and the fake GitHub are shared by every browser project and live for the whole run: the GitHub
+	// connection belongs to USER and `octo/paper` keeps what an earlier run's Sync now pushed. Start from scratch: a
+	// fresh `octo/paper` (the used one renamed out of the way, its name without "pap") and USER not connected.
+	const FAKE = 'http://127.0.0.1:4175';
+	const fake = async (helper: string, ...args: unknown[]) => (await page.request.post(`${FAKE}/_fake/${helper}`, { data: { args } })).json();
+	await page.goto(`/api/github/connect?return=${encodeURIComponent(`/project/${pid}`)}`);
+	const { accounts } = await (await page.request.get('/api/github/repos')).json();
+	const installation = accounts.find((a: { login: string }) => a.login === 'octo').installationId;
+	await fake('renameRepo', 'octo/paper', `used-${Date.now()}`);
+	await fake('addRepo', { name: 'paper', installation, files: { 'README.md': '# Paper\n' } });
+	expect((await page.request.delete('/api/github/account', { headers: { origin: baseURL! } })).status()).toBe(204);
 	await openEditor(page);
 	await page.getByRole('button', { name: 'GitHub', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'GitHub sync' });
@@ -152,7 +163,7 @@ test('the indicator shows the sync state; Push now with a title; readers only lo
 	await expect(popover.getByText(/temporary problem/).first()).toBeVisible();
 	await expect(popover.getByText(/^Retrying at /)).toBeVisible();
 	await fake('clearFailures');
-	await page.request.delete(`/api/projects/${pid}/github`);
+	expect((await page.request.delete(`/api/projects/${pid}/github`, { headers: { origin: new URL(page.url()).origin } })).status()).toBe(204);
 });
 
 test('an empty project imports a repository from the preview (US5)', async ({ page, pid }) => {
@@ -181,5 +192,5 @@ test('an empty project imports a repository from the preview (US5)', async ({ pa
 	await expect(page.getByRole('treeitem', { name: 'main.pdf' })).toHaveCount(0);
 	await expect.poll(() => text(page)).toContain('Imported');
 	await expect(page.locator('#github-status')).toHaveAttribute('data-state', 'in-sync');
-	await page.request.delete(`/api/projects/${pid}/github`);
+	expect((await page.request.delete(`/api/projects/${pid}/github`, { headers: { origin: new URL(page.url()).origin } })).status()).toBe(204);
 });
