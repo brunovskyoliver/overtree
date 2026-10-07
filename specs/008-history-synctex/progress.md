@@ -1,6 +1,6 @@
 # Feature 008: Project history, restore, SyncTeX & PDF navigation
-Stage: implement
-Updated: 2026-10-07T00:00:00Z
+Stage: done
+Updated: 2026-10-07
 
 ## Decisions
 - Branch `008-history-synctex` created from HEAD of `005-accounts-sharing-collab` (2309f8e), per user.
@@ -36,5 +36,29 @@ Updated: 2026-10-07T00:00:00Z
 - 2026-10-07 implement phase 9 US7 (T043–T046): `Layout` in src/lib/layout.svelte.ts (mode in `overtree:layout-mode`, `window.open(url, 'overtree-pdf-<id>', 'popup,…')`, `win.closed` poll every 1 s, `pdfChannel` with a `from` field so main windows of the same project ignore each other, `mirrorCompile` posts each new compile result once from either side and takes the other's), LayoutMenu (menuitemradio, popup-blocked alert for 6 s) in the top bar, Workspace applies modes (editor only / window collapse the PDF pane, PDF only hides sidebar, editor and handles with CSS so paneforge's stored sizes stay untouched, side-by-side expands), window mode unmounts the PDF pane and keeps only "→" on the rail, popup route /project/[id]/pdf (own CompileState, PdfPane `tools` snippet for "←", double-click/logs → `open-at`). Decisions: reload in window mode pings with `hello`; a PDF window still open answers and the mode stays, otherwise after 1 s it falls back to side-by-side (no auto popup, no reopen button); leaving window mode closes the popup (`win.close()`, plus `bye` for one found again after a reload, which closes itself); `bye` from the popup counts only if no `hello` follows within 1 s (popup reload); expanding the PDF with its tab in editor only, or a source jump from the PDF in PDF only, switches to side-by-side; the mode is applied on each choice and at load only for non-split modes, so a PDF collapsed with its tab in side-by-side stays collapsed (FR-018). check 0 errors, test 315/315, e2e chromium layout-menu/layout/synctex/pdf-position/viewer/history 34/34, layout-menu firefox+webkit 12/12.
 - 2026-10-07 implement phase 10 polish (T047–T050): perf tests in history.test.ts (1,000 versions: first page ~1 ms, labels-only page ~2 ms; 50-file project restore ~80 ms; no code change needed); a11y: focus returns to the History toggle (`#history-toggle`) when history closes, Escape on a closed label-chip menu leaves history, only the selected version's label chips are Tab stops, Changed files moves focus to the file's diff, sync → button has `aria-keyshortcuts` and an inset focus ring, legend swatches `aria-hidden`; history.spec asserts the focus return and chip keyboard path; README sections History and restore, PDF navigation and layout, env knobs (ROADMAP row left to the maintainer). check 0 errors, test 317/317, full e2e 484 passed / 4 skipped (chromium 162, firefox 161 + collab5 skip, webkit 161 + collab5 skip, clerk 2 skipped without keys). The baseline run before the changes had collab5 fail once (5 sessions not converged in 15 s) while CPU-heavy unit tests ran in parallel; it passed in the clean run. Quickstart scenarios 1–10 are all covered by e2e specs (8's 403 for another editor by labels unit tests).
 - 2026-10-07 implement phase 11 convergence (T052–T055): sync routes answer a stale `pdfId` / missing synctex with a 404 of its own message (`STALE_PDF` in src/lib/synctex.ts); `syncWith` reloads the compile state and asks once more with the new `pdfId`, else "Recompile to sync" in a transient `SyncNote` (role status, 4 s, rendered only while shown so the save indicator stays the page's one status region), in Workspace and the PDF window; PdfViewer `showBox` waits for a PDF still loading; a line or spot that maps nowhere stays quiet. `plan()` in restore.ts became `planner()` (tree, roles, aliases read once) with a dry mode (no texts/blobs/main read, a text counts as changed); `restorable()` gives diffVersion its `canRestore` from the single-file plan (one tree read per diff), so a file whose old folder is read-only is not offered; name clashes (409) aren't checked. A file whose old folder isn't restored is skipped whole (no content restore). Unit tests: canRestore vs restore 403 on a moved-out file, skipped-whole file, typing during a restore converges. check 0 errors, test 320/320, e2e chromium synctex/layout-menu/restore/history 24/24.
+- 2026-10-07 converge: 6 findings (0 critical/high); F1 resolved in spec, T052–T055 cc4bfab, T056 roadmap 1be856f.
+- 2026-10-07 collab5 investigation: history rows cost ~55 µs per keystroke in their own insert; buffered them (e3d0623), then shared the buffer across server.ts and bundled routes (044e44a; without it compile/restore missed just-typed edits in the prod build). collab5's latency-phase hang reproduces on the pre-feature commit 2309f8e (2 of 3 runs), so it is pre-existing.
 
 ## Report
+
+**What changed** (branch `008-history-synctex`, from 2309f8e; not pushed)
+- Phase 1–2 history foundation e870c3d: `history_log` (never-compacted Yjs updates + tree changes with author), `versions` with manifest blobs, sweep (5 min idle / 30 min max), compile points, baselines; tree ops take the actor; `setText` makes minimal edits.
+- Phase 3 US1 browse/diff 4e98fd2: History view (timeline, per-author colored diff from Yjs snapshot replay, compare with current / changes in this version).
+- Phase 4 US2 restore 903139a (+ f48fc4f same-path identity): single file and whole project, new restore version, live through Yjs, per-file overrides enforced on the server (whole-project restore skips and lists read-only files).
+- Phase 5 US3 SyncTeX aa105de: server-side parser of `output.synctex.gz`, → / ← strip, Ctrl/⌘+Alt+J, double-click to source across files.
+- Phase 6 US4 PDF position 8ad8b23: page, offset and zoom across recompiles and reloads.
+- Phase 7 US5 labels ef71060 (+ be3eab4 readers can't change labels).
+- Phase 8 US6 version zip e2a307a.
+- Phase 9 US7 Layout menu and separate PDF window a9211ad.
+- Phase 10 polish 6f0aa27 (perf checks, a11y, README); phase 11 convergence cc4bfab; perf e3d0623 + 044e44a; ROADMAP row 008 done 1be856f.
+
+**How it was verified**
+- `pnpm check`: 0 errors. `pnpm test`: 320/320.
+- `pnpm test:e2e` final run: 489 passed, 4 skipped (collab5 on Firefox/WebKit by design, 2 Clerk smoke tests without keys), 1 failed: `collab5.spec.ts` (Chromium).
+- collab5 fails in its latency phase (one keypress never reaches the other page, test times out); the same failure reproduced 2 of 3 times on 2309f8e, before this feature, so it is a pre-existing flaky test, not a regression. The per-keystroke cost this feature added was removed (e3d0623).
+- Perf: 1,000-version first page ~1 ms, 50-file restore ~80 ms.
+
+**What is left**
+- collab5.spec.ts is flaky on this machine independent of 008 (worth its own investigation: the latency loop waits forever when a keypress is lost).
+- Known ceilings marked `ponytail:` — diff replay starts at a file's first log row (add checkpoints if slow); up to 100 ms of history rows can be lost on a crash (text itself safe); blobs never garbage-collected (011).
+- Not done by design: push / PR.
