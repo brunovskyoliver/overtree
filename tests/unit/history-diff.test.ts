@@ -4,7 +4,7 @@ import { SEED } from '../../src/lib/server/collab.ts';
 import { createEntry, deleteEntry, getMainFileId, renameOrMove, setText, uploadFile } from '../../src/lib/server/files.ts';
 import type { FileDiff, Segment } from '../../src/lib/history-types.ts';
 import { diffVersion } from '../../src/lib/server/history-diff.ts';
-import { closeVersion, lastVersion, listVersions, userRefs } from '../../src/lib/server/history.ts';
+import { closeVersion, flushHistory, lastVersion, listVersions, userRefs } from '../../src/lib/server/history.ts';
 import { historyLog, memberships, overrides } from '../../src/lib/server/schema.ts';
 import * as listRoute from '../../src/routes/api/projects/[pid]/history/+server.ts';
 import * as diffRoute from '../../src/routes/api/projects/[pid]/history/[vid]/+server.ts';
@@ -30,7 +30,7 @@ async function setup() {
 	return { server, pid, main: getMainFileId(pid)! };
 }
 
-const logged = (s: Started, pid: string) => s.db.select().from(historyLog).where(eq(historyLog.projectId, pid)).all().length;
+const logged = (s: Started, pid: string) => (flushHistory(), s.db.select()).from(historyLog).where(eq(historyLog.projectId, pid)).all().length;
 
 /** Waits until the server has logged whatever `edit` sends. */
 async function edit(s: Started, pid: string, fn: () => void) {

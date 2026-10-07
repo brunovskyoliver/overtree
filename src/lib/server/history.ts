@@ -5,11 +5,13 @@ import type { HistoryPage, Label, UserRef, VersionInfo } from '../history-types.
 import { colorFor } from '../presence.ts';
 import { broadcast, canEdit, projectRole, type Role } from './access.ts';
 import { getServer } from './collab.ts';
+import type { Db } from './db.ts';
 import { FileError, putBlob, readBlob, type Tx } from './files.ts';
 import { documents, files, historyLog, projects, updates, users, versionLabels, versions, type VersionKind } from './schema.ts';
 
 // Project history (research R1–R3, R8): a never-compacted log of Yjs updates and tree changes with their authors,
-// and versions derived from it. Synchronous (better-sqlite3), no in-memory state: a restart loses nothing.
+// and versions derived from it. Synchronous (better-sqlite3). The only in-memory state is the text-row buffer and
+// the set of projects with open rows; the startup sweep closes whatever a restart left open.
 // Loaded unbundled by server.ts in production: no SvelteKit imports here.
 
 const db = () => getServer().db;
@@ -28,16 +30,55 @@ export type Changed = { id: string; path: string; change: 'added' | 'edited' | '
 
 // --- log (research R1) ---------------------------------------------------------------------------------------------
 
-/** A Yjs update of a text document, next to its `updates` row (collab.ts onChange). */
-export function logText(pid: string, docName: string, userId: string | null | undefined, update: Uint8Array, tx: Tx = db()) {
-	tx.insert(historyLog)
-		.values({ projectId: pid, docName, userId: userId ?? null, kind: 'text', update: Buffer.from(update), createdAt: Date.now() })
-		.run();
+// Text rows are buffered and written in one transaction at most FLUSH_MS later: a row per keystroke in its own
+// commit next to the `updates` row slowed five busy typists enough to lag behind (collab5.spec). Everything that
+// reads or appends to the log flushes first, so ids keep the order the updates were applied in.
+// ponytail: a crash loses up to FLUSH_MS of history rows (the text itself is safe in `updates`); that document's
+// diffs then fall back to plain ones (research R4).
+const FLUSH_MS = 100;
+type LogRow = typeof historyLog.$inferInsert;
+let pending: { db: Db; rows: LogRow[]; timer: ReturnType<typeof setTimeout> } | null = null;
+
+/** Projects with log rows after their last version: the sweep looks only at these (plus everything at startup). */
+const open = new Set<string>();
+
+/** A Yjs update of a text document (collab.ts onChange), buffered (see FLUSH_MS). */
+export function logText(pid: string, docName: string, userId: string | null | undefined, update: Uint8Array) {
+	const d = db();
+	if (pending && pending.db !== d) flushHistory(); // tests reopen the server in one process
+	pending ??= { db: d, rows: [], timer: setTimeout(flushLater, FLUSH_MS) };
+	pending.rows.push({ projectId: pid, docName, userId: userId ?? null, kind: 'text', update: Buffer.from(update), createdAt: Date.now() });
+	open.add(pid);
+}
+
+function flushLater() {
+	try {
+		flushHistory();
+	} catch (e) {
+		console.error('history log flush failed', e);
+	}
+}
+
+/** Writes the buffered text rows, inside `tx` when given (it must belong to the current server's db). */
+export function flushHistory(tx?: Tx) {
+	if (!pending) return;
+	const { db: d, rows, timer } = pending;
+	pending = null;
+	clearTimeout(timer);
+	if (!d.$client.open) return;
+	// 7 columns a row: well under SQLite's 32766 bound variables per statement
+	const write = (t: Tx) => {
+		for (let i = 0; i < rows.length; i += 1000) t.insert(historyLog).values(rows.slice(i, i + 1000)).run();
+	};
+	if (tx && d === db()) write(tx);
+	else d.transaction(write);
 }
 
 /** A tree change (create, rename/move, delete, upload, main file, restore) by `userId`. */
 export function logTree(pid: string, userId: string | null, tx: Tx = db()) {
+	flushHistory(tx);
 	tx.insert(historyLog).values({ projectId: pid, docName: null, userId, kind: 'tree', update: null, createdAt: Date.now() }).run();
+	open.add(pid);
 }
 
 /** A document's stored state: the compacted snapshot plus the updates since, as one update. */
@@ -51,6 +92,7 @@ export function storedState(docName: string, tx: Tx = db()): Uint8Array {
 /** A `baseline` row with the stored state of every text file of the project that has no log row yet: existing
  *  projects at upgrade, new/imported/duplicated projects (written to `updates` directly), anything out of band. */
 export function ensureBaselines(pid: string, tx: Tx = db()) {
+	flushHistory(tx);
 	const missing = tx
 		.select({ id: files.id })
 		.from(files)
@@ -157,7 +199,7 @@ export const lastVersion = (pid: string, tx: Tx = db()): Version | null =>
  *  the doc applies it) lands in the next version (research R3). */
 export function closeVersion(pid: string, kind: VersionKind, { restoredFrom }: { restoredFrom?: number } = {}): Version | null {
 	const version = db().transaction((tx) => {
-		ensureBaselines(pid, tx);
+		ensureBaselines(pid, tx); // flushes the buffered rows first
 		const prev = lastVersion(pid, tx);
 		const from = prev?.watermark ?? 0;
 		const rows = tx
@@ -166,6 +208,7 @@ export function closeVersion(pid: string, kind: VersionKind, { restoredFrom }: {
 			.where(and(eq(historyLog.projectId, pid), gt(historyLog.id, from)))
 			.orderBy(asc(historyLog.id))
 			.all();
+		open.delete(pid); // everything logged so far is in this version (or there was nothing)
 		if (!rows.length && kind !== 'restore' && !(kind === 'baseline' && !prev)) return null;
 		const prevManifest = prev && readManifest(prev.manifestHash);
 		const reread = new Set(rows.flatMap((r) => (r.docName ? [r.docName] : [])));
@@ -192,22 +235,28 @@ export function closeVersion(pid: string, kind: VersionKind, { restoredFrom }: {
 }
 
 /** Closes what is due: a project without versions gets its baseline (upgrade), open rows become an `edit` version
- *  when the newest is `IDLE_MS` old or the oldest `MAX_OPEN_MS`. `now = Infinity` closes everything open (startup).
- *  ponytail: two queries per project per sweep; a "dirty projects" table if instances grow to many thousands */
+ *  when the newest is `IDLE_MS` old or the oldest `MAX_OPEN_MS`. `now = Infinity` closes everything open and checks
+ *  every project (startup); later sweeps only look at projects with rows logged since their last version. */
 export function sweep(now = Date.now()) {
-	for (const { id: pid } of db().select({ id: projects.id }).from(projects).all()) {
+	flushHistory();
+	const pids = now === Infinity ? db().select({ id: projects.id }).from(projects).all().map((p) => p.id) : [...open];
+	for (const pid of pids) {
 		const prev = lastVersion(pid);
 		if (!prev) {
-			closeVersion(pid, 'baseline');
+			if (db().select({ id: projects.id }).from(projects).where(eq(projects.id, pid)).get()) closeVersion(pid, 'baseline');
+			else open.delete(pid); // deleted meanwhile
 			continue;
 		}
-		const open = db()
+		const range = db()
 			.select({ first: min(historyLog.createdAt), last: max(historyLog.createdAt) })
 			.from(historyLog)
 			.where(and(eq(historyLog.projectId, pid), gt(historyLog.id, prev.watermark)))
 			.get();
-		if (open?.first == null || open.last == null) continue;
-		if (now - open.last >= IDLE_MS || now - open.first >= MAX_OPEN_MS) closeVersion(pid, 'edit');
+		if (range?.first == null || range.last == null) {
+			open.delete(pid);
+			continue;
+		}
+		if (now - range.last >= IDLE_MS || now - range.first >= MAX_OPEN_MS) closeVersion(pid, 'edit');
 	}
 }
 

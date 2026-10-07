@@ -7,7 +7,7 @@ import { pathOf } from '../files.ts';
 import { colorFor } from '../presence.ts';
 import { fail, getText, listFiles, textUpdate, type Row } from './files.ts';
 import { broadcast, kick, projectRole, type Role } from './access.ts';
-import { closeVersion } from './history.ts';
+import { closeVersion, flushHistory } from './history.ts';
 import {
 	compileSettings,
 	documents,
@@ -169,6 +169,7 @@ export function deleteProject(pid: string) {
 		tx.delete(memberships).where(eq(memberships.projectId, pid)).run();
 		tx.delete(invites).where(eq(invites.projectId, pid)).run();
 		tx.delete(compileSettings).where(eq(compileSettings.project, pid)).run();
+		flushHistory(tx); // buffered rows of this project land before they go, not after (FK)
 		tx.delete(historyLog).where(eq(historyLog.projectId, pid)).run();
 		tx.delete(versionLabels).where(eq(versionLabels.projectId, pid)).run();
 		tx.delete(versions).where(eq(versions.projectId, pid)).run();

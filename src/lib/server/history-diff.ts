@@ -11,6 +11,7 @@ import {
 	blobText,
 	changedFiles,
 	currentText,
+	flushHistory,
 	getVersion,
 	previousVersion,
 	readManifest,
@@ -140,6 +141,7 @@ function soleAuthor(pid: string, a: number, b: number): string | null {
  *  (`previous`: what this version changed), as `userId` sees it. 404 for a version of another project. */
 export function diffVersion(pid: string, vid: number, compare: Compare, userId: string): VersionDiff {
 	const v = versionRow(pid, vid) ?? fail(404, 'Version not found.');
+	flushHistory(); // the replay reads the log up to now
 	let older: Side, newer: Side;
 	if (compare === 'previous') {
 		const prev = previousVersion(v);

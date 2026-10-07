@@ -95,10 +95,8 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 		async onChange({ documentName, update, context }) {
 			const file = !isPresence(documentName) && textFile(documentName);
 			if (!file) return;
-			db.transaction((tx) => {
-				tx.insert(updates).values({ docName: documentName, update: Buffer.from(update), createdAt: Date.now() }).run();
-				logText(file.projectId, documentName, context.userId, update, tx);
-			});
+			db.insert(updates).values({ docName: documentName, update: Buffer.from(update), createdAt: Date.now() }).run();
+			logText(file.projectId, documentName, context.userId, update); // buffered (history.ts FLUSH_MS)
 			touchThrottled(file.projectId);
 		},
 

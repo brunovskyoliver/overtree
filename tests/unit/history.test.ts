@@ -5,6 +5,7 @@ import { createEntry, deleteEntry, getFile, getMainFileId, renameOrMove, setMain
 import {
 	blobText,
 	closeVersion,
+	flushHistory,
 	IDLE_MS,
 	lastVersion,
 	listVersions,
@@ -32,7 +33,7 @@ async function setup(dir = tempDir()) {
 	return { server, pid, main: getMainFileId(pid)! };
 }
 
-const log = (s: Started, pid: string) => s.db.select().from(historyLog).where(eq(historyLog.projectId, pid)).all();
+const log = (s: Started, pid: string) => (flushHistory(), s.db.select()).from(historyLog).where(eq(historyLog.projectId, pid)).all();
 const allVersions = (s: Started, pid: string) => s.db.select().from(versions).where(eq(versions.projectId, pid)).all();
 const changes = (v: { changed: string }) => (JSON.parse(v.changed) as Changed[]).map((c) => [c.change, c.path, c.from]);
 
