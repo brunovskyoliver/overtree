@@ -70,9 +70,9 @@ describe('effective role', () => {
 		const pid = project();
 		const b = user(B).id;
 		member(server, pid, B, 'editor');
-		const chapters = createEntry(pid, { kind: 'folder', name: 'chapters', parentId: null });
-		const intro = createEntry(pid, { kind: 'text', name: 'intro.tex', parentId: chapters.id });
-		const locked = createEntry(pid, { kind: 'folder', name: 'locked', parentId: null });
+		const chapters = createEntry(pid, { kind: 'folder', name: 'chapters', parentId: null }, user().id);
+		const intro = createEntry(pid, { kind: 'text', name: 'intro.tex', parentId: chapters.id }, user().id);
+		const locked = createEntry(pid, { kind: 'folder', name: 'locked', parentId: null }, user().id);
 		override(server, pid, B, intro.id, 'reader');
 		override(server, pid, B, locked.id, 'reader');
 
@@ -85,7 +85,7 @@ describe('effective role', () => {
 		requireEditFolder(pid, b, null); // the root: project role
 
 		// the nearest override wins: an editor override inside a reader folder
-		const inner = createEntry(pid, { kind: 'text', name: 'inner.tex', parentId: locked.id });
+		const inner = createEntry(pid, { kind: 'text', name: 'inner.tex', parentId: locked.id }, user().id);
 		expect(fileRole(pid, b, inner.id)).toBe('reader');
 		override(server, pid, B, inner.id, 'editor');
 		expect(fileRole(pid, b, inner.id)).toBe('editor');

@@ -6,6 +6,7 @@ import * as Y from 'yjs';
 import { canEdit, fileRole, projectRole, type ConnectionContext } from './access.ts';
 import { authenticateToken } from './auth.ts';
 import { openDb } from './db.ts';
+import { logText, sweep, SWEEP_MS } from './history.ts';
 import { touchProject } from './projects.ts';
 import { documents, files, updates } from './schema.ts';
 
@@ -89,11 +90,15 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 			// no seeding here: createProject() stores the starter text of a new project
 		},
 
-		// better-sqlite3 is synchronous: the update is on disk before the next message is handled.
-		async onChange({ documentName, update }) {
+		// better-sqlite3 is synchronous: the update is on disk before the next message is handled. The history copy
+		// carries the author: the socket's context, or the one given to openDirectConnection (research R1).
+		async onChange({ documentName, update, context }) {
 			const file = !isPresence(documentName) && textFile(documentName);
 			if (!file) return;
-			appendUpdate(documentName, update);
+			db.transaction((tx) => {
+				tx.insert(updates).values({ docName: documentName, update: Buffer.from(update), createdAt: Date.now() }).run();
+				logText(file.projectId, documentName, context.userId, update, tx);
+			});
 			touchThrottled(file.projectId);
 		},
 
@@ -121,10 +126,6 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 		}
 	});
 
-	function appendUpdate(docName: string, update: Uint8Array) {
-		db.insert(updates).values({ docName, update: Buffer.from(update), createdAt: Date.now() }).run();
-	}
-
 	const wss = new WebSocketServer({ noServer: true });
 
 	httpServer.on('upgrade', (req, socket, head) => {
@@ -138,6 +139,19 @@ export function attachCollab(httpServer: HttpServer, dataDir = process.env.DATA_
 
 	// SvelteKit routes are bundled apart from server.ts/the Vite plugin, so they reach this instance via globalThis.
 	globalThis.__overtreeServer = { hocuspocus, db, dataDir };
+
+	// History versions (research R2). At startup nobody is editing across the restart: close whatever is open.
+	sweep(Infinity);
+	const sweeper = setInterval(() => {
+		// a later attachCollab (tests restart the server in one process) or a closed db ends this one
+		if (globalThis.__overtreeServer?.db !== db || !db.$client.open) return clearInterval(sweeper);
+		try {
+			sweep();
+		} catch (e) {
+			console.error('history sweep failed', e);
+		}
+	}, SWEEP_MS);
+	sweeper.unref();
 
 	return { hocuspocus, wss, db };
 }

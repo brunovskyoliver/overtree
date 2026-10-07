@@ -129,3 +129,64 @@ export const overrides = sqliteTable(
 	},
 	(t) => [primaryKey({ columns: [t.projectId, t.userId, t.fileId] })]
 );
+
+// --- history (008 data-model.md) -----------------------------------------------------------------------------------
+
+export type HistoryKind = 'text' | 'tree' | 'baseline';
+export type VersionKind = 'baseline' | 'edit' | 'compile' | 'restore';
+
+// Append-only copy of every Yjs update with its author, plus tree changes; never compacted (research R1).
+export const historyLog = sqliteTable(
+	'history_log',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id),
+		docName: text('doc_name'), // text file id; null for `tree` rows
+		userId: text('user_id').references(() => users.id), // null: baseline or system write
+		kind: text('kind').$type<HistoryKind>().notNull(),
+		update: blob('update', { mode: 'buffer' }), // null for `tree` rows
+		createdAt: integer('created_at').notNull()
+	},
+	(t) => [index('history_log_project_idx').on(t.projectId, t.id), index('history_log_doc_idx').on(t.docName, t.id)]
+);
+
+// A version covers the project's log rows after the previous version's watermark up to its own (research R2).
+export const versions = sqliteTable(
+	'versions',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id),
+		kind: text('kind').$type<VersionKind>().notNull(),
+		watermark: integer('watermark').notNull(), // max history_log.id covered
+		manifestHash: text('manifest_hash').notNull(), // blob with the Manifest JSON (research R3)
+		authors: text('authors').notNull(), // JSON array of user ids
+		changed: text('changed').notNull(), // JSON array of Changed
+		restoredFrom: integer('restored_from').references((): AnySQLiteColumn => versions.id),
+		startedAt: integer('started_at').notNull(),
+		createdAt: integer('created_at').notNull()
+	},
+	(t) => [index('versions_project_idx').on(t.projectId, t.id)]
+);
+
+export const versionLabels = sqliteTable(
+	'version_labels',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => projects.id),
+		versionId: integer('version_id')
+			.notNull()
+			.references(() => versions.id),
+		name: text('name').notNull(), // trimmed, 1–100 characters
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id),
+		createdAt: integer('created_at').notNull()
+	},
+	(t) => [index('version_labels_project_idx').on(t.projectId, t.versionId)]
+);

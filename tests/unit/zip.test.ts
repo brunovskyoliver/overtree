@@ -35,7 +35,7 @@ describe('project zip', () => {
 		const pid = importZip(zips.roundtrip());
 		expect(await contents(pid)).toEqual(MULTI);
 		expect(mainPath(pid)).toBe('main.tex');
-		createEntry(pid, { kind: 'folder', name: 'empty', parentId: null });
+		createEntry(pid, { kind: 'folder', name: 'empty', parentId: null }, user().id);
 		const before = paths(pid);
 
 		const exported = await exportZip(pid);

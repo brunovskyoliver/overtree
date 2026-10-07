@@ -22,9 +22,9 @@ function member(server: Started, pid: string, email: string, role: MemberRole) {
 const put = async (pid: string, body: object, email = OWNER) => (await hit(overridesRoute.PUT, ev(email, { pid }, json('PUT', body)))).status;
 
 const tree = (pid: string) => {
-	const chapters = createEntry(pid, { kind: 'folder', name: 'chapters', parentId: null });
-	const intro = createEntry(pid, { kind: 'text', name: 'intro.tex', parentId: chapters.id });
-	const other = createEntry(pid, { kind: 'folder', name: 'other', parentId: null });
+	const chapters = createEntry(pid, { kind: 'folder', name: 'chapters', parentId: null }, user().id);
+	const intro = createEntry(pid, { kind: 'text', name: 'intro.tex', parentId: chapters.id }, user().id);
+	const other = createEntry(pid, { kind: 'folder', name: 'other', parentId: null }, user().id);
 	return { chapters: chapters.id, intro: intro.id, other: other.id, main: getMainFileId(pid)! };
 };
 
@@ -69,7 +69,7 @@ describe('resolution', () => {
 		const pid = project();
 		const b = user(B).id;
 		const t = tree(pid);
-		const loose = createEntry(pid, { kind: 'text', name: 'loose.tex', parentId: null }).id;
+		const loose = createEntry(pid, { kind: 'text', name: 'loose.tex', parentId: null }, user().id).id;
 		member(server, pid, B, 'editor');
 		await put(pid, { userId: b, fileId: t.other, role: 'reader' });
 		await put(pid, { userId: b, fileId: t.intro, role: 'editor' });

@@ -201,16 +201,16 @@ describe('duplicate', () => {
 			kind: 'folder',
 			name: 'ch',
 			parentId: null
-		});
+		}, user().id);
 		const intro = createEntry(pid, {
 			kind: 'text',
 			name: 'intro.tex',
 			parentId: folder.id
-		});
-		await setText(intro.id, 'Intro text');
+		}, user().id);
+		await setText(intro.id, 'Intro text', {});
 		const png = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
-		await uploadFile(pid, folder.id, 'dot.png', png, false);
-		setMainFile(pid, intro.id);
+		await uploadFile(pid, folder.id, 'dot.png', png, false, user().id);
+		setMainFile(pid, intro.id, user().id);
 		setCompiler(pid, 'lualatex');
 		// an open editor's latest change, maybe not stored yet
 		const { text, provider } = await connect(server.url, main.id);

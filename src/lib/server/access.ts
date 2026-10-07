@@ -109,7 +109,7 @@ export function kick({ userId, projectId }: ConnectionContext) {
 	for (const ws of sockets) ws.close(4403, 'access-changed');
 }
 
-export type ProjectEvent = { type: 'tree' | 'project' | 'access' | 'deleted' };
+export type ProjectEvent = { type: 'tree' | 'project' | 'access' | 'deleted' | 'history' };
 
 /** A server event to everyone on the project's presence document (research R8); nobody connected, nothing sent. */
 export function broadcast(pid: string, event: ProjectEvent) {

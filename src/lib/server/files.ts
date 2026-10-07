@@ -2,15 +2,19 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { and, count, eq, inArray, isNull, ne } from 'drizzle-orm';
+import diff from 'fast-diff';
 import * as Y from 'yjs';
 import { kindForName, limits, validateName, type FileEntry, type FileKind } from '../files.ts';
+import type { ConnectionContext } from './access.ts';
 import { getServer } from './collab.ts';
 import type { Db } from './db.ts';
+import { logTree } from './history.ts';
 import { touchProject } from './projects.ts';
 import { documents, files, overrides, projects, updates } from './schema.ts';
 
 // File service (research R1–R5), every call scoped to one project (005 research R11). Synchronous where SQLite
-// is enough; text content only through Hocuspocus. Access checks are the caller's (access.ts).
+// is enough; text content only through Hocuspocus. Access checks are the caller's (access.ts). Tree changes are
+// logged for history with their `actor` (008 research R1).
 
 /** An error for the user, with its HTTP status. Not SvelteKit's `error()`: server.ts loads this module
  *  from the prod image, which has no devDependencies; routes convert it with `api()` from ./api.ts. */
@@ -56,10 +60,13 @@ export const fileOr404 = (pid: string, id: string, tx: Tx = db()): Row => getFil
 export const getMainFileId = (pid: string): string | null =>
 	db().select({ mainFileId: projects.mainFileId }).from(projects).where(eq(projects.id, pid)).get()?.mainFileId ?? null;
 
-export function setMainFile(pid: string, id: string) {
-	const row = fileOr404(pid, id);
-	if (row.kind !== 'text' || !row.name.toLowerCase().endsWith('.tex')) fail(400, 'Only a .tex file can be the main document.');
-	db().update(projects).set({ mainFileId: id }).where(eq(projects.id, pid)).run();
+export function setMainFile(pid: string, id: string, actor: string) {
+	db().transaction((tx) => {
+		const row = fileOr404(pid, id, tx);
+		if (row.kind !== 'text' || !row.name.toLowerCase().endsWith('.tex')) fail(400, 'Only a .tex file can be the main document.');
+		tx.update(projects).set({ mainFileId: id }).where(eq(projects.id, pid)).run();
+		logTree(pid, actor, tx);
+	});
 }
 
 const siblingNames = (tx: Tx, pid: string, parentId: string | null, except = '') =>
@@ -87,7 +94,11 @@ function checkCount(tx: Tx, pid: string) {
 	if (total >= limits.projectMaxFiles) fail(413, `A project can have at most ${limits.projectMaxFiles} files.`);
 }
 
-export function createEntry(pid: string, { kind, name, parentId }: { kind: 'folder' | 'text'; name: string; parentId: string | null }): FileEntry {
+export function createEntry(
+	pid: string,
+	{ kind, name, parentId }: { kind: 'folder' | 'text'; name: string; parentId: string | null },
+	actor: string
+): FileEntry {
 	const entry = db().transaction((tx) => {
 		checkParent(tx, pid, parentId);
 		checkName(tx, pid, name, parentId);
@@ -96,13 +107,14 @@ export function createEntry(pid: string, { kind, name, parentId }: { kind: 'fold
 		const now = Date.now();
 		const row = { id: randomUUID(), projectId: pid, parentId, name, kind, hash: null, size: null, createdAt: now, updatedAt: now };
 		tx.insert(files).values(row).run();
+		logTree(pid, actor, tx);
 		return toEntry(row); // a new text file is an empty Yjs doc: nothing to write
 	});
 	touchProject(pid);
 	return entry;
 }
 
-export function renameOrMove(pid: string, id: string, change: { name?: string; parentId?: string | null }): FileEntry {
+export function renameOrMove(pid: string, id: string, change: { name?: string; parentId?: string | null }, actor: string): FileEntry {
 	const entry = db().transaction((tx) => {
 		const row = fileOr404(pid, id, tx);
 		const name = change.name ?? row.name;
@@ -117,6 +129,7 @@ export function renameOrMove(pid: string, id: string, change: { name?: string; p
 		checkName(tx, pid, name, parentId, id);
 		const updated = { ...row, name, parentId, updatedAt: Date.now() };
 		tx.update(files).set({ name, parentId, updatedAt: updated.updatedAt }).where(eq(files.id, id)).run();
+		logTree(pid, actor, tx);
 		return toEntry(updated);
 	});
 	touchProject(pid);
@@ -131,7 +144,7 @@ export function withDescendants(id: string, all: Pick<Row, 'id' | 'parentId'>[])
 }
 
 /** Removes the entry, its descendants, their Yjs docs and overrides; clears the main document if it went (research R4). */
-export function deleteEntry(pid: string, id: string) {
+export function deleteEntry(pid: string, id: string, actor: string) {
 	const textIds = db().transaction((tx) => {
 		const all = tx.select({ id: files.id, parentId: files.parentId, kind: files.kind }).from(files).where(eq(files.projectId, pid)).all();
 		if (!all.some((f) => f.id === id)) fail(404, 'File not found.');
@@ -142,6 +155,7 @@ export function deleteEntry(pid: string, id: string) {
 		tx.delete(documents).where(inArray(documents.name, text)).run();
 		tx.delete(updates).where(inArray(updates.docName, text)).run();
 		tx.update(projects).set({ mainFileId: null }).where(and(eq(projects.id, pid), inArray(projects.mainFileId, doomed))).run();
+		logTree(pid, actor, tx);
 		return text;
 	});
 	touchProject(pid);
@@ -156,7 +170,8 @@ export async function uploadFile(
 	parentId: string | null,
 	name: string,
 	bytes: Uint8Array,
-	replace: boolean
+	replace: boolean,
+	actor: string
 ): Promise<{ entry: FileEntry; replaced: boolean }> {
 	if (bytes.length > limits.uploadMaxFileMb * 1024 * 1024) fail(413, `A file can be at most ${limits.uploadMaxFileMb} MB.`);
 	let text: string | null = null;
@@ -188,15 +203,18 @@ export async function uploadFile(
 			if (existing.kind !== kind) fail(409, 'Replacing can’t turn a text file into a binary file or back.');
 			const row = { ...existing, hash, size, updatedAt: now };
 			tx.update(files).set({ hash, size, updatedAt: now }).where(eq(files.id, existing.id)).run();
+			if (kind === 'binary') logTree(pid, actor, tx); // a replaced text is logged by its Yjs edit
 			return { entry: toEntry(row), replaced: true };
 		}
 		checkCount(tx, pid);
 		const row = { id: randomUUID(), projectId: pid, parentId, name, kind, hash, size, createdAt: now, updatedAt: now };
 		tx.insert(files).values(row).run();
+		logTree(pid, actor, tx);
 		return { entry: toEntry(row), replaced: false };
 	});
 	touchProject(pid);
-	if (text !== null) await setText(result.entry.id, text); // through Yjs: open editors see a replaced text at once
+	// through Yjs: open editors see a replaced text at once
+	if (text !== null) await setText(result.entry.id, text, { userId: actor, projectId: pid });
 	return result;
 }
 
@@ -225,17 +243,27 @@ export async function getText(id: string): Promise<string> {
 	}
 }
 
-/** Replaces the whole text through Hocuspocus (research R3): persisted by onChange, live in open editors. */
-export async function setText(id: string, text: string) {
-	const conn = await getServer().hocuspocus.openDirectConnection(id);
+/** Sets the text through Hocuspocus (research R3): persisted by onChange, live in open editors. `ctx` is the
+ *  connection context onChange sees, so history attributes the edit to `ctx.userId` (008 research R5). */
+export async function setText(id: string, text: string, ctx: ConnectionContext) {
+	const conn = await getServer().hocuspocus.openDirectConnection(id, ctx);
 	try {
-		await conn.transact((doc) => {
-			const t = doc.getText('content');
-			t.delete(0, t.length);
-			t.insert(0, text);
-		});
+		await conn.transact((doc) => editText(doc.getText('content'), text));
 	} finally {
 		await conn.disconnect();
+	}
+}
+
+/** Turns `t` into `text` with the fewest deletes and inserts (fast-diff): untouched runs keep their Yjs items, so
+ *  remote cursors and authorship survive and the update stays small (008 research R5). */
+export function editText(t: Y.Text, text: string) {
+	let at = 0;
+	for (const [op, run] of diff(t.toString(), text)) {
+		if (op === diff.DELETE) t.delete(at, run.length);
+		else {
+			if (op === diff.INSERT) t.insert(at, run);
+			at += run.length;
+		}
 	}
 }
 

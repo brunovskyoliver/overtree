@@ -19,7 +19,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		error(400, 'expected { name?: string, parentId?: string | null }');
 	api(() => requireEditFiles(pid, user.id, [id]));
 	if (parentId !== undefined) api(() => requireEditFolder(pid, user.id, parentId));
-	const entry = api(() => renameOrMove(pid, id, { name, parentId }));
+	const entry = api(() => renameOrMove(pid, id, { name, parentId }, user.id));
 	broadcast(pid, { type: 'tree' });
 	// ponytail: any move re-authenticates everyone with overrides; per-file diffing if moves get frequent
 	if (parentId !== undefined) kickOverridden(pid);
@@ -30,7 +30,7 @@ export const DELETE: RequestHandler = ({ locals, params }) => {
 	const { pid, id } = params;
 	const { user } = api(() => requireProject(locals, pid, 'read'));
 	api(() => requireEditFiles(pid, user.id, [id]));
-	api(() => deleteEntry(pid, id));
+	api(() => deleteEntry(pid, id, user.id));
 	broadcast(pid, { type: 'tree' });
 	return new Response(null, { status: 204 });
 };

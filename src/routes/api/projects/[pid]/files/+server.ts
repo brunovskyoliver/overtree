@@ -29,7 +29,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		const existing = replace && listFiles(pid).find((f) => f.parentId === parentId && f.name.toLowerCase() === file.name.toLowerCase());
 		if (existing) api(() => requireEditFiles(pid, user.id, [existing.id]));
 		const bytes = new Uint8Array(await file.arrayBuffer());
-		const { entry, replaced } = await api(() => uploadFile(pid, parentId, file.name, bytes, replace));
+		const { entry, replaced } = await api(() => uploadFile(pid, parentId, file.name, bytes, replace, user.id));
 		broadcast(pid, { type: 'tree' });
 		return json(entry, { status: replaced ? 200 : 201 });
 	}
@@ -38,7 +38,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!['folder', 'text'].includes(body?.kind) || typeof body.name !== 'string' || !(parentId === null || typeof parentId === 'string'))
 		error(400, 'expected { kind: "folder" | "text", name: string, parentId: string | null }');
 	api(() => requireEditFolder(pid, user.id, parentId));
-	const entry = api(() => createEntry(pid, { kind: body.kind, name: body.name, parentId }));
+	const entry = api(() => createEntry(pid, { kind: body.kind, name: body.name, parentId }, user.id));
 	broadcast(pid, { type: 'tree' });
 	return json(entry, { status: 201 });
 };

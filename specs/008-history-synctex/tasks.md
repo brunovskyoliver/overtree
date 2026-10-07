@@ -24,9 +24,9 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Purpose**: dependency, schema, test server knobs
 
-- [ ] T001 Add `fast-diff` to dependencies with `pnpm add fast-diff` (package.json, pnpm-lock.yaml) (research R14)
-- [ ] T002 Add `historyLog`, `versions`, `versionLabels` tables with indexes to `src/lib/server/schema.ts` per data-model.md, then generate `drizzle/0004_*.sql` with `pnpm db:generate`
-- [ ] T003 [P] Set `HISTORY_IDLE_MS=1500`, `HISTORY_MAX_OPEN_MS=10000`, `HISTORY_SWEEP_MS=500` in the e2e webServer env of `playwright.config.ts` (quickstart.md)
+- [X] T001 Add `fast-diff` to dependencies with `pnpm add fast-diff` (package.json, pnpm-lock.yaml) (research R14)
+- [X] T002 Add `historyLog`, `versions`, `versionLabels` tables with indexes to `src/lib/server/schema.ts` per data-model.md, then generate `drizzle/0004_*.sql` with `pnpm db:generate`
+- [X] T003 [P] Set `HISTORY_IDLE_MS=1500`, `HISTORY_MAX_OPEN_MS=10000`, `HISTORY_SWEEP_MS=500` in the e2e webServer env of `playwright.config.ts` (quickstart.md)
 
 ---
 
@@ -34,15 +34,15 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 **Purpose**: the history log, versions and manifests; every later story reads them
 
-- [ ] T004 Create `src/lib/server/history.ts`: `logText(pid, docName, userId, update)`, `logTree(pid, userId)`, `ensureBaselines(pid)` (baseline row per text file without log rows, merged `documents.state` + `updates`), thresholds from env with defaults (research R1, R2)
-- [ ] T005 In `src/lib/server/history.ts` add the manifest builder: synchronous text read (loaded Hocuspocus doc, else DB state + updates into a fresh `Y.Doc`), text stored via `putBlob`, unchanged files reuse the previous manifest hash; `readManifest(hash)` (research R3)
-- [ ] T006 In `src/lib/server/history.ts` add `closeVersion(pid, kind, { userId?, restoredFrom? })` (one transaction; no empty non-restore versions; authors, `changed` list with added/edited/deleted/renamed vs previous manifest, `startedAt`) and `sweep(now)` (idle 5 min / max open 30 min), broadcasting `{ type: 'history' }` after each new version (research R2, R8)
-- [ ] T007 Add `'history'` to `ProjectEvent` in `src/lib/server/access.ts`
-- [ ] T008 In `src/lib/server/collab.ts` call `logText` in `onChange` with `context.userId` (for every non-presence text doc), and start the sweep (`setInterval(...).unref()`, interval `HISTORY_SWEEP_MS`) plus one sweep at startup
-- [ ] T009 Add an `actor: string` parameter to `createEntry`, `renameOrMove`, `deleteEntry`, `uploadFile`, `setMainFile` in `src/lib/server/files.ts` that writes a `tree` log row; pass `user.id` from `src/routes/api/projects/[pid]/files/+server.ts`, `files/[id]/+server.ts`, `main/+server.ts`; `setText(id, text, ctx)` passes `{ userId, projectId }` to `openDirectConnection` and applies a minimal `fast-diff` edit instead of delete-all/insert-all (research R5)
-- [ ] T010 In `src/routes/api/projects/[pid]/compile/+server.ts` call `closeVersion(pid, 'compile')` before `compileProject` (FR-002)
-- [ ] T011 Remove `history_log`, `version_labels`, `versions` rows (in that order) in project deletion in `src/lib/server/projects.ts`
-- [ ] T012 [P] Vitest `tests/unit/history.test.ts`: onChange rows carry the socket's user and direct-connection context; baseline rows for existing docs; idle/max-open sweep closes exactly one version; compile with no changes adds nothing; tree ops log the actor; manifest reconstructs tree + texts + main; restart (new attach) closes open rows; project delete removes history
+- [X] T004 Create `src/lib/server/history.ts`: `logText(pid, docName, userId, update)`, `logTree(pid, userId)`, `ensureBaselines(pid)` (baseline row per text file without log rows, merged `documents.state` + `updates`), thresholds from env with defaults (research R1, R2)
+- [X] T005 In `src/lib/server/history.ts` add the manifest builder: synchronous text read (loaded Hocuspocus doc, else DB state + updates into a fresh `Y.Doc`), text stored via `putBlob`, unchanged files reuse the previous manifest hash; `readManifest(hash)` (research R3)
+- [X] T006 In `src/lib/server/history.ts` add `closeVersion(pid, kind, { userId?, restoredFrom? })` (one transaction; no empty non-restore versions; authors, `changed` list with added/edited/deleted/renamed vs previous manifest, `startedAt`) and `sweep(now)` (idle 5 min / max open 30 min), broadcasting `{ type: 'history' }` after each new version (research R2, R8)
+- [X] T007 Add `'history'` to `ProjectEvent` in `src/lib/server/access.ts`
+- [X] T008 In `src/lib/server/collab.ts` call `logText` in `onChange` with `context.userId` (for every non-presence text doc), and start the sweep (`setInterval(...).unref()`, interval `HISTORY_SWEEP_MS`) plus one sweep at startup
+- [X] T009 Add an `actor: string` parameter to `createEntry`, `renameOrMove`, `deleteEntry`, `uploadFile`, `setMainFile` in `src/lib/server/files.ts` that writes a `tree` log row; pass `user.id` from `src/routes/api/projects/[pid]/files/+server.ts`, `files/[id]/+server.ts`, `main/+server.ts`; `setText(id, text, ctx)` passes `{ userId, projectId }` to `openDirectConnection` and applies a minimal `fast-diff` edit instead of delete-all/insert-all (research R5)
+- [X] T010 In `src/routes/api/projects/[pid]/compile/+server.ts` call `closeVersion(pid, 'compile')` before `compileProject` (FR-002)
+- [X] T011 Remove `history_log`, `version_labels`, `versions` rows (in that order) in project deletion in `src/lib/server/projects.ts`
+- [X] T012 [P] Vitest `tests/unit/history.test.ts`: onChange rows carry the socket's user and direct-connection context; baseline rows for existing docs; idle/max-open sweep closes exactly one version; compile with no changes adds nothing; tree ops log the actor; manifest reconstructs tree + texts + main; restart (new attach) closes open rows; project delete removes history
 
 **Checkpoint**: versions accumulate for every project; nothing visible yet
 

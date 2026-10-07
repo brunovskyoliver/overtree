@@ -7,7 +7,22 @@ import { pathOf } from '../files.ts';
 import { colorFor } from '../presence.ts';
 import { fail, getText, listFiles, textUpdate, type Row } from './files.ts';
 import { broadcast, kick, projectRole, type Role } from './access.ts';
-import { compileSettings, documents, files, invites, memberships, overrides, projects, updates, users, type MemberRole } from './schema.ts';
+import { closeVersion } from './history.ts';
+import {
+	compileSettings,
+	documents,
+	files,
+	historyLog,
+	invites,
+	memberships,
+	overrides,
+	projects,
+	updates,
+	users,
+	versionLabels,
+	versions,
+	type MemberRole
+} from './schema.ts';
 
 // Projects (005 research R11). Loaded unbundled by server.ts in production: no SvelteKit imports here.
 
@@ -40,6 +55,7 @@ export function insertProject(
 		// fresh ids: nobody has them open, so the text goes in as one stored update each
 		for (const [docName, t] of texts) tx.insert(updates).values({ docName, update: textUpdate(t), createdAt: now }).run();
 	});
+	closeVersion(id, 'baseline'); // history starts here, also for a copy (spec assumptions)
 	return id;
 }
 
@@ -137,8 +153,8 @@ export function joinByLink(token: string, userId: string): string | null {
 	return pid;
 }
 
-/** Delete a project and everything in it (T023): files, Yjs documents and updates, memberships, invites, overrides
- *  and compile settings in one transaction, then the compile output; open editors get `deleted` and are kicked.
+/** Delete a project and everything in it (T023): files, Yjs documents and updates, history, memberships, invites,
+ *  overrides and compile settings in one transaction, then the compile output; open editors get `deleted` and are kicked.
  *  404 for an unknown project. Blobs stay (content-addressed, maybe shared: files.ts putBlob). */
 export function deleteProject(pid: string) {
 	db().transaction((tx) => {
@@ -153,6 +169,9 @@ export function deleteProject(pid: string) {
 		tx.delete(memberships).where(eq(memberships.projectId, pid)).run();
 		tx.delete(invites).where(eq(invites.projectId, pid)).run();
 		tx.delete(compileSettings).where(eq(compileSettings.project, pid)).run();
+		tx.delete(historyLog).where(eq(historyLog.projectId, pid)).run();
+		tx.delete(versionLabels).where(eq(versionLabels.projectId, pid)).run();
+		tx.delete(versions).where(eq(versions.projectId, pid)).run();
 		tx.delete(files).where(eq(files.projectId, pid)).run(); // one statement: the parent FK is checked at its end
 		if (text.length) {
 			tx.delete(documents).where(inArray(documents.name, text)).run();

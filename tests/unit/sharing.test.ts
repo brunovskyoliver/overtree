@@ -221,7 +221,7 @@ describe('invites', () => {
 		const pid = project();
 		member(server, pid, B, 'editor');
 		member(server, pid, C, 'editor');
-		const ch = createEntry(pid, { kind: 'folder', name: 'ch', parentId: null });
+		const ch = createEntry(pid, { kind: 'folder', name: 'ch', parentId: null }, user().id);
 		for (const email of [B, C]) server.db.insert(overrides).values({ projectId: pid, userId: user(email).id, fileId: ch.id, role: 'reader' }).run();
 
 		expect((await hit(memberRoute.DELETE, ev(OWNER, { pid, userId: user(B).id }))).status).toBe(204);

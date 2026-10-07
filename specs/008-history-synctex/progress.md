@@ -17,5 +17,6 @@ Updated: 2026-10-07T00:00:00Z
 - 2026-10-07 plan: plan.md, research.md (R1–R14), data-model.md, contracts/http-api.md, contracts/ui.md, quickstart.md.
 - 2026-10-07 tasks: tasks.md 50 tasks / 10 phases.
 - 2026-10-07 analyze: 0 critical, 0 high, 3 medium, 2 low; fixed after go.
+- 2026-10-07 implement phase 1-2 (T001–T012): migration 0004, history.ts (log, baselines, manifests, closeVersion, sweep), tree ops take `actor`, setText minimal fast-diff edit with context, compile closes a `compile` version, project delete removes history. Decisions: every new project (create/import/duplicate via insertProject) closes a `baseline` version at once, and the startup sweep gives one to projects without versions (upgrade); the startup sweep closes all open rows regardless of idle time; `closeVersion` returns null when nothing was closed and takes only `{ restoredFrom }` (authors come from rows only).
 
 ## Report

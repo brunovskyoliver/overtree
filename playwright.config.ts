@@ -46,7 +46,11 @@ export default defineConfig({
 				ADMIN_EMAILS: 'admin@test.local',
 				COMPILE_TIMEOUT_MS: '5000',
 				// upload.spec refuses a file just over this; no other spec uploads more than a few KB
-				UPLOAD_MAX_FILE_MB: '1'
+				UPLOAD_MAX_FILE_MB: '1',
+				// history versions close within seconds instead of minutes (008 quickstart.md)
+				HISTORY_IDLE_MS: '1500',
+				HISTORY_MAX_OPEN_MS: '10000',
+				HISTORY_SWEEP_MS: '500'
 			}
 		},
 		// started after the first one (Playwright sets web servers up in order), so it reuses that build

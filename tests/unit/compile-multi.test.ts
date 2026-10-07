@@ -23,9 +23,9 @@ async function load(name: string) {
 		let parentId: string | null = null;
 		for (const folder of parts.slice(0, -1)) {
 			const found = listFiles(pid).find((f) => f.parentId === parentId && f.name === folder);
-			parentId = (found ?? createEntry(pid, { kind: 'folder', name: folder, parentId })).id;
+			parentId = (found ?? createEntry(pid, { kind: 'folder', name: folder, parentId }, user().id)).id;
 		}
-		await uploadFile(pid, parentId, parts.at(-1)!, bytes, true);
+		await uploadFile(pid, parentId, parts.at(-1)!, bytes, true, user().id);
 	}
 }
 
@@ -51,7 +51,7 @@ describe('multi-file compile', { timeout: 60_000 }, () => {
 	it('compiles a main document in a subfolder relative to its folder', async () => {
 		await start();
 		await load('sub-main');
-		setMainFile(pid, idOf('thesis.tex'));
+		setMainFile(pid, idOf('thesis.tex'), user().id);
 		const r = await compileProject(pid, { stopOnFirstError: false });
 		expect(r.status).toBe('success');
 		expect(r.entries.filter((e) => e.level === 'error')).toEqual([]);
@@ -61,14 +61,14 @@ describe('multi-file compile', { timeout: 60_000 }, () => {
 		await start();
 		await load('multi');
 		const intro = idOf('intro.tex');
-		await setText(intro, '\\section{Introduction}\n\nThis chapter holds the INTRO-MARKER text.\n\\undefinedmacro\n');
+		await setText(intro, '\\section{Introduction}\n\nThis chapter holds the INTRO-MARKER text.\n\\undefinedmacro\n', {});
 		const r = await compileProject(pid, { stopOnFirstError: false });
 		expect(r.entries.find((e) => e.level === 'error')).toMatchObject({ file: 'chapters/intro.tex', line: 4, fileId: intro });
 	});
 
 	it('fails without starting a container when there is no main document', async () => {
 		await start();
-		deleteEntry(pid, idOf('main.tex'));
+		deleteEntry(pid, idOf('main.tex'), user().id);
 		const r = await compileProject(pid, { stopOnFirstError: false });
 		expect(r).toMatchObject({ status: 'failure', message: expect.stringMatching(/^No main document\./), entries: [] });
 	});
@@ -95,7 +95,7 @@ describe('tarProject', () => {
 	it('never writes absolute or parent paths; the service refuses such names', async () => {
 		await start();
 		await load('multi');
-		expect(() => createEntry(pid, { kind: 'text', name: '../x.tex', parentId: null })).toThrow(FileError);
+		expect(() => createEntry(pid, { kind: 'text', name: '../x.tex', parentId: null }, user().id)).toThrow(FileError);
 		const { files } = await collectProject(pid);
 		const listed = execFileSync('tar', ['-tf', '-'], { input: tarProject(files), encoding: 'utf8' }).trim().split('\n');
 		expect(listed.sort()).toEqual(['chapters/intro.tex', 'chapters/two.tex', 'figures/dot.png', 'main.tex', 'refs.bib']);
