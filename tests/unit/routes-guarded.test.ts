@@ -54,6 +54,23 @@ describe('history routes (008)', () => {
 	});
 });
 
+describe('sync routes (008)', () => {
+	const sync = handlers.filter((h) => h.name.includes('/compile/sync/'));
+	it('finds them', () => expect(sync.map((h) => h.name).sort()).toEqual(['GET /api/projects/[pid]/compile/sync/code', 'GET /api/projects/[pid]/compile/sync/pdf']));
+
+	// readers navigate too (FR-024); without a compile there is no mapping
+	it.each(sync)('$name: a reader gets past the guard, 404 before a compile, 400 on bad params', async ({ fn }) => {
+		const { db } = await start();
+		const pid = project();
+		const reader = user('reader@test.local');
+		db.insert(memberships).values({ projectId: pid, userId: reader.id, role: 'reader', viaLink: false, createdAt: Date.now() }).run();
+		const e = event('GET', 'reader@test.local', pid);
+		expect((await hit(fn, e)).status).toBe(400);
+		e.url = new URL('http://x/?pdfId=nope&fileId=x&line=1&page=1&x=10&y=10');
+		expect((await hit(fn, e)).status).toBe(404);
+	});
+});
+
 describe('/share/[token]', () => {
 	it('shows a signed-out visitor the title and nothing else', async () => {
 		await start();

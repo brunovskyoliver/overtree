@@ -96,7 +96,7 @@ The restore runs `closeVersion(pid, 'edit')` first, then the changes, then `clos
 - **forward** `(fileId, line) → { page, x, y, width, height }[]`: records with the file's input tag and that line; if none, the nearest earlier line that has records; the first page with matches; hbox records merged into one rectangle per page.
 - **reverse** `(page, x, y) → { fileId, line }`: the smallest hbox on the page containing the point; else the nearest record by vertical then horizontal distance.
 
-Coordinates are converted to PDF points from the top-left: `pt = sp × unit × mag/1000 / 65536 × 72/72.27`, with the X/Y offsets (default 1in) added. The parsed index is cached in memory per `pdfId` (an LRU of 4 entries).
+Coordinates are converted to PDF points from the top-left: `pt = sp × unit × mag/1000 / 65536 × 72/72.27`, with the preamble's X/Y offsets added (current pdfTeX writes 0: the 1in margin is already in the coordinates, checked against the multi fixture). The parsed index is cached in memory per `pdfId` (an LRU of 4 entries).
 
 Paths: SyncTeX input names are absolute (`/tmp/p/...`) or relative to latexmk's cwd (`/tmp/p/$MAIN_DIR`). `compileOnce` writes `sync.json` (`{ mainPath, paths: { [projectPath]: fileId } }`, from `collectProject`) next to the synctex file, so navigation uses compile-time paths even if files were renamed since. Inputs outside `/tmp/p/` (TeX Live files) map to nothing.
 
@@ -106,7 +106,7 @@ Paths: SyncTeX input names are absolute (`/tmp/p/...`) or relative to latexmk's 
 
 ## R10. Navigation UI
 
-**Decision**: A narrow vertical strip on the editor/PDF divider holds two buttons, "→" (Go to PDF location) and "←" (Go to code location). Shortcut for forward: **Ctrl/⌘+Alt+J** (⌘⌥→ switches tabs in some browsers). Forward: `GET /compile/sync/code?pdfId&fileId&line` → scroll the page into view at the rectangle (`scrollPageIntoView` with an `XYZ` destination) and draw a highlight `div` over the page for 1 s. Reverse: `dblclick` on a pdf.js page → convert client coords to PDF points via the page view's viewport (`convertToPdfPoint`, flipped to top-left) → `GET /compile/sync/pdf?pdfId&page&x&y` → `openAt(fileId, line)` (existing helper on the project page). "←" uses the point at the top-left quarter of the visible area of the current page. Disabled when `compile.last?.pdfId` is missing or the server answers 404 (no synctex).
+**Decision**: A narrow vertical strip on the editor/PDF divider holds two buttons, "→" (Go to PDF location) and "←" (Go to code location). Shortcut for forward: **Ctrl/⌘+Alt+J** (⌘⌥→ switches tabs in some browsers). Forward: `GET /compile/sync/code?pdfId&fileId&line` → scroll the page into view at the rectangle (`scrollPageIntoView` with an `XYZ` destination) and draw a highlight `div` over the page for 1 s. Reverse: `dblclick` on a pdf.js page → convert client coords to PDF points via the page view's viewport (`convertToPdfPoint`, flipped to top-left) → `GET /compile/sync/pdf?pdfId&page&x&y` → `openAt(fileId, line)` (existing helper on the project page). "←" uses the point mid-width, a quarter down the visible area of the current page (a left-quarter point hits paragraph indents, which belong to the enclosing file). Disabled when `compile.last?.pdfId` is missing or the server answers 404 (no synctex).
 
 ## R11. PDF position across recompiles and reloads
 

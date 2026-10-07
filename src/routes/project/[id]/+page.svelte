@@ -72,6 +72,14 @@
 		view.focus();
 	}
 
+	let workspace = $state<ReturnType<typeof Workspace>>();
+	/** The editor's file and cursor line, for SyncTeX's "→". */
+	function cursor() {
+		if (!editor) return;
+		const { state } = editor.view;
+		return { fileId: editor.fileId, line: state.doc.lineAt(state.selection.main.head).number };
+	}
+
 	/** An avatar: open the file that user is in and scroll to their cursor (research R8). */
 	async function jumpTo(peer: Peer) {
 		if (!peer.fileId) return;
@@ -140,8 +148,23 @@
 				<div class="history-layer"><HistoryView {history} canEdit={project.details?.permissions.canEdit ?? false} /></div>
 			{/if}
 			<div class="work" class:hidden={history.open} inert={history.open}>
-				<Workspace {compile} {project} onopenat={openAt} activeId={project.active} onopen={(id) => project.openFile(id)}>
-					<Editor {project} {session} bind:editor onLocalEdit={() => compile.onLocalEdit()} onCompile={() => compile.compile()} />
+				<Workspace
+					bind:this={workspace}
+					{compile}
+					{project}
+					onopenat={openAt}
+					{cursor}
+					activeId={project.active}
+					onopen={(id) => project.openFile(id)}
+				>
+					<Editor
+						{project}
+						{session}
+						bind:editor
+						onLocalEdit={() => compile.onLocalEdit()}
+						onCompile={() => compile.compile()}
+						onSyncForward={() => workspace?.forward()}
+					/>
 					{#snippet outline()}
 						<Outline {editor} enabled={outlined} />
 					{/snippet}

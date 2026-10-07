@@ -43,8 +43,17 @@
 		session,
 		editor = $bindable(),
 		onLocalEdit,
-		onCompile
-	}: { project: Project; session: Session; editor?: EditorHandle; onLocalEdit?: () => void; onCompile?: () => void } = $props();
+		onCompile,
+		onSyncForward
+	}: {
+		project: Project;
+		session: Session;
+		editor?: EditorHandle;
+		onLocalEdit?: () => void;
+		onCompile?: () => void;
+		/** Ctrl/⌘+Alt+J: show the cursor's place in the PDF (SyncTeX) */
+		onSyncForward?: () => void;
+	} = $props();
 
 	type Tab = {
 		ytext: Y.Text;
@@ -122,7 +131,9 @@
 		// before defaultKeymap, which binds Mod-Enter to insertBlankLine
 		keymap.of([
 			{ key: 'Mod-Enter', run: compileKey },
-			{ key: 'Mod-s', run: compileKey }
+			{ key: 'Mod-s', run: compileKey },
+			// not ⌘⌥→: it switches tabs in some browsers (research R10)
+			{ key: 'Mod-Alt-j', run: () => (onSyncForward?.(), true) }
 		]),
 		keymap.of([...undoKeys, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap, ...completionKeymap]),
 		editorTheme,

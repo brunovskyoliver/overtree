@@ -1,9 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
-import { readTree } from '../fixtures/projects/zips.ts';
-import { api, openEditor, projectPath, resetProject, test } from './helpers.ts';
+import { api, loadMulti, openEditor, projectPath, resetProject, test, upload } from './helpers.ts';
 
 // US3: compile a multi-file project (contracts/files-api.md, research R8)
 
@@ -26,30 +24,6 @@ const tab = (page: Page, name: string) => page.getByRole('tablist', { name: 'Ope
 const recompile = (page: Page) => page.getByRole('button', { name: 'Recompile' });
 const viewer = (page: Page) => page.getByTestId('pdf-viewer');
 const files = async (page: Page): Promise<FileEntry[]> => (await (await page.request.get(`${api()}/files`)).json()).files;
-
-/** Upload one file (multipart, T032); `replace` overwrites the seeded main.tex. Origin like a browser form post. */
-async function upload(page: Page, path: string, bytes: Buffer, parentId: string | null) {
-	const res = await page.request.post(`${api()}/files`, {
-		headers: { origin: new URL(page.url()).origin },
-		multipart: { file: { name: path.split('/').at(-1)!, mimeType: 'application/octet-stream', buffer: bytes }, parentId: parentId ?? '', replace: '1' }
-	});
-	expect(res.ok()).toBe(true);
-	return (await res.json()) as FileEntry;
-}
-
-/** tests/fixtures/projects/multi into the project: folders by JSON create, files by upload. */
-async function loadMulti(page: Page) {
-	const folders = new Map<string, string>();
-	for (const [path, bytes] of Object.entries(readTree(fileURLToPath(new URL('../fixtures/projects/multi', import.meta.url))))) {
-		const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-		if (dir && !folders.has(dir)) {
-			const res = await page.request.post(`${api()}/files`, { data: { kind: 'folder', name: dir, parentId: null } });
-			expect(res.status()).toBe(201);
-			folders.set(dir, (await res.json()).id);
-		}
-		await upload(page, path, Buffer.from(bytes), folders.get(dir) ?? null);
-	}
-}
 
 async function compile(page: Page) {
 	const [res] = await Promise.all([

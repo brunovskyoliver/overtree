@@ -1,10 +1,11 @@
 <script lang="ts">
 	// pdf.mjs must run first: pdf_viewer.mjs reads globalThis.pdfjsLib
 	import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from 'pdfjs-dist';
-	import { EventBus, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
+	import { EventBus, PDFViewer, type PDFPageView } from 'pdfjs-dist/web/pdf_viewer.mjs';
 	import 'pdfjs-dist/web/pdf_viewer.css';
 	import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 	import { onMount } from 'svelte';
+	import type { SyncBox } from '#lib/synctex.ts';
 
 	GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -16,8 +17,18 @@
 		page = $bindable(0),
 		pages = $bindable(0),
 		scale = $bindable('page-width'),
-		percent = $bindable(100)
-	}: { url: string; dark?: boolean; page?: number; pages?: number; scale?: string; percent?: number } = $props();
+		percent = $bindable(100),
+		onsync
+	}: {
+		url: string;
+		dark?: boolean;
+		page?: number;
+		pages?: number;
+		scale?: string;
+		percent?: number;
+		/** double-click on a page: the point in PDF points from the page's top-left (reverse SyncTeX) */
+		onsync?: (page: number, x: number, y: number) => void;
+	} = $props();
 
 	let container: HTMLDivElement;
 	let viewer = $state<PDFViewer>();
@@ -80,11 +91,18 @@
 			pinch(g.scale / last, g.clientX, g.clientY);
 			last = g.scale;
 		};
+		const onDblClick = (e: MouseEvent) => {
+			const n = Number((e.target as Element).closest<HTMLElement>('.page')?.dataset.pageNumber);
+			const view = n ? v.getPageView(n - 1) : undefined;
+			if (onsync && view) onsync(n, ...pdfPoint(view, e.clientX, e.clientY));
+		};
+		container.addEventListener('dblclick', onDblClick);
 		container.addEventListener('wheel', onWheel, { passive: false });
 		container.addEventListener('gesturestart', onGestureStart);
 		container.addEventListener('gesturechange', onGestureChange);
 		viewer = v;
 		return () => {
+			container.removeEventListener('dblclick', onDblClick);
 			container.removeEventListener('wheel', onWheel);
 			container.removeEventListener('gesturestart', onGestureStart);
 			container.removeEventListener('gesturechange', onGestureChange);
@@ -97,6 +115,50 @@
 	export const goTo = (n: number) => viewer && (viewer.currentPageNumber = n);
 	export const zoom = (step: 1 | -1) => (step > 0 ? viewer?.increaseScale() : viewer?.decreaseScale());
 	export const setScale = (value: string) => viewer && (viewer.currentScaleValue = value);
+
+	/** A point on screen → PDF points from the page's top-left (SyncTeX's frame; PDF space starts bottom-left). */
+	function pdfPoint(view: PDFPageView, clientX: number, clientY: number): [number, number] {
+		const r = view.div.getBoundingClientRect();
+		const [x, y] = view.viewport.convertToPdfPoint(clientX - r.left - view.div.clientLeft, clientY - r.top - view.div.clientTop);
+		const [x0, , , y1] = view.viewport.viewBox;
+		return [x - x0, y1 - y];
+	}
+
+	/** Forward SyncTeX: scroll `boxes` (PDF points from the page's top-left) of page `n` to the middle of the pane and
+	 *  highlight them for a second. */
+	export function showBox(n: number, boxes: SyncBox[]) {
+		const view = viewer?.getPageView(n - 1);
+		if (!viewer || !view) return;
+		const [x0, y0, x1, y1] = view.viewport.viewBox;
+		const first = boxes[0];
+		// XYZ takes PDF space (bottom-left origin); no zoom: keep the current one
+		const dest = first && [null, { name: 'XYZ' }, x0 + Math.max(first.x - 20, 0), y1 - first.y - first.height / 2, null];
+		viewer.scrollPageIntoView({ pageNumber: n, destArray: dest, center: dest ? 'vertical' : undefined });
+		// in % of the page, so a zoom meanwhile doesn't misplace them
+		const pct = (v: number, of: number) => `${(v / of) * 100}%`;
+		for (const b of boxes) {
+			const mark = document.createElement('div');
+			mark.className = 'sync-highlight';
+			Object.assign(mark.style, { left: pct(b.x, x1 - x0), top: pct(b.y, y1 - y0), width: pct(b.width, x1 - x0), height: pct(b.height, y1 - y0) });
+			view.div.append(mark);
+			setTimeout(() => mark.remove(), 1000);
+		}
+	}
+
+	/** For "←": a point near the top of the visible part of the current page (a quarter down, mid-width so it is in
+	 *  the text rather than a line's indent), in PDF points from the page's top-left. */
+	export function visiblePoint(): { page: number; x: number; y: number } | undefined {
+		const n = viewer?.currentPageNumber ?? 0;
+		const view = viewer?.pagesCount ? viewer.getPageView(n - 1) : undefined;
+		if (!view) return;
+		const c = container.getBoundingClientRect();
+		const r = view.div.getBoundingClientRect();
+		const [left, top] = [Math.max(c.left, r.left), Math.max(c.top, r.top)];
+		const [right, bottom] = [Math.min(c.right, r.right), Math.min(c.bottom, r.bottom)];
+		if (right <= left || bottom <= top) return;
+		const [x, y] = pdfPoint(view, (left + right) / 2, top + (bottom - top) / 4);
+		return { page: n, x, y };
+	}
 
 	// Parse the new PDF before swapping, so the old pages stay visible until then (SC-007).
 	$effect(() => {
@@ -139,6 +201,14 @@
 		position: absolute;
 		inset: 0;
 		overflow: auto;
+	}
+	:global(.sync-highlight) {
+		position: absolute;
+		z-index: 10;
+		border-radius: 2px;
+		background: rgb(255 196 0 / 35%);
+		outline: 2px solid rgb(255 196 0 / 80%);
+		pointer-events: none;
 	}
 	.dark :global(.page canvas) {
 		filter: invert(1) hue-rotate(180deg);

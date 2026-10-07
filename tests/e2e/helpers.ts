@@ -1,8 +1,10 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test as base, expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
-import type { ProjectInfo } from '../../src/lib/files.ts';
+import type { FileEntry, ProjectInfo } from '../../src/lib/files.ts';
 import { SEED } from '../../src/lib/server/collab.ts';
+import { readTree } from '../fixtures/projects/zips.ts';
 
 export { SEED };
 
@@ -105,4 +107,28 @@ export async function resetProject(page: Page) {
 	await page.evaluate(() => localStorage.clear());
 	await openEditor(page);
 	await resetDoc(page);
+}
+
+/** Upload one file (multipart, T032); `replace` overwrites the seeded main.tex. Origin like a browser form post. */
+export async function upload(page: Page, path: string, bytes: Buffer, parentId: string | null) {
+	const res = await page.request.post(`${api()}/files`, {
+		headers: { origin: new URL(page.url()).origin },
+		multipart: { file: { name: path.split('/').at(-1)!, mimeType: 'application/octet-stream', buffer: bytes }, parentId: parentId ?? '', replace: '1' }
+	});
+	expect(res.ok()).toBe(true);
+	return (await res.json()) as FileEntry;
+}
+
+/** tests/fixtures/projects/multi into the project: folders by JSON create, files by upload. */
+export async function loadMulti(page: Page) {
+	const folders = new Map<string, string>();
+	for (const [path, bytes] of Object.entries(readTree(fileURLToPath(new URL('../fixtures/projects/multi', import.meta.url))))) {
+		const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+		if (dir && !folders.has(dir)) {
+			const res = await page.request.post(`${api()}/files`, { data: { kind: 'folder', name: dir, parentId: null } });
+			expect(res.status()).toBe(201);
+			folders.set(dir, (await res.json()).id);
+		}
+		await upload(page, path, Buffer.from(bytes), folders.get(dir) ?? null);
+	}
 }

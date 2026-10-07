@@ -3,8 +3,10 @@
 	import type { Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
+	import { syncToCode, syncToPdf } from '#lib/synctex.ts';
 	import FileTree from './FileTree.svelte';
 	import PdfPane from './PdfPane.svelte';
+	import SyncStrip from './SyncStrip.svelte';
 
 	// children = editor, outline = body under the "File outline" header
 	let {
@@ -14,7 +16,8 @@
 		onopenat,
 		project,
 		activeId,
-		onopen
+		onopen,
+		cursor
 	}: {
 		children: Snippet;
 		outline: Snippet;
@@ -23,6 +26,8 @@
 		project: Project;
 		activeId?: string | null;
 		onopen?: (id: string) => void;
+		/** the editor's file and line for "→" (SyncTeX); undefined when no text file is open */
+		cursor?: () => { fileId: string; line: number } | undefined;
 	} = $props();
 
 	let sidebar = $state<Pane>();
@@ -31,6 +36,30 @@
 	let pdfOpen = $state(true);
 
 	const toggle = (pane: Pane | undefined) => (pane?.isCollapsed() ? pane.expand() : pane?.collapse());
+
+	// SyncTeX (research R10): against the last compile's PDF; no mapping (stale, edited since, not in the PDF) does nothing
+	let pdfPane = $state<ReturnType<typeof PdfPane>>();
+	const pdfId = $derived(compile.last?.pdfId);
+
+	/** "→" and Ctrl/⌘+Alt+J: show the cursor's place in the PDF. */
+	export async function forward() {
+		const at = cursor?.();
+		if (!pdfId || !at) return;
+		if (pdf?.isCollapsed()) pdf.expand();
+		const r = await syncToPdf(project.id, pdfId, at.fileId, at.line);
+		if (r) pdfPane?.showBox(r.page, r.boxes);
+	}
+
+	/** Double-click on the PDF or "←": open the source of that spot. */
+	async function reverse(page: number, x: number, y: number) {
+		const r = pdfId && (await syncToCode(project.id, pdfId, page, x, y));
+		if (r) onopenat?.(r.fileId, r.line);
+	}
+
+	function reverseVisible() {
+		const p = pdfPane?.visiblePoint();
+		if (p) void reverse(p.page, p.x, p.y);
+	}
 </script>
 
 <!-- paneforge stores under `paneforge:<autoSaveId>`, collapsed panes included (FR-018) -->
@@ -80,6 +109,8 @@
 		>
 			<svg viewBox="0 0 8 12" aria-hidden="true"><path d={pdfOpen ? 'm2 2 4 4-4 4' : 'M6 2 2 6l4 4'} /></svg>
 		</button>
+		<!-- on the editor's right rail, above the PDF collapse tab: in the pane, so it takes no width from the layout -->
+		<div class="sync-rail"><SyncStrip enabled={!!pdfId} onforward={forward} onreverse={reverseVisible} /></div>
 	</Pane>
 	<PaneResizer class="handle handle-v" aria-label="Resize PDF" />
 	<Pane
@@ -93,7 +124,7 @@
 		onExpand={() => (pdfOpen = true)}
 	>
 		<!-- inert while collapsed, like the sidebar -->
-		<PdfPane {compile} {onopenat} inert={!pdfOpen} />
+		<PdfPane bind:this={pdfPane} {compile} {onopenat} onsync={reverse} inert={!pdfOpen} />
 	</Pane>
 </PaneGroup>
 
@@ -153,12 +184,19 @@
 		color: var(--text);
 		cursor: pointer;
 	}
-	/* 10px rails so the tabs never cover line numbers (left) or the scrollbar (right) */
+	/* rails so the tabs never cover line numbers (left, 10px) or the scrollbar (right, 20px with the sync strip) */
 	:global(.editor-pane .cm-gutters) {
 		padding-left: 10px;
 	}
 	:global(.editor-pane .cm-scroller) {
-		margin-right: 10px;
+		margin-right: 20px;
+	}
+	.sync-rail {
+		position: absolute;
+		top: 50%;
+		right: 0;
+		z-index: 5;
+		margin-top: -82px;
 	}
 	.collapse:hover {
 		background: #5a6375;

@@ -26,4 +26,6 @@ Updated: 2026-10-07T00:00:00Z
 - 2026-10-07 implement phase 4 (T023–T027): 903139a; test 279/279, e2e restore/history/permissions/tree 17/17.
 - 2026-10-07 fix (me): diff pairs a deleted + re-added file at the same path as one edit; restore reuses the current file at a target path instead of recreating it next to it. Unit test added; restore+history e2e 6/6.
 
+- 2026-10-07 implement phase 5 US3 (T028–T033): compile writes `sync.json` (`pdfId`, `mainPath`, `paths`) next to `output.synctex.gz`; `src/lib/server/synctex.ts` parses it (fixture `tests/fixtures/synctex/multi.*` from a real compile of the multi project), GET /compile/sync/code and /compile/sync/pdf, client `src/lib/synctex.ts`, `SyncStrip` on the editor's right rail (above the PDF collapse tab, inside the editor pane so the layout minimums are unchanged), PdfViewer `showBox`/`visiblePoint`/`onsync`, Ctrl/⌘+Alt+J. Decisions: current pdfTeX writes X/Y Offset 0 with the 1in margin already in the coordinates (R9's "add 1in" is wrong; offsets are read from the preamble); reverse picks the smallest hbox around the point, else the nearest hbox, then the last record left of the point in it; "←" uses the point mid-width, a quarter down the visible part of the current page (left quarter hit paragraph indents from main.tex); no mapping (404) does nothing.
+
 ## Report

@@ -283,8 +283,11 @@ async function compileOnce(pid: string, { stopOnFirstError }: Opts): Promise<Com
 	const previous = getLastResult(pid);
 	if (r.pdf) {
 		write('output.pdf', r.pdf);
-		if (r.synctex) write('output.synctex.gz', r.synctex);
-		else rmSync(join(dir, 'output.synctex.gz'), { force: true });
+		// sync.json: the compile-time paths of the synctex inputs, so navigation survives later renames (research R9)
+		if (r.synctex) {
+			write('output.synctex.gz', r.synctex);
+			write('sync.json', JSON.stringify({ pdfId: id, mainPath, paths: Object.fromEntries(paths) }));
+		} else for (const name of ['output.synctex.gz', 'sync.json']) rmSync(join(dir, name), { force: true });
 	}
 	// no log (timeout, unavailable): drop the old one so it isn't shown as this compile's
 	if (r.log !== undefined) write('output.log', r.log);

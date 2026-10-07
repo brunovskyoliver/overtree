@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { CompileState } from '#lib/compile.svelte.ts';
+	import type { SyncBox } from '#lib/synctex.ts';
 	import LogsPanel from './LogsPanel.svelte';
 	import PdfToolbar from './PdfToolbar.svelte';
 	import PdfViewer from './PdfViewer.svelte';
@@ -8,8 +9,15 @@
 	let {
 		compile,
 		onopenat,
+		onsync,
 		inert = false
-	}: { compile: CompileState; onopenat?: (fileId: string, line: number) => void; inert?: boolean } = $props();
+	}: {
+		compile: CompileState;
+		onopenat?: (fileId: string, line: number) => void;
+		/** double-click on the PDF (reverse SyncTeX), see PdfViewer */
+		onsync?: (page: number, x: number, y: number) => void;
+		inert?: boolean;
+	} = $props();
 
 	const PDF_KEY = 'overtree:pdf';
 
@@ -26,6 +34,10 @@
 		// unreadable storage: default
 	}
 	$effect(() => localStorage.setItem(PDF_KEY, JSON.stringify({ dark })));
+
+	// SyncTeX on the shown PDF (PdfViewer); no-ops without one
+	export const showBox = (page: number, boxes: SyncBox[]) => viewer?.showBox(page, boxes);
+	export const visiblePoint = () => viewer?.visiblePoint();
 
 	const failed = $derived(compile.last && compile.last.status !== 'success' ? compile.last : undefined);
 </script>
@@ -70,7 +82,7 @@
 		<!-- stays mounted (and laid out, so pdf.js can measure) under the logs: closing them shows the PDF at once -->
 		<div class="view" class:covered={logsOpen} inert={logsOpen}>
 			{#if compile.pdfUrl}
-				<PdfViewer url={compile.pdfUrl} {dark} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
+				<PdfViewer url={compile.pdfUrl} {dark} {onsync} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
 			{:else}
 				<p class="empty">Click Recompile or press Ctrl/⌘+Enter to see your PDF.</p>
 			{/if}
