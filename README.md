@@ -1,214 +1,259 @@
 # Overtree
 
-A self-hosted LaTeX editor in the spirit of Overleaf. Accounts through Clerk, a dashboard of projects, sharing with Owner, Editor and Reader roles (also per file or folder), live collaboration with labelled cursors and avatars (Yjs + Hocuspocus), a file tree and outline sidebar, a CodeMirror editor with tabs and LaTeX autocomplete, and a PDF pane that compiles each project in a throwaway TeX Live container. Users, projects, text and uploaded files are stored in SQLite.
+A self-hosted LaTeX editor in the spirit of Overleaf. Write LaTeX with other people in real time, compile to PDF in a sandboxed TeX Live container, and keep everything on your own server.
 
-The container publishes on `127.0.0.1` by default. Every page and API call needs a signed-in account; `/sign-in` and share-link landing pages (which show the project title only) are the public exceptions.
+- Projects dashboard with templates (blank, article, report, beamer, letter) and zip import
+- Live collaboration with named cursors, offline edits that merge on reconnect
+- Sharing with Owner, Editor and Reader roles, by email or link, and per file or folder
+- CodeMirror editor with tabs and LaTeX autocomplete (commands, environments, labels, citations, files)
+- PDF preview with SyncTeX jumps in both directions
+- Full history: browse versions, diff, label, restore a file or the whole project
+- Optional two-way sync with a GitHub repository
 
-## Clerk setup
+## Install
 
-Sign-in runs on [Clerk](https://clerk.com). The app needs a Clerk application and its two keys; it refuses to start without them.
+You need Docker with Compose and a free [Clerk](https://clerk.com) account for sign-in.
 
-1. Create an application in the [Clerk dashboard](https://dashboard.clerk.com). A development instance is fine for a private server; a production instance needs your domain and DNS records (Clerk walks you through them).
-2. Under **Configure → User & authentication**:
-   - **Email**: turn on sign-in with email, with both **Email verification code** and **Password**.
-   - **SSO connections**: add **Google**. Development instances use Clerk's shared Google credentials; a production instance needs your own OAuth client ID and secret from Google Cloud.
-3. Under **API keys**, copy the **Publishable key** (`pk_…`) into `PUBLIC_CLERK_PUBLISHABLE_KEY` and the **Secret key** (`sk_…`) into `CLERK_SECRET_KEY`. Optionally copy the **JWT public key** (PEM) into `CLERK_JWT_KEY` so session checks need no network.
-4. Behind a real domain, set `ORIGIN` (e.g. `https://tex.example.org`): sessions are only accepted from that origin.
-
-Who may get an account is decided by Overtree, not Clerk (see [Admin](#admin)). Someone the sign-up policy refuses still has an account in Clerk (Clerk creates it before Overtree sees them); they get "Your email isn't allowed on this instance" and are signed out. Remove such accounts under **Users** in the Clerk dashboard if you want them gone.
-
-### Passing the keys
-
-Keep the keys out of the repository. Any of these works:
+**1. Get the code and the TeX image**
 
 ```sh
-# a .env file next to compose.yaml (gitignored); docker compose reads it on its own
-PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_…
-CLERK_SECRET_KEY=sk_test_…
-ADMIN_EMAILS=you@example.org
-
-docker compose up -d --build
-set -a; . ./.env; set +a; pnpm dev        # dev server: export the file into the shell first
-node --env-file=.env server.ts            # production build without Docker
+git clone <this repository> overtree
+cd overtree
+docker pull texlive/texlive:latest-medium   # about 1 GB, pulled once
 ```
 
-The maintainer keeps them in the macOS keychain and injects them per command with `agent-secret`, e.g. `agent-secret run -e PUBLIC_CLERK_PUBLISHABLE_KEY=overtree/clerk-publishable-key -e CLERK_SECRET_KEY=overtree/clerk-secret-key -- pnpm dev`.
+The medium image covers common documents. For packages it lacks (extra fonts, less common packages, language packs and so on), use the full TeX Live image instead. That's what the main Overtree server runs:
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PUBLIC_CLERK_PUBLISHABLE_KEY` | required | Clerk publishable key (browser). |
-| `CLERK_SECRET_KEY` | required | Clerk secret key (server): verifies sessions and reads profiles. |
-| `CLERK_JWT_KEY` | unset | PEM public key for networkless session checks; unset fetches and caches Clerk's JWKS. |
-| `ADMIN_EMAILS` | empty | Comma-separated emails that are always site admins. |
-| `OVERTREE_TEST_AUTH` | unset | `1` turns on the test sign-in (tests only, see [Test](#test)); refused with `NODE_ENV=production`. |
+```sh
+docker pull texlive/texlive:latest-full     # several GB
+```
 
-## Accounts, projects and sharing
+and add `TEXLIVE_IMAGE=texlive/texlive:latest-full` to `.env` in step 3. Compose passes it to the app and pre-pulls it on `up`.
 
-The first account to sign in becomes a site admin and receives projects from before accounts existed (a 003 data dir shows up as "Untitled project"). The dashboard (`/`) lists your own and shared projects: create one from a template (blank, article, report, beamer, letter), upload a zip, search, rename, duplicate, delete your own, leave shared ones.
+**2. Create a Clerk application**
+
+1. In the [Clerk dashboard](https://dashboard.clerk.com), create an application. A development instance is fine for a private server.
+2. Under Configure, User & authentication: turn on email sign-in with both the verification code and password. Add Google under SSO connections if you want it.
+3. Under API keys, copy the publishable key (`pk_...`) and the secret key (`sk_...`).
+
+**3. Write a `.env` file** next to `compose.yaml` (it is gitignored):
+
+```sh
+PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+ADMIN_EMAILS=you@example.org
+```
+
+**4. Start it**
+
+```sh
+docker compose up -d --build   # http://127.0.0.1:3000
+```
+
+Sign in. The first account becomes the site admin. Data lives in the `overtree-data` volume and survives `docker compose down`.
+
+**Linux hosts:** the app starts compile containers through the Docker socket, which on Linux usually belongs to the `docker` group. Add `DOCKER_GID=$(stat -c %g /var/run/docker.sock)` to `.env`. Docker Desktop and OrbStack work with the default.
+
+**Behind a domain:** the port is bound to `127.0.0.1` only. Put a TLS proxy in front and add `ORIGIN: https://tex.example.org` (or `PROTOCOL_HEADER: x-forwarded-proto`) to the app's `environment` in `compose.yaml`. Without it, uploads and deletes fail SvelteKit's same-origin check. For a production Clerk instance, add your domain in Clerk and follow its DNS steps.
+
+> The Docker socket gives the app control of the host's Docker, which is root-equivalent. The app code is trusted; user LaTeX only runs inside locked-down job containers with no network, a read-only root, a non-root user and memory, CPU and time limits.
+
+## How it works
+
+```mermaid
+flowchart LR
+    Browser -- "HTTP pages and API" --> App
+    Browser -- "WebSocket (Yjs)" --> App
+    Browser -- "sign-in" --> Clerk
+    App["Overtree server<br/>SvelteKit + Hocuspocus"] -- "verify sessions" --> Clerk
+    App --> DB[("SQLite<br/>overtree.db")]
+    App -- "project tar in, PDF and log out" --> Job["TeX Live container<br/>(one per compile)"]
+    App -. "optional sync" .-> GitHub
+```
+
+Text files are Yjs documents served over Hocuspocus, so every keystroke reaches collaborators directly and is stored in SQLite. A compile streams the project into a fresh container and gets the PDF back, so the app and the job share no files. Roles are checked on the server for every route and socket; non-members get a 404.
+
+## Data model
+
+All state is in one SQLite file. The main tables:
+
+```mermaid
+erDiagram
+    users ||--o{ projects : owns
+    users ||--o{ memberships : has
+    projects ||--o{ memberships : has
+    projects ||--o{ invites : "pending for"
+    projects ||--o{ files : contains
+    files ||--o{ files : "parent of"
+    files ||--o{ overrides : "per-file role"
+    users ||--o{ overrides : gets
+    projects ||--o{ history_log : records
+    projects ||--o{ versions : groups
+    versions ||--o{ version_labels : named
+    users ||--o| github_accounts : connects
+    projects ||--o| github_links : "syncs with"
+    projects ||--o{ github_runs : logs
+
+    users {
+        text id PK "Clerk user id"
+        text email
+        text role "admin or user"
+        bool disabled
+    }
+    projects {
+        text id PK
+        text title
+        text owner_id FK
+        text main_file_id
+        text link_token "null when link sharing is off"
+    }
+    files {
+        text id PK "also the Yjs document name"
+        text project_id FK
+        text parent_id FK
+        text name
+        text kind
+    }
+    memberships {
+        text project_id PK
+        text user_id PK
+        text role "editor or reader"
+        bool via_link
+    }
+    invites {
+        text project_id PK
+        text email PK
+        text role
+    }
+    overrides {
+        text project_id PK
+        text user_id PK
+        text file_id PK
+        text role
+    }
+    history_log {
+        int id PK
+        text project_id FK
+        text doc_name
+        text user_id FK
+        blob update "Yjs update or tree change"
+    }
+    versions {
+        int id PK
+        text project_id FK
+        text kind "edit, compile, restore, github"
+        int watermark "last history_log id covered"
+    }
+    version_labels {
+        int id PK
+        int version_id FK
+        text name
+    }
+    github_links {
+        text project_id PK
+        text repo
+        text branch
+        text status
+    }
+```
+
+Besides these, `documents` and `updates` hold the live Yjs state, `settings` holds the sign-up policy, `compile_settings` the compiler per project, and `github_accounts` / `github_runs` the encrypted GitHub tokens and the sync log. The schema is in `src/lib/server/schema.ts`.
+
+## Using it
+
+### Roles and sharing
 
 | Role | Can |
 | --- | --- |
-| **Owner** | Everything: edit, rename, share, set per-file permissions, transfer ownership, delete. One per project. |
-| **Editor** | Edit files and the tree, set the main document and compiler, compile, download. |
-| **Reader** | Open files read-only, compile, download the PDF and zip, duplicate the project into their own copy. |
+| Owner | Everything, including sharing, per-file permissions, transferring ownership and deleting. One per project. |
+| Editor | Edit files and the tree, set the main document and compiler, compile, download. |
+| Reader | Read files, compile, download the PDF and zip, duplicate the project. |
 
-Roles are enforced on the server: HTTP routes check them and read-only WebSocket connections drop edits, so the UI is not the guard. Non-members get 404 for a project, never a hint that it exists.
+- **Share** (owner): invite by email. Someone without an account gets a pending invite that becomes access when they sign up.
+- **Link sharing**: a link with Editor or Reader access. Opening it still needs sign-in. Resetting or turning off the link removes everyone who joined only through it.
+- **Per-file permissions**: give one collaborator a different role on a file or folder. The nearest override up the folder chain wins.
 
-- **Share** (owner, top bar): invite by email as Editor or Reader. Someone with an account gets access at once; an unknown email becomes a pending invite that turns into access when they sign up (and lets them past an invite-only policy). Change roles, remove people, withdraw invites, transfer ownership (you become an Editor).
-- **Link sharing**: turn on a link with Editor or Reader access. Opening it needs sign-in; the person then appears in the list as "via link". Resetting or turning off the link removes everyone who only had link access. A link joiner who was also invited keeps the higher of the two roles while the link is on.
-- **Per-file permissions** (owner, tree menu "Permissions…"): give a named collaborator Editor or Reader on one file or folder. The nearest override up the folder chain wins, else the project role, so an Editor can be locked out of `main.tex` and a Reader can be let into `chapters/`. Locked entries show a lock in the tree. Overrides are listed per person in the Share dialog.
-- **Live**: every change of access applies within seconds without a reload: sockets of affected users are closed and re-authenticate with the new role; removed users see "Your access was removed".
+Access changes apply within seconds, without a reload.
 
-Everyone in a project sees the others' cursors with name labels and their avatars in the top bar (click one to jump to their cursor). Edits made offline merge when the connection returns.
+### Admin
 
-## Admin
+Site admins get an Admin page (`/admin`) to promote, demote and disable users, delete projects, and set the sign-up policy. **Invite-only** (the default) admits the first user, `ADMIN_EMAILS`, people with a pending invite and an allowlist of emails or `@domains`. **Open** admits anyone with a Clerk account.
 
-Site admins get **Admin** in the account menu (`/admin`):
+### Files and compile
 
-- **Users**: promote to admin or demote, disable or enable. Disabling signs the person out everywhere within seconds. The last enabled admin can't be demoted or disabled.
-- **Projects**: every project with owner and collaborator count; delete one (admins can't open other people's projects).
-- **Settings**: the sign-up policy. **Invite-only** (the default) lets in the first user, `ADMIN_EMAILS`, emails with a pending project invite, and the allowlist (`name@example.org` or a whole domain as `@example.org`). **Open** lets anyone with a Clerk account in.
+The sidebar holds the file tree and an outline. Upload files or drag them in from the desktop, and download the whole project as a zip. A zip uploaded on the dashboard becomes a new project; its main document is the root `main.tex`, else the shallowest `.tex` with `\documentclass`.
 
-## Run with Docker
+Compiling runs `latexmk` (with bibtex or biber as needed). Clicking a log entry opens the file at that line. Ctrl/Cmd+Alt+J jumps from the cursor to the PDF; double-clicking the PDF jumps back to the source. The Layout menu switches between side-by-side, editor only, PDF only and a separate PDF window.
 
-```sh
-docker compose up -d --build     # http://127.0.0.1:3000
-docker compose down              # data stays in the overtree-data volume
-```
+### History
+
+Every edit and tree change is logged with its author and grouped into versions: after 5 minutes of quiet, after 30 minutes of continuous editing, or on compile. Open History in the top bar to browse versions, compare with the current state, label a version, download it as a zip, or restore a file or the whole project. A restore is a new edit; it never rewrites history.
+
+### GitHub sync
+
+Optional. A project can sync both ways with one branch of a GitHub repository. Overtree pulls on open and every 2 minutes while open, and pushes one commit after everyone has closed the project (or on Push now). Commits are never force-pushed, and each collaborator gets a `Co-authored-by` trailer with their Overtree email, so those emails become visible to anyone who can read the repository. Build files, `.github/` and PDFs compiled from a `.tex` of the same name are skipped by default.
+
+To turn it on, create a GitHub App (Settings, Developer settings, GitHub Apps):
+
+1. Homepage URL: your Overtree URL. Callback URL and Setup URL: `<overtree>/api/github/callback`.
+2. Tick "Request user authorization (OAuth) during installation" and "Redirect on update". Keep token expiry on.
+3. Webhook: untick Active. Overtree polls, so GitHub needs no access to your server.
+4. Repository permissions: Contents read and write, Metadata read-only. Nothing else.
+5. Create it, then generate a client secret and a private key.
+
+Set all five `GITHUB_APP_*` variables below and restart. In a project, the owner opens GitHub in the top bar and connects a repository.
+
+## Configuration
+
+Only the two Clerk keys are required. Docker Compose passes the Clerk, admin, port, compile, upload and GitHub App variables from `.env`; the others (`ORIGIN`, `PROTOCOL_HEADER`, `HISTORY_*`, `GITHUB_API_URL`) go in the app's `environment` in `compose.yaml`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OVERTREE_BIND` | `127.0.0.1` | Host address the port is published on. `OVERTREE_BIND=0.0.0.0` exposes it on the LAN. |
+| `PUBLIC_CLERK_PUBLISHABLE_KEY` | required | Clerk publishable key. |
+| `CLERK_SECRET_KEY` | required | Clerk secret key. |
+| `CLERK_JWT_KEY` | unset | Clerk's JWT public key (PEM), so session checks need no network. |
+| `ADMIN_EMAILS` | empty | Comma-separated emails that are always site admins. |
+| `ORIGIN` / `PROTOCOL_HEADER` | unset | Set one when a TLS proxy sits in front. |
+| `OVERTREE_BIND` | `127.0.0.1` | Host address the port is published on. `0.0.0.0` exposes it on the LAN. |
 | `PORT` | `3000` | Host port. |
-| `DATA_DIR` | `/data` in the image, `./data` otherwise | Where `overtree.db` lives. |
-| `UPLOAD_MAX_FILE_MB` | `50` | Largest single uploaded file. |
-| `IMPORT_MAX_MB` | `200` | Largest total unpacked size of an imported project zip. |
-| `PROJECT_MAX_FILES` | `2000` | Most files and folders in a project (folders count). |
-| `ORIGIN` / `PROTOCOL_HEADER` | unset | Set one of these when a TLS proxy sits in front, e.g. `ORIGIN=https://tex.example.org` or `PROTOCOL_HEADER=x-forwarded-proto`. Without either, `server.ts` treats every request as plain HTTP; behind HTTPS that makes SvelteKit's same-origin check refuse deletes and uploads. |
-
-`scripts/compose-smoke.sh` builds the image and checks it signed out: `/sign-in` answers, `/` redirects to it, API routes answer 401, `/collab` refuses a connection without a token, the image refuses to start with `OVERTREE_TEST_AUTH=1`, the stack restarts, and the port is bound to loopback only. It needs the Clerk keys in the environment and runs under its own compose project (`overtree-smoke`), removing its containers and volume when it exits. Compiling and text round trips need a session and are covered by the e2e suite. `scripts/collab-client.ts` reads or appends to a project's main document over the WebSocket given a token in `OVERTREE_TOKEN` (a Clerk session JWT from a signed-in tab: `await Clerk.session.getToken()`).
-
-## Projects and files
-
-The sidebar's file tree holds a project: folders and files, sorted folders first. Create files and folders from the tree header or a folder's menu, rename (F2), delete (Delete or Backspace), and drag entries between folders. One `.tex` file is the main document (marked in the tree; change it with "Set as main document"). Text files open in editor tabs; images and PDFs open as previews, other binaries offer a download.
-
-- **Upload**: the Upload button, a folder's "Upload here", or drag files from the desktop onto the tree. Uploading a name that exists asks before replacing it. Folders dropped from the desktop are not uploaded; use a zip.
-- **Zip**: "Download project as zip" exports every file and folder. "Upload zip" on the dashboard creates a new project from one, titled after the zip. A single top folder in the zip (GitHub's `repo-main/`, an Overleaf export) is dropped, `__MACOSX` and `.DS_Store` are skipped, and entries with `..`, absolute paths or symlinks are refused. The main document becomes the root `main.tex`, else the shallowest `.tex` with `\documentclass`.
-
-Limits are set by `UPLOAD_MAX_FILE_MB`, `IMPORT_MAX_MB` and `PROJECT_MAX_FILES` (table above).
-
-## Autocomplete
-
-Typing `\` offers LaTeX commands, plus those defined with `\newcommand` and friends anywhere in the project. `\begin{` lists environments (including the project's `\newenvironment`s) and the matching `\end{}` follows while you type the name. Inside arguments it completes from the project: `\ref{`/`\eqref{` offer labels, `\cite{` offers keys from `.bib` files with their titles, `\includegraphics{` image paths, `\input{`/`\include{` `.tex` files, `\bibliography{`/`\addbibresource{` `.bib` files, and `\usepackage{` package names.
-
-## History and restore
-
-Overtree records every change with its author: each Yjs update and each tree operation (create, rename, move, delete, upload, main document) goes into an append-only log. The log is grouped into **versions**. An automatic version closes after a pause in editing (`HISTORY_IDLE_MS`) or once it has been open too long (`HISTORY_MAX_OPEN_MS`); every compile that follows changes closes one too and marks it with a compile icon. A restart closes whatever was open. A new project starts with a baseline version, and projects from before history existed get theirs on the first start.
-
-**History** in the top bar replaces the editor and PDF with three columns (the editor stays connected underneath):
-
-- **Versions** (right): newest first, grouped by day, with time, authors' avatars, the first changed files, labels and "Restored from …" lines. ↑/↓ select, Enter moves to the diff, Escape leaves history. More versions load as you scroll. **Labels only** filters the list.
-- **Diff** (middle): the selected version against the current state (**Compare with current**) or against the version before it (**Changes in this version**). Insertions are highlighted and deletions struck through in the author's color, with a legend; long unchanged runs fold behind "Show N unchanged lines". Binary files show their old and new sizes.
-- **Changed files** (left): jump to a file in the diff.
-
-Every member can browse history. Editors can **Restore this file** or **Restore project** (after a confirmation). A restore never rewrites history: it seals open edits as a version, writes the old state back through the live document as a normal edit by the restorer (collaborators see it at once, and their undo doesn't revert it), and adds a `restore` version. Files deleted since come back, renamed ones get their old names, and the main document is reset. Per-file permissions apply: a whole-project restore skips files you can only read and lists them; restoring such a file alone is refused.
-
-- **Labels**: editors name a version with **Label…** in the diff header, or the current state with the tag button above the timeline (open edits become a version first). Names are 1–100 characters. The label's author (while still an editor) and the owner can rename or delete it from the chip's menu; deleting a label keeps the version.
-- **Version zip**: **Download zip** in the diff header gives every member the project as it was at that version, named `<title>-<first label>.zip` or `<title>-YYYY-MM-DD HH-mm.zip` (UTC).
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `HISTORY_IDLE_MS` | `300000` (5 min) | Pause in editing that closes an automatic version. |
-| `HISTORY_MAX_OPEN_MS` | `1800000` (30 min) | Longest an automatic version stays open during continuous editing. |
-| `HISTORY_SWEEP_MS` | `30000` | How often the server looks for versions to close. |
-
-The e2e server shortens them to 1.5 s, 10 s and 0.5 s.
-
-## GitHub sync
-
-Optional: a project can sync both ways with one branch of a GitHub repository. Each user connects their own GitHub account (separate from how they sign in to Overtree); the project owner links the project to a repository they can push to. Edits made in Overtree go up as ordinary commits, never force-pushed; commits made on GitHub (the web editor, a laptop clone, a CI workflow) are merged into the open documents, and History shows them as "Merged from GitHub". Without the variables below there is no GitHub UI at all.
-
-**Set up a GitHub App** (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App; under an organization for a shared instance):
-
-1. **Homepage URL**: your Overtree URL. **Callback URL** and **Setup URL**: `<overtree>/api/github/callback` (e.g. `https://tex.example.org/api/github/callback`).
-2. Tick **Request user authorization (OAuth) during installation** and **Redirect on update**. Leave **Expire user authorization tokens** on; Overtree refreshes them.
-3. **Webhook**: untick **Active**. Overtree polls instead, so the server needs no inbound access from GitHub.
-4. **Repository permissions**: **Contents** read and write, **Metadata** read-only (it's mandatory). Nothing else, no account permissions. Overtree never writes `.github/`, so it doesn't need the Workflows permission.
-5. **Where can this GitHub App be installed?** "Only on this account" for yourself, "Any account" if other people's accounts or organizations should install it.
-6. Create it, then **Generate a new client secret** and **Generate a private key** (a `.pem` download).
-
-Then set the five `GITHUB_APP_*` variables (all or none; the server refuses to start with only some) and restart. In a project the owner opens **GitHub** in the top bar → **Connect GitHub**, installs the App on the repositories it may use, picks a repository and branch, and checks the preview before the first sync.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `GITHUB_APP_ID` | unset | The App's numeric ID (the App's settings page). Unset turns GitHub sync off. |
-| `GITHUB_APP_SLUG` | required with it | The App's URL name (`github.com/apps/<slug>`), for the install links. |
-| `GITHUB_APP_CLIENT_ID` | required with it | The App's client ID (`Iv…`). |
-| `GITHUB_APP_CLIENT_SECRET` | required with it | The client secret generated above. |
-| `GITHUB_APP_PRIVATE_KEY` | required with it | The private key PEM; one line with literal `\n` works too. |
-| `GITHUB_API_URL` / `GITHUB_URL` | `https://api.github.com` / `https://github.com` | Other endpoints (GitHub Enterprise Server, the tests' fake GitHub). |
-
-Tokens are stored encrypted on the server and never sent to the browser or written to logs. A user who disconnects or revokes the App on GitHub stops every link they made until they reconnect.
-
-**When it syncs.** Opening a project pulls; while it is open the server pulls every 2 minutes. Overtree pushes once per working session: 2 minutes after the last person closes the project, with one commit for everything changed (a pull goes first, so GitHub's commits are merged rather than overwritten). In sessions longer than 30 minutes it also pushes when there are unpushed changes and a history version closed since the last push. Editors and the owner can **Push now** (optionally with a commit title) and **Pull now** from the status button in the top bar; readers only see the status. Only one sync runs per project at a time. Failures retry after 1, 2, 4 … up to 60 minutes; lost access ("needs reconnect", "needs access", a deleted branch) waits for the owner. After a restart, unpushed changes are pushed and the rest pulled.
-
-**Commits.** The commit title is `Update a.tex and 2 more files` (or the custom title), the body lists the changed files, and each Overtree user whose edits are in the commit gets a `Co-authored-by: Name <email>` trailer with **their Overtree account email**. That puts collaborators' email addresses in the repository's history, visible to anyone who can read it. Users without an email are named in the body instead. The first push to an **empty** repository makes two commits: GitHub refuses the normal commit API until a repository has one, so Overtree adds the first file with the Contents API and the rest in a normal commit on top.
-
-**Not pulled.** Each link has a list of patterns for files that are neither pulled into the project nor pushed (owner: GitHub dialog → **Settings…**). The defaults are `.github/**`, LaTeX build files (`*.aux`, `*.log`, `*.bbl`, `*.synctex.gz`, …) and `<compile-output-pdf>`: a PDF with a `.tex` of the same name next to it. So a repository whose own workflow compiles the LaTeX and commits the PDFs works as it is: the workflow's commits are seen, nothing comes into the project, and Overtree never changes or deletes those files on GitHub. A PDF without a matching `.tex` (an uploaded figure) syncs like any file. Adding a pattern later doesn't delete matching files on either side.
-
-**Linking an existing repository.** Before the first sync the dialog shows what it will do: which GitHub files get overwritten by the project's version, which files are added on either side, which stay on GitHub only, and which are identical. A new, still blank project can instead **Import from repository**: the branch's files (except the "not pulled" ones) become the project, the main document is the root `main.tex`, else the first root `.tex` with `\documentclass`, and the usual upload limits apply.
-
-## PDF navigation and layout
-
-- **SyncTeX**: the strip between the editor and the PDF has **→** (go to the cursor's place in the PDF, also **Ctrl/⌘+Alt+J** in the editor) and **←** (open the source of the visible part of the PDF). Forward search scrolls the PDF and highlights the lines for a second; double-clicking a spot in the PDF opens its source file at that line. Both need a compiled PDF (the arrows say "Compile first" until then) and work for readers. After edits without a recompile, they use the last compile's positions.
-- **PDF position**: the PDF keeps its page, offset in the page and zoom across recompiles, and the browser remembers it per project across reloads.
-- **Layout** menu in the top bar: **Side-by-side**, **Editor only**, **PDF only** or **PDF in separate window**. The choice is remembered per browser. The separate window (`/project/<id>/pdf`) has its own recompile, logs, zoom and **←** button; it follows compiles started in the main window and the other way round, and a double-click or a log entry in it opens the source in the main window. Closing it returns the main window to side-by-side. If the browser blocks the popup, the menu says so and the layout stays as it was.
-
-## Compile
-
-Each compile runs `latexmk` on the main document in a fresh container from the TeX Live image: no network, read-only root, non-root user, memory, CPU and time limits. The whole project goes in as a tar on stdin and the PDF and log come back on stdout, so the app and the job share no files. `latexmk` runs bibtex or biber as needed. Log entries in other files open that file at the line.
-
-This needs Docker. Pull the image once (about 1 GB download):
-
-```sh
-docker pull texlive/texlive:latest-medium
-```
-
-Under compose the `texlive` service pulls it on `up` and exits right away; otherwise the first compile would pull inside its time limit and time out.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `TEXLIVE_IMAGE` | `texlive/texlive:latest-medium` | Image each compile runs in. |
-| `COMPILE_TIMEOUT_MS` | `20000` | Wall-clock limit per compile. |
-| `COMPILE_MEMORY` | `512m` | Memory limit (`--memory` and `--memory-swap`). |
-| `COMPILE_CPUS` | `1` | CPU limit. |
-| `DOCKER_GID` | `0` | Compose only: group the app joins to use the Docker socket. |
-
-The app container ships the Docker CLI and mounts `/var/run/docker.sock`, so compile jobs are sibling containers on the host's Docker. The app runs as `node`; `group_add: ["${DOCKER_GID:-0}"]` gives it access to the socket. On Docker Desktop and OrbStack the socket inside containers is owned by `root:root`, so the default `0` works. On Linux the socket usually belongs to the `docker` group: set `DOCKER_GID=$(stat -c %g /var/run/docker.sock)`.
-
-> **The socket grants control of the host's Docker**, which is root-equivalent on the host. The app code is trusted; the LaTeX is not, and it only ever runs inside the locked-down job containers.
+| `DATA_DIR` | `/data` in Docker, `./data` otherwise | Where `overtree.db` lives. |
+| `DOCKER_GID` | `0` | Group that owns the Docker socket (compose only). |
+| `TEXLIVE_IMAGE` | `texlive/texlive:latest-medium` | Image each compile runs in. Use `texlive/texlive:latest-full` for every TeX Live package. |
+| `COMPILE_TIMEOUT_MS` | `20000` | Time limit per compile. |
+| `COMPILE_MEMORY` | `512m` | Memory limit per compile. |
+| `COMPILE_CPUS` | `1` | CPU limit per compile. |
+| `UPLOAD_MAX_FILE_MB` | `50` | Largest uploaded file. |
+| `IMPORT_MAX_MB` | `200` | Largest unpacked size of an imported zip. |
+| `PROJECT_MAX_FILES` | `2000` | Most files and folders in a project. |
+| `HISTORY_IDLE_MS` | `300000` | Pause that closes a history version. |
+| `HISTORY_MAX_OPEN_MS` | `1800000` | Longest a version stays open while editing continues. |
+| `HISTORY_SWEEP_MS` | `30000` | How often the server checks for versions to close. |
+| `GITHUB_APP_ID` | unset | GitHub App ID. Unset turns GitHub sync off. |
+| `GITHUB_APP_SLUG` | with the ID | The App's URL name (`github.com/apps/<slug>`). |
+| `GITHUB_APP_CLIENT_ID` | with the ID | The App's client ID. |
+| `GITHUB_APP_CLIENT_SECRET` | with the ID | The App's client secret. |
+| `GITHUB_APP_PRIVATE_KEY` | with the ID | The App's private key PEM; one line with literal `\n` works. |
+| `GITHUB_API_URL` / `GITHUB_URL` | GitHub.com | For GitHub Enterprise Server. |
 
 ## Develop
 
-Needs Node 24+ and pnpm 10.
+Needs Node 24+, pnpm 10 and Docker (for compiles).
 
 ```sh
 pnpm install
-pnpm dev            # http://localhost:5173
-pnpm build && pnpm start   # production server (node server.ts), HOST defaults to 127.0.0.1
+set -a; . ./.env; set +a      # load the Clerk keys into the shell
+pnpm dev                      # http://localhost:5173
+pnpm build && pnpm start      # production server without Docker
 ```
 
-## Test
+### Test
 
 ```sh
-pnpm check          # svelte-check + TypeScript
-pnpm test           # vitest unit tests (the sandbox tests need Docker and the TeX Live image)
+pnpm check                                             # svelte-check and TypeScript
+pnpm test                                              # unit tests (sandbox tests need Docker and the TeX image)
 pnpm exec playwright install chromium firefox webkit   # once
-pnpm test:e2e       # Playwright on chromium, firefox and webkit
-# the `clerk` smoke set against a real Clerk development instance (skipped without the keys)
-PUBLIC_CLERK_PUBLISHABLE_KEY=… CLERK_SECRET_KEY=… pnpm exec playwright test --project=clerk
+pnpm test:e2e                                          # end-to-end on three browsers
+pnpm exec playwright test --project=clerk              # against a real Clerk dev instance (needs the keys)
 ```
 
-Unit and e2e tests sign in through a **test bypass** instead of Clerk: with `OVERTREE_TEST_AUTH=1`, a cookie `overtree-test-user=<email>` (HTTP) or the token `test:<email>` (WebSocket) signs in as that email, so the suites run offline and can play several users at once. It is on only when `OVERTREE_TEST_AUTH=1` **and** `NODE_ENV` is not `production`, and `server.ts` exits at startup if both are set. The Docker image sets `NODE_ENV=production`, so the bypass can't be turned on in a deployed app; `scripts/compose-smoke.sh` checks this. Every API route also checks the session itself (`tests/unit/routes-guarded.test.ts` fails if a new route skips its guard).
-
-The `clerk` project signs in through the real Clerk dev instance with [`@clerk/testing`](https://clerk.com/docs/testing/playwright/overview) (`+clerk_test` emails, code `424242`).
+Unit and e2e tests sign in through a test bypass instead of Clerk (`OVERTREE_TEST_AUTH=1`), so they run offline and can act as several users. The bypass is refused when `NODE_ENV=production`, which the Docker image sets. `scripts/compose-smoke.sh` builds the image and checks the signed-out behavior, including that the bypass can't be enabled.
