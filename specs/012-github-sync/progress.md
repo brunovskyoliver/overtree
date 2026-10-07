@@ -10,6 +10,7 @@ Updated: 2026-10-07
 - Direction change from 2:C: spec reworked (new US3 pull, FR-016–021, "not pulled" patterns for workflow PDFs).
 - Gate 2: user replied "gk", read as `go` (full implementation). Real-GitHub smoke test skipped (no App provided); compile e2e depends on OrbStack running.
 - Applied H1 (pending_push), H2 (first-sync base in T020), M1 (filter both sides), M2 (repo id lookup). L1/L2 left as noted.
+- Empty repositories refuse Git Data calls (found by phase 1's faithful fake): first push to an empty repo seeds one file with the Contents API, then the normal Git Data commit (two commits once). Added `@octokit/request` (auth-app needs `request.defaults({ baseUrl })`).
 
 ## Log
 - 2026-10-07 specify: spec.md (4 stories, 21 FRs) + checklists/requirements.md (all pass).
@@ -17,5 +18,6 @@ Updated: 2026-10-07
 - 2026-10-07 plan: plan.md, research.md (R1–R13), data-model.md, contracts/http-api.md + ui.md, quickstart.md. GitHub App + installation tokens, Git Data API push, diff3 pull into Yjs, fake GitHub for tests.
 - 2026-10-07 tasks: tasks.md 52 tasks / 8 phases (MVP = 1–5).
 - 2026-10-07 analyze: 0 critical, 2 high, 2 medium, 2 low; checklist 16/16; waiting at gate 2.
+- 2026-10-07 phase 1 setup (T001–T005): deps, env, schema + 0005 migration, fake GitHub + self-test, Playwright wiring. d8c6ffd. check clean; vitest 295 pass, 31 fail = Docker-only (OrbStack off).
 
 ## Report
