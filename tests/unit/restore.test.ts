@@ -177,6 +177,50 @@ describe('restoreVersion', () => {
 		expect(await getText(c2.id)).toBe('two\n');
 	});
 
+	it('a file whose old folder isn’t restored is skipped whole: neither moved nor its text restored (T054)', async () => {
+		const { server, pid } = await setup();
+		const o = user().id;
+		const ro = createEntry(pid, { kind: 'folder', name: 'ro', parentId: null }, o);
+		const sub = createEntry(pid, { kind: 'folder', name: 'sub', parentId: ro.id }, o);
+		const x = createEntry(pid, { kind: 'text', name: 'x.tex', parentId: sub.id }, o);
+		await setText(x.id, 'old\n', { userId: o, projectId: pid });
+		const v = closeVersion(pid, 'edit')!;
+		renameOrMove(pid, x.id, { parentId: null }, o);
+		deleteEntry(pid, sub.id, o);
+		await setText(x.id, 'new\n', { userId: o, projectId: pid });
+		// B can't recreate ro/sub, so x.tex has nowhere to go back to
+		server.db.insert(overrides).values({ projectId: pid, userId: user(B).id, fileId: ro.id, role: 'reader' }).run();
+
+		const res = await restore(pid, v.id, B);
+		expect(res.status).toBe(200);
+		expect(res.body.skipped).toEqual(['ro/sub', 'x.tex']);
+		expect(byPath(pid).get('x.tex')!.id).toBe(x.id);
+		expect(await getText(x.id)).toBe('new\n');
+	});
+
+	it('a collaborator typing during a restore: both apply and the clients converge', async () => {
+		const { server, pid, main } = await setup();
+		const { SEED } = await import('../../src/lib/server/collab.ts');
+		const v = lastVersion(pid)!; // the seed text
+		const b = await connect(server.url, main, B);
+		b.text.insert(0, 'mine\n');
+		await waitFor(() => false === b.provider.hasUnsyncedChanges);
+		while (!(await getText(main)).startsWith('mine')) await new Promise((r) => setTimeout(r, 10));
+
+		// B keeps typing at the top while the owner restores the file
+		const restoring = restoreVersion(pid, v.id, user().id, main);
+		for (const [i, ch] of [...'abc'].entries()) {
+			b.text.insert(i, ch);
+			await new Promise((r) => setTimeout(r, 5));
+		}
+		expect((await restoring).version).not.toBeNull();
+
+		const c = await connect(server.url, main, OWNER);
+		await waitFor(() => !b.provider.hasUnsyncedChanges && b.text.toString() === c.text.toString() && !b.text.toString().includes('mine'));
+		expect(b.text.toString()).toBe(`abc${SEED}`);
+		expect(await getText(main)).toBe(`abc${SEED}`);
+	});
+
 	it('an open document gets the restored text live; the collaborator can’t undo it', async () => {
 		const { server, pid, main } = await setup();
 		const b = await connect(server.url, main, B);

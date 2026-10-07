@@ -167,3 +167,39 @@ test('a reader navigates both ways (US3-5)', async ({ browser, page, pid }) => {
 	await expect.poll(() => cursorLine(reader)).toBe(13);
 	await ctx.close();
 });
+
+test('after a collaborator compiles, → reloads the compile state and still lands (FR-024)', async ({ page }) => {
+	await compile(page);
+	const before = await page.evaluate(() => window.__overtree!.compile!.last!.pdfId);
+	// another tab compiles: this page's pdfId is no longer the server's last
+	expect((await page.request.post(`${api()}/compile`, { data: { stopOnFirstError: false } })).ok()).toBe(true);
+	await open(page, 'intro.tex');
+	await setCursor(page, 3);
+	const stale = page.waitForResponse((r) => r.url().includes('/compile/sync/code') && r.url().includes(`pdfId=${before}`));
+	const retried = page.waitForResponse((r) => r.url().includes('/compile/sync/code') && !r.url().includes(`pdfId=${before}`));
+	await toPdf(page).click();
+	expect((await stale).status()).toBe(404);
+	expect((await retried).status()).toBe(200);
+	await expect(pdfPage(page, 1).locator('.sync-highlight')).toBeInViewport();
+	await expect(page.getByRole('status').filter({ hasText: 'Recompile to sync' })).toHaveCount(0);
+});
+
+test('a PDF that still has no mapping says "Recompile to sync"; a line that maps nowhere stays quiet', async ({ page }) => {
+	await compile(page);
+	await open(page, 'intro.tex');
+	await setCursor(page, 3);
+	// the server's answer for a stale pdfId or a PDF without synctex, also after the reload
+	await page.route('**/compile/sync/code?*', (route) => route.fulfill({ status: 404, json: { message: 'stale pdfId; recompile to sync' } }));
+	await toPdf(page).click();
+	const note = page.getByRole('status').filter({ hasText: 'Recompile to sync' });
+	await expect(note).toBeVisible();
+	await expect(note).toHaveCount(0, { timeout: 6000 }); // transient
+
+	await page.route('**/compile/sync/code?*', (route) => route.fulfill({ status: 404, json: { message: 'no mapping for this line' } }));
+	const answer = page.waitForResponse((r) => r.url().includes('/compile/sync/code'));
+	await toPdf(page).click();
+	await answer;
+	await page.waitForTimeout(300);
+	await expect(note).toHaveCount(0);
+	await expect(pdfPage(page, 1).locator('.sync-highlight')).toHaveCount(0);
+});

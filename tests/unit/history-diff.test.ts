@@ -155,6 +155,28 @@ describe('diffVersion', () => {
 		expect(can(B)).toBe(false);
 	});
 
+	it('canRestore follows the restore’s rules: a file that moves back needs edit on its old folder (T053)', async () => {
+		const { server, pid } = await setup();
+		const o = user().id;
+		const locked = createEntry(pid, { kind: 'folder', name: 'locked', parentId: null }, o);
+		const a = createEntry(pid, { kind: 'text', name: 'a.tex', parentId: locked.id }, o);
+		await setText(a.id, 'one\n', { userId: o, projectId: pid });
+		const v = closeVersion(pid, 'edit')!;
+		renameOrMove(pid, a.id, { parentId: null }, o);
+		await setText(a.id, 'two\n', { userId: o, projectId: pid });
+		server.db.insert(overrides).values({ projectId: pid, userId: user(B).id, fileId: locked.id, role: 'reader' }).run();
+
+		const can = (email: string) => file(diffVersion(pid, v.id, 'current', user(email).id).files, 'a.tex').canRestore;
+		// B may edit a.tex where it is now, but not put it back into locked/: the restore would answer 403
+		expect([can(OWNER), can(B), can(R)]).toEqual([true, false, false]);
+		const { restoreVersion } = await import('../../src/lib/server/restore.ts');
+		await expect(restoreVersion(pid, v.id, user(B).id, a.id)).rejects.toMatchObject({ status: 403 });
+		// edit on locked/ again: offered, and the restore goes through
+		server.db.delete(overrides).run();
+		expect(can(B)).toBe(true);
+		expect((await restoreVersion(pid, v.id, user(B).id, a.id)).version).not.toBeNull();
+	});
+
 	it('another project’s version is a 404', async () => {
 		const { pid } = await setup();
 		const other = project();

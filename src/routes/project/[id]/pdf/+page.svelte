@@ -2,10 +2,11 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import PdfPane from '#lib/components/PdfPane.svelte';
+	import SyncNote from '#lib/components/SyncNote.svelte';
 	import { CompileState } from '#lib/compile.svelte.ts';
 	import { mirrorCompile, pdfChannel } from '#lib/layout.svelte.ts';
 	import { Project } from '#lib/project.svelte.ts';
-	import { syncToCode, syncToPdf } from '#lib/synctex.ts';
+	import { RECOMPILE_TO_SYNC, syncToCode, syncToPdf, syncWith } from '#lib/synctex.ts';
 
 	// The separate PDF window (008 research R12, contracts/ui.md "PDF window route"): its own compile state, kept in
 	// step with the project page over the `overtree:pdf:<id>` channel; SyncTeX answers go back to the editor there.
@@ -18,6 +19,7 @@
 	});
 
 	let pane = $state<ReturnType<typeof PdfPane>>();
+	let note = $state<ReturnType<typeof SyncNote>>();
 	const pdfId = $derived(compile.last?.pdfId);
 
 	const channel = pdfChannel(project.id, 'pdf', (m) => {
@@ -28,16 +30,19 @@
 	});
 	const received = mirrorCompile(compile, channel.post);
 
+	// SyncTeX as in Workspace: a stale PDF is reloaded and asked again, else "Recompile to sync"
 	async function forward(fileId: string, line: number) {
-		const r = pdfId && (await syncToPdf(project.id, pdfId, fileId, line));
-		if (r) pane?.showBox(r.page, r.boxes);
+		const r = await syncWith(compile, (id) => syncToPdf(project.id, id, fileId, line));
+		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
+		else if (r) await pane?.showBox(r.page, r.boxes);
 	}
 
 	const openAt = (fileId: string, line: number) => channel.post({ type: 'open-at', fileId, line });
 
 	async function reverse(n: number, x: number, y: number) {
-		const r = pdfId && (await syncToCode(project.id, pdfId, n, x, y));
-		if (r) openAt(r.fileId, r.line);
+		const r = await syncWith(compile, (id) => syncToCode(project.id, id, n, x, y));
+		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
+		else if (r) openAt(r.fileId, r.line);
 	}
 
 	function reverseVisible() {
@@ -73,12 +78,19 @@
 				</button>
 			{/snippet}
 		</PdfPane>
+		<SyncNote bind:this={note} />
 	</main>
 {/if}
 
 <style>
 	.window {
+		position: relative;
 		height: 100vh;
+	}
+	.window :global(.sync-note) {
+		top: 44px;
+		left: 50%;
+		transform: translateX(-50%);
 	}
 	.to-code {
 		display: grid;

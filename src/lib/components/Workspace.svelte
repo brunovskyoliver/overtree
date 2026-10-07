@@ -4,9 +4,10 @@
 	import type { CompileState } from '#lib/compile.svelte.ts';
 	import type { Layout, LayoutMode } from '#lib/layout.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
-	import { syncToCode, syncToPdf } from '#lib/synctex.ts';
+	import { RECOMPILE_TO_SYNC, syncToCode, syncToPdf, syncWith } from '#lib/synctex.ts';
 	import FileTree from './FileTree.svelte';
 	import PdfPane from './PdfPane.svelte';
+	import SyncNote from './SyncNote.svelte';
 	import SyncStrip from './SyncStrip.svelte';
 
 	// children = editor, outline = body under the "File outline" header
@@ -69,8 +70,10 @@
 		onopenat?.(fileId, line);
 	}
 
-	// SyncTeX (research R10): against the last compile's PDF; no mapping (stale, edited since, not in the PDF) does nothing
+	// SyncTeX (research R10): against the last compile's PDF; a line or spot that maps nowhere does nothing (US3 #6),
+	// a PDF that is no longer the last one is reloaded and asked again, else "Recompile to sync" (syncWith)
 	let pdfPane = $state<ReturnType<typeof PdfPane>>();
+	let note = $state<ReturnType<typeof SyncNote>>();
 	const pdfId = $derived(compile.last?.pdfId);
 
 	/** "→" and Ctrl/⌘+Alt+J: show the cursor's place in the PDF. */
@@ -79,14 +82,16 @@
 		if (!pdfId || !at) return;
 		if (layout.mode === 'window') return layout.forward(at.fileId, at.line);
 		if (pdf?.isCollapsed()) pdf.expand(); // in editor only this goes to side-by-side (onExpand)
-		const r = await syncToPdf(project.id, pdfId, at.fileId, at.line);
-		if (r) pdfPane?.showBox(r.page, r.boxes);
+		const r = await syncWith(compile, (id) => syncToPdf(project.id, id, at.fileId, at.line));
+		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
+		else if (r) await pdfPane?.showBox(r.page, r.boxes);
 	}
 
 	/** Double-click on the PDF or "←": open the source of that spot. */
 	async function reverse(page: number, x: number, y: number) {
-		const r = pdfId && (await syncToCode(project.id, pdfId, page, x, y));
-		if (r) openAt(r.fileId, r.line);
+		const r = await syncWith(compile, (id) => syncToCode(project.id, id, page, x, y));
+		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
+		else if (r) openAt(r.fileId, r.line);
 	}
 
 	function reverseVisible() {
@@ -149,6 +154,7 @@
 		{#if layout.mode === 'split' || layout.mode === 'window'}
 			<div class="sync-rail">
 				<SyncStrip enabled={!!pdfId} onforward={forward} onreverse={layout.mode === 'split' ? reverseVisible : undefined} />
+				<SyncNote bind:this={note} />
 			</div>
 		{/if}
 	</Pane>
@@ -247,6 +253,10 @@
 		right: 0;
 		z-index: 5;
 		margin-top: -82px;
+	}
+	.sync-rail :global(.sync-note) {
+		top: 4px;
+		right: 24px;
 	}
 	.collapse:hover {
 		background: #5a6375;

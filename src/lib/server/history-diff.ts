@@ -5,7 +5,6 @@ import { and, asc, eq, gt, isNotNull, lte } from 'drizzle-orm';
 import diff from 'fast-diff';
 import * as Y from 'yjs';
 import type { Compare, FileDiff, Segment, VersionDiff } from '../history-types.ts';
-import { canEdit, fileRoles } from './access.ts';
 import { getServer } from './collab.ts';
 import { fail, getMainFileId } from './files.ts';
 import {
@@ -21,6 +20,7 @@ import {
 	type ManifestEntry,
 	type Version
 } from './history.ts';
+import { restorable } from './restore.ts';
 import { files, historyLog } from './schema.ts';
 
 // Per-author diffs between two states of a project (research R4): a version and the current state, or a version
@@ -152,15 +152,8 @@ export function diffVersion(pid: string, vid: number, compare: Compare, userId: 
 	const target = compare === 'previous' ? newer.manifest : older.manifest; // the state a restore goes back to
 	const oldById = new Map(older.manifest.entries.map((e) => [e.id, e]));
 	const newById = new Map(newer.manifest.entries.map((e) => [e.id, e]));
-	const targetById = new Map(target.entries.map((e) => [e.id, e]));
-	const { all, roleOf } = fileRoles(pid, userId);
-	const exists = new Set(all.map((f) => f.id));
-	// restoring a file needs edit on it, or on the nearest folder of the version's tree that still exists
-	const canRestore = (id: string) => {
-		let at: string | null = id;
-		while (at !== null && !exists.has(at)) at = targetById.get(at)?.parentId ?? null;
-		return canEdit(roleOf(at));
-	};
+	// the single-file restore's own rules (moves back, recreated folders, same-path aliases), run dry (FR-018)
+	const canRestore = restorable(pid, userId, target);
 	let sole: string | null | undefined;
 	const fallbackUser = () => (sole === undefined ? (sole = soleAuthor(pid, older.watermark, newer.watermark)) : sole);
 

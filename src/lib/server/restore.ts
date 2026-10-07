@@ -53,25 +53,32 @@ const blobSize = (hash: string) => statSync(join(getServer().dataDir, 'blobs', h
 
 /** What restoring `target` (only file `only`, if given) changes, given the ids whose change is `blocked`. */
 function plan(pid: string, userId: string, target: Manifest, only: string | undefined, blocked: Set<string>): Plan {
+	return planner(pid, userId, target)(only, blocked);
+}
+
+/** Whether `userId` may restore each file of `target` on its own: the single-file plan run dry (no texts or blobs
+ *  read, a text counts as changed), on one read of the tree and roles (diffVersion's `canRestore`, FR-018). Name
+ *  clashes (409 on restore) aren't checked. */
+export function restorable(pid: string, userId: string, target: Manifest): (fileId: string) => boolean {
+	const run = planner(pid, userId, target);
+	return (fileId) => {
+		try {
+			return run(fileId, new Set(), true).skipped.size === 0;
+		} catch {
+			return false;
+		}
+	};
+}
+
+/** `plan` with the current tree, the caller's roles and the same-path aliases read once. `dry`: decide only what
+ *  is allowed, without reading texts, blobs or the main file. */
+function planner(pid: string, userId: string, target: Manifest) {
 	const cur = db().select().from(files).where(eq(files.projectId, pid)).all();
 	const curById = new Map(cur.map((r) => [r.id, r]));
 	const tById = new Map(target.entries.map((e) => [e.id, e]));
 	const curPaths = manifestPaths(cur);
 	const tPaths = manifestPaths(target.entries);
 	const { all, roleOf } = fileRoles(pid, userId);
-	// a new folder has no role of its own yet: the existing folder it was created in decides
-	const anchor = new Map<string, string | null>();
-	const anchorOf = (id: string | null) => (id !== null && anchor.has(id) ? anchor.get(id)! : id);
-	const editable = (id: string | null) => canEdit(roleOf(anchorOf(id)));
-	const p: Plan = {
-		creates: [],
-		moves: [],
-		binaries: [],
-		texts: [],
-		deletes: new Set(),
-		main: undefined,
-		skipped: new Set()
-	};
 
 	// A file deleted and created again at the same path (an earlier restore recreates with new ids) is the same file:
 	// the target entry is restored onto the current one instead of deleting it and recreating it next to itself.
@@ -83,111 +90,135 @@ function plan(pid: string, userId: string, target: Manifest, only: string | unde
 	}
 	const targetOf = new Map([...alias].map(([t, c]) => [c, t])); // current id → aliased target id
 
-	// in scope: everything, or the file plus the folders of its version path that are gone
-	let scope: Set<string> | null = null;
-	if (only !== undefined) {
-		const kind = (curById.get(only) ?? tById.get(only))?.kind ?? fail(404, 'File not found.');
-		if (kind === 'folder') fail(400, 'Only files can be restored one by one.');
-		const tOnly = tById.has(only) ? only : targetOf.get(only);
-		scope = new Set([only, ...(tOnly ? [tOnly] : []), ...(alias.has(only) ? [alias.get(only)!] : [])]);
-		for (let a = (tOnly && tById.get(tOnly)?.parentId) ?? null; a !== null && !curById.has(a) && !alias.has(a); a = tById.get(a)?.parentId ?? null)
-			scope.add(a);
-	}
-	const inScope = (id: string) => scope === null || scope.has(id);
+	return (only: string | undefined, blocked: Set<string>, dry = false): Plan => {
+		// a new folder has no role of its own yet: the existing folder it was created in decides
+		const anchor = new Map<string, string | null>();
+		const anchorOf = (id: string | null) => (id !== null && anchor.has(id) ? anchor.get(id)! : id);
+		const editable = (id: string | null) => canEdit(roleOf(anchorOf(id)));
+		const p: Plan = {
+			creates: [],
+			moves: [],
+			binaries: [],
+			texts: [],
+			deletes: new Set(),
+			main: undefined,
+			skipped: new Set()
+		};
 
-	// target id → current id: the same file, the aliased one, or the one recreated for it
-	const idMap = new Map<string, string>();
-	for (const e of target.entries) if (curById.has(e.id)) idMap.set(e.id, e.id);
-	for (const [t, c] of alias) idMap.set(t, c);
-	const parentOf = (tid: string | null): string | null | undefined => (tid === null ? null : idMap.get(tid));
-
-	// recreations, parents first
-	const depth = (id: string) => tPaths.get(id)!.split('/').length;
-	const gone = target.entries.filter((e) => !curById.has(e.id) && !alias.has(e.id) && inScope(e.id)).sort((a, b) => depth(a.id) - depth(b.id));
-	for (const e of gone) {
-		const parentId = parentOf(e.parentId);
-		if (parentId === undefined) {
-			p.skipped.add(tPaths.get(e.id)!);
-			continue;
+		// in scope: everything, or the file plus the folders of its version path that are gone
+		let scope: Set<string> | null = null;
+		if (only !== undefined) {
+			const kind = (curById.get(only) ?? tById.get(only))?.kind ?? fail(404, 'File not found.');
+			if (kind === 'folder') fail(400, 'Only files can be restored one by one.');
+			const tOnly = tById.has(only) ? only : targetOf.get(only);
+			scope = new Set([only, ...(tOnly ? [tOnly] : []), ...(alias.has(only) ? [alias.get(only)!] : [])]);
+			const goneFolder = (a: string | null): a is string => a !== null && !curById.has(a) && !alias.has(a);
+			for (let a = (tOnly && tById.get(tOnly)?.parentId) ?? null; goneFolder(a); a = tById.get(a)?.parentId ?? null) scope.add(a);
 		}
-		// single file: a gone folder whose name is in use by a folder again is that folder
-		if (scope !== null && e.kind === 'folder') {
-			const same = cur.find((r) => r.parentId === parentId && r.kind === 'folder' && r.name.toLowerCase() === e.name.toLowerCase());
-			if (same) {
-				idMap.set(e.id, same.id);
+		const inScope = (id: string) => scope === null || scope.has(id);
+
+		// target id → current id: the same file, the aliased one, or the one recreated for it
+		const idMap = new Map<string, string>();
+		for (const e of target.entries) if (curById.has(e.id)) idMap.set(e.id, e.id);
+		for (const [t, c] of alias) idMap.set(t, c);
+		const parentOf = (tid: string | null): string | null | undefined => (tid === null ? null : idMap.get(tid));
+
+		// recreations, parents first
+		const depth = (id: string) => tPaths.get(id)!.split('/').length;
+		const gone = target.entries
+			.filter((e) => !curById.has(e.id) && !alias.has(e.id) && inScope(e.id))
+			.sort((a, b) => depth(a.id) - depth(b.id));
+		for (const e of gone) {
+			const parentId = parentOf(e.parentId);
+			if (parentId === undefined) {
+				p.skipped.add(tPaths.get(e.id)!);
 				continue;
 			}
+			// single file: a gone folder whose name is in use by a folder again is that folder
+			if (scope !== null && e.kind === 'folder') {
+				const same = cur.find((r) => r.parentId === parentId && r.kind === 'folder' && r.name.toLowerCase() === e.name.toLowerCase());
+				if (same) {
+					idMap.set(e.id, same.id);
+					continue;
+				}
+			}
+			if (blocked.has(e.id) || !editable(parentId)) {
+				p.skipped.add(tPaths.get(e.id)!);
+				continue;
+			}
+			const id = randomUUID();
+			idMap.set(e.id, id);
+			anchor.set(id, anchorOf(parentId));
+			const hash = e.kind === 'binary' ? e.hash : null;
+			p.creates.push({
+				tid: e.id,
+				id,
+				parentId,
+				name: e.name,
+				kind: e.kind,
+				hash,
+				size: hash && !dry ? blobSize(hash) : null
+			});
+			if (e.kind === 'text' && !dry) p.texts.push({ id, text: blobText(e.hash!) });
 		}
-		if (blocked.has(e.id) || !editable(parentId)) {
-			p.skipped.add(tPaths.get(e.id)!);
-			continue;
-		}
-		const id = randomUUID();
-		idMap.set(e.id, id);
-		anchor.set(id, anchorOf(parentId));
-		const hash = e.kind === 'binary' ? e.hash : null;
-		p.creates.push({
-			tid: e.id,
-			id,
-			parentId,
-			name: e.name,
-			kind: e.kind,
-			hash,
-			size: hash ? blobSize(hash) : null
-		});
-		if (e.kind === 'text') p.texts.push({ id, text: blobText(e.hash!) });
-	}
 
-	// files in both: back to their place, name and content
-	for (const c of cur) {
-		const e = tById.get(c.id) ?? tById.get(targetOf.get(c.id) ?? '');
-		if (!e || !inScope(c.id)) continue;
-		const path = curPaths.get(c.id)!;
-		const parentId = parentOf(e.parentId);
-		if (parentId === undefined) p.skipped.add(path);
-		else if (parentId !== c.parentId || e.name !== c.name) {
-			const ok =
-				!blocked.has(c.id) && withDescendants(c.id, all).every((id) => editable(id)) && (parentId === c.parentId || editable(parentId));
-			if (ok) p.moves.push({ id: c.id, parentId, name: e.name });
-			else p.skipped.add(path);
-		}
-		if (c.kind === 'text') {
-			const text = blobText(e.hash!);
-			if (text !== currentText(c.id)) {
-				if (editable(c.id)) p.texts.push({ id: c.id, text });
+		// files in both: back to their place, name and content
+		for (const c of cur) {
+			const e = tById.get(c.id) ?? tById.get(targetOf.get(c.id) ?? '');
+			if (!e || !inScope(c.id)) continue;
+			const path = curPaths.get(c.id)!;
+			const parentId = parentOf(e.parentId);
+			// its old folder isn't restored: left as it is, content included, so `skipped` only lists unchanged paths
+			if (parentId === undefined) {
+				p.skipped.add(path);
+				continue;
+			}
+			if (parentId !== c.parentId || e.name !== c.name) {
+				const ok =
+					!blocked.has(c.id) && withDescendants(c.id, all).every((id) => editable(id)) && (parentId === c.parentId || editable(parentId));
+				if (ok) p.moves.push({ id: c.id, parentId, name: e.name });
 				else p.skipped.add(path);
 			}
-		} else if (c.kind === 'binary' && e.hash && e.hash !== c.hash) {
-			if (editable(c.id)) p.binaries.push({ id: c.id, hash: e.hash, size: blobSize(e.hash) });
-			else p.skipped.add(path);
-		}
-	}
-
-	// files added since: removed; a folder only once nothing stays in it
-	for (const c of cur) {
-		if (tById.has(c.id) || targetOf.has(c.id) || !inScope(c.id)) continue;
-		if (editable(c.id)) p.deletes.add(c.id);
-		else p.skipped.add(curPaths.get(c.id)!);
-	}
-	const moved = new Map(p.moves.map((m) => [m.id, m]));
-	const finalParent = (r: Row) => (moved.has(r.id) ? moved.get(r.id)!.parentId : r.parentId);
-	for (let changed = true; changed; ) {
-		changed = false;
-		for (const id of p.deletes) {
-			if (cur.some((r) => !p.deletes.has(r.id) && finalParent(r) === id)) {
-				p.deletes.delete(id);
-				p.skipped.add(curPaths.get(id)!);
-				changed = true;
+			if (c.kind === 'text' && dry) {
+				if (!editable(c.id)) p.skipped.add(path);
+			} else if (c.kind === 'text') {
+				const text = blobText(e.hash!);
+				if (text !== currentText(c.id)) {
+					if (editable(c.id)) p.texts.push({ id: c.id, text });
+					else p.skipped.add(path);
+				}
+			} else if (c.kind === 'binary' && e.hash && e.hash !== c.hash) {
+				if (editable(c.id)) p.binaries.push({ id: c.id, hash: e.hash, size: dry ? 0 : blobSize(e.hash) });
+				else p.skipped.add(path);
 			}
 		}
-	}
 
-	if (scope === null) {
-		const main = target.mainFileId === null ? null : idMap.get(target.mainFileId);
-		const currentMain = db().select({ m: projects.mainFileId }).from(projects).where(eq(projects.id, pid)).get()?.m ?? null;
-		if (main !== undefined && main !== currentMain) p.main = main;
-	}
-	return p;
+		// files added since: removed; a folder only once nothing stays in it
+		for (const c of cur) {
+			if (tById.has(c.id) || targetOf.has(c.id) || !inScope(c.id)) continue;
+			if (editable(c.id)) p.deletes.add(c.id);
+			else p.skipped.add(curPaths.get(c.id)!);
+		}
+		const moved = new Map(p.moves.map((m) => [m.id, m]));
+		const finalParent = (r: Row) => (moved.has(r.id) ? moved.get(r.id)!.parentId : r.parentId);
+		for (let changed = true; changed; ) {
+			changed = false;
+			for (const id of p.deletes) {
+				if (cur.some((r) => !p.deletes.has(r.id) && finalParent(r) === id)) {
+					p.deletes.delete(id);
+					p.skipped.add(curPaths.get(id)!);
+					changed = true;
+				}
+			}
+		}
+
+		if (scope === null && !dry) {
+			const main = target.mainFileId === null ? null : idMap.get(target.mainFileId);
+			const currentMain = db().select({ m: projects.mainFileId }).from(projects).where(eq(projects.id, pid)).get()?.m ?? null;
+			if (main !== undefined && main !== currentMain) p.main = main;
+		}
+		return p;
+	};
 }
 
 /** Changed entries (target ids) that would end up next to a same-named entry or inside themselves. */

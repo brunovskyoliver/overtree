@@ -45,6 +45,9 @@
 	let pos = keep;
 	let trackNow = () => {};
 	let restoring = true; // between a setDocument and its pagesinit the scroll position means nothing
+	// set while a new PDF is parsed and laid out: showBox waits for it (a sync retried after reloading the compile state)
+	let loading: Promise<void> | undefined;
+	let laidOut: (() => void) | undefined;
 
 	function stored(): Partial<Pos> | undefined {
 		try {
@@ -71,6 +74,8 @@
 			track();
 			pages = v.pagesCount;
 			page = v.currentPageNumber; // no pagechanging when the clamped page is the reset one
+			laidOut?.();
+			laidOut = undefined;
 		});
 		eventBus.on('pagechanging', (e: { pageNumber: number }) => (page = e.pageNumber));
 		eventBus.on('scalechanging', (e: { scale: number }) => {
@@ -180,7 +185,8 @@
 
 	/** Forward SyncTeX: scroll `boxes` (PDF points from the page's top-left) of page `n` to the middle of the pane and
 	 *  highlight them for a second. */
-	export function showBox(n: number, boxes: SyncBox[]) {
+	export async function showBox(n: number, boxes: SyncBox[]) {
+		while (loading) await loading;
 		const view = viewer?.getPageView(n - 1);
 		if (!viewer || !view) return;
 		const [x0, y0, x1, y1] = view.viewport.viewBox;
@@ -219,6 +225,9 @@
 		const v = viewer;
 		if (!v) return;
 		let stale = false;
+		let finish = () => {};
+		const done = new Promise<void>((resolve) => (finish = () => (loading === done && (loading = undefined), resolve())));
+		loading = done;
 		const task = getDocument({ url });
 		task.promise.then(
 			(doc) => {
@@ -228,13 +237,15 @@
 				trackNow(); // a scroll in the last 150 ms
 				keep = pos;
 				restoring = true;
+				laidOut = finish;
 				v.setDocument(doc);
 				void old?.destroy();
 			},
-			() => {} // a broken/missing PDF keeps the old one
+			finish // a broken/missing PDF keeps the old one
 		);
 		return () => {
 			stale = true;
+			finish();
 			if (shown !== task) void task.destroy();
 		};
 	});

@@ -52,7 +52,7 @@ Side effects: restore and label changes `broadcast(pid, { type: 'history' })`; r
 | GET | `/compile/sync/code` | R | `?pdfId&fileId&line` → `{ page, boxes: [{ x, y, width, height }] }` in PDF points from the page's top-left; 404 when no mapping (stale `pdfId`, no synctex, line not found in any file) |
 | GET | `/compile/sync/pdf` | R | `?pdfId&page&x&y` (PDF points, top-left) → `{ fileId, line }`; 404 when nothing maps to a project file |
 
-`pdfId` must equal the last result's `pdfId` (only the latest synctex is kept); otherwise 404 and the client recompiles or shows "Recompile to sync".
+`pdfId` must equal the last result's `pdfId` (only the latest synctex is kept); otherwise (or with no synctex) 404 with the message `stale pdfId; recompile to sync`, which the client tells apart from a spot that maps nowhere: it reloads the compile state and asks once more with the new `pdfId`, else shows "Recompile to sync" (role `status`, a few seconds).
 
 ## Project events (stateless on `project:<pid>`)
 
