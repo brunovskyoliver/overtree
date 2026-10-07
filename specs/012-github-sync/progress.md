@@ -68,3 +68,8 @@ Updated: 2026-10-07
 - Accepted deviations: access revoked on GitHub is noticed at the hourly check; a failed first push after "Sync now" goes to `failing` (not `pending`); "Change…" switches branch only (switching repo = unlink + link); empty repo first sync makes two commits.
 - Firefox/WebKit runs of the full non-GitHub suite were not repeated (only the GitHub spec ran there).
 - Deploy to the AI VM not done (not requested).
+
+### Deploy (2026-10-07)
+- main fast-forwarded to 012; deployed to the AI VM. Backup first: `~/overtree-backups/data-20261007-152116-pre012.tgz` on the VM.
+- First build crashed at startup (Dockerfile didn't copy `src/lib/github-types.ts`); site down a few minutes; fixed in the next commit and redeployed. Site 200, migration 0005 applied.
+- GitHub sync is deployed but hidden until the GitHub App env vars are set on the VM.
