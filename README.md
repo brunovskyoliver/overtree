@@ -101,6 +101,35 @@ Limits are set by `UPLOAD_MAX_FILE_MB`, `IMPORT_MAX_MB` and `PROJECT_MAX_FILES` 
 
 Typing `\` offers LaTeX commands, plus those defined with `\newcommand` and friends anywhere in the project. `\begin{` lists environments (including the project's `\newenvironment`s) and the matching `\end{}` follows while you type the name. Inside arguments it completes from the project: `\ref{`/`\eqref{` offer labels, `\cite{` offers keys from `.bib` files with their titles, `\includegraphics{` image paths, `\input{`/`\include{` `.tex` files, `\bibliography{`/`\addbibresource{` `.bib` files, and `\usepackage{` package names.
 
+## History and restore
+
+Overtree records every change with its author: each Yjs update and each tree operation (create, rename, move, delete, upload, main document) goes into an append-only log. The log is grouped into **versions**. An automatic version closes after a pause in editing (`HISTORY_IDLE_MS`) or once it has been open too long (`HISTORY_MAX_OPEN_MS`); every compile that follows changes closes one too and marks it with a compile icon. A restart closes whatever was open. A new project starts with a baseline version, and projects from before history existed get theirs on the first start.
+
+**History** in the top bar replaces the editor and PDF with three columns (the editor stays connected underneath):
+
+- **Versions** (right): newest first, grouped by day, with time, authors' avatars, the first changed files, labels and "Restored from …" lines. ↑/↓ select, Enter moves to the diff, Escape leaves history. More versions load as you scroll. **Labels only** filters the list.
+- **Diff** (middle): the selected version against the current state (**Compare with current**) or against the version before it (**Changes in this version**). Insertions are highlighted and deletions struck through in the author's color, with a legend; long unchanged runs fold behind "Show N unchanged lines". Binary files show their old and new sizes.
+- **Changed files** (left): jump to a file in the diff.
+
+Every member can browse history. Editors can **Restore this file** or **Restore project** (after a confirmation). A restore never rewrites history: it seals open edits as a version, writes the old state back through the live document as a normal edit by the restorer (collaborators see it at once, and their undo doesn't revert it), and adds a `restore` version. Files deleted since come back, renamed ones get their old names, and the main document is reset. Per-file permissions apply: a whole-project restore skips files you can only read and lists them; restoring such a file alone is refused.
+
+- **Labels**: editors name a version with **Label…** in the diff header, or the current state with the tag button above the timeline (open edits become a version first). Names are 1–100 characters. The label's author (while still an editor) and the owner can rename or delete it from the chip's menu; deleting a label keeps the version.
+- **Version zip**: **Download zip** in the diff header gives every member the project as it was at that version, named `<title>-<first label>.zip` or `<title>-YYYY-MM-DD HH-mm.zip` (UTC).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `HISTORY_IDLE_MS` | `300000` (5 min) | Pause in editing that closes an automatic version. |
+| `HISTORY_MAX_OPEN_MS` | `1800000` (30 min) | Longest an automatic version stays open during continuous editing. |
+| `HISTORY_SWEEP_MS` | `30000` | How often the server looks for versions to close. |
+
+The e2e server shortens them to 1.5 s, 10 s and 0.5 s.
+
+## PDF navigation and layout
+
+- **SyncTeX**: the strip between the editor and the PDF has **→** (go to the cursor's place in the PDF, also **Ctrl/⌘+Alt+J** in the editor) and **←** (open the source of the visible part of the PDF). Forward search scrolls the PDF and highlights the lines for a second; double-clicking a spot in the PDF opens its source file at that line. Both need a compiled PDF (the arrows say "Compile first" until then) and work for readers. After edits without a recompile, they use the last compile's positions.
+- **PDF position**: the PDF keeps its page, offset in the page and zoom across recompiles, and the browser remembers it per project across reloads.
+- **Layout** menu in the top bar: **Side-by-side**, **Editor only**, **PDF only** or **PDF in separate window**. The choice is remembered per browser. The separate window (`/project/<id>/pdf`) has its own recompile, logs, zoom and **←** button; it follows compiles started in the main window and the other way round, and a double-click or a log entry in it opens the source in the main window. Closing it returns the main window to side-by-side. If the browser blocks the popup, the menu says so and the layout stays as it was.
+
 ## Compile
 
 Each compile runs `latexmk` on the main document in a fresh container from the TeX Live image: no network, read-only root, non-root user, memory, CPU and time limits. The whole project goes in as a tar on stdin and the PDF and log come back on stdout, so the app and the job share no files. `latexmk` runs bibtex or biber as needed. Log entries in other files open that file at the line.

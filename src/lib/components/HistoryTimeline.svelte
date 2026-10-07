@@ -165,7 +165,7 @@
 								{#if v.labels.length}
 									<div class="labels">
 										{#each v.labels as l (l.id)}
-											<LabelChip label={l} onrename={renameLabel} ondelete={deleteLabel} />
+											<LabelChip label={l} tabbable={history.selected === v.id} onrename={renameLabel} ondelete={deleteLabel} />
 										{/each}
 									</div>
 								{/if}

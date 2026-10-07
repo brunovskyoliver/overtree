@@ -113,6 +113,7 @@ test('a reader sees both authors’ versions and their colored changes, vs curre
 	await reader.keyboard.press('Escape');
 	await expect(view).toBeHidden();
 	await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+	await expect(toggle).toBeFocused(); // focus doesn't fall back to <body>
 	await expect(reader.locator('.cm-content')).toContainText('% bob was here');
 
 	await bob.context().close();
@@ -187,6 +188,18 @@ test('labels: an editor names versions, they survive a reload, a reader gets no 
 	await rename.getByLabel('Label').fill('First draft');
 	await rename.getByRole('button', { name: 'Rename' }).click();
 	await expect(options.nth(1).getByRole('button', { name: 'Label First draft' })).toBeVisible();
+
+	// keyboard: only the selected version's chips are Tab stops; ↓ opens the menu, Escape closes it and stays in history
+	const chip = options.nth(1).getByRole('button', { name: 'Label First draft' });
+	await expect(options.nth(0).getByRole('button', { name: 'Label Draft A' })).toHaveAttribute('tabindex', '-1');
+	await expect(chip).toHaveAttribute('tabindex', '0');
+	await chip.focus();
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByRole('menuitem', { name: 'Rename…' })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('menu')).toBeHidden();
+	await expect(chip).toBeFocused();
+	await expect(view).toBeVisible();
 
 	// a new edit is no labeled version: labels only hides it
 	await page.getByRole('button', { name: 'History' }).click();

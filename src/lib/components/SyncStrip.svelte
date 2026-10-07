@@ -9,6 +9,7 @@
 		type="button"
 		aria-label="Go to PDF location"
 		title={enabled ? 'Go to PDF location (Ctrl/⌘+Alt+J)' : 'Compile first'}
+		aria-keyshortcuts="Control+Alt+J Meta+Alt+J"
 		disabled={!enabled}
 		onclick={onforward}
 	>
@@ -46,6 +47,9 @@
 	}
 	button:hover:not(:disabled) {
 		background: var(--panel-raised);
+	}
+	button:focus-visible {
+		outline-offset: -2px;
 	}
 	button:disabled {
 		opacity: 0.35;

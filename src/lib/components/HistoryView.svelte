@@ -10,7 +10,13 @@
 	let section = $state<HTMLElement>();
 
 	$effect(() => {
-		section?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
+		const s = section;
+		s?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
+		// closing (Escape, the toggle) would drop focus on <body> with the view: back to the top bar's History button
+		return () => {
+			const active = document.activeElement;
+			if (!active || active === document.body || s?.contains(active)) document.getElementById('history-toggle')?.focus();
+		};
 	});
 
 	function onkeydown(e: KeyboardEvent) {

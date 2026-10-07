@@ -15,6 +15,7 @@ import {
 	type Changed
 } from '../../src/lib/server/history.ts';
 import { deleteProject } from '../../src/lib/server/projects.ts';
+import { restoreVersion } from '../../src/lib/server/restore.ts';
 import { historyLog, memberships, versionLabels, versions } from '../../src/lib/server/schema.ts';
 import * as labelsRoute from '../../src/routes/api/projects/[pid]/history/labels/+server.ts';
 import * as labelRoute from '../../src/routes/api/projects/[pid]/history/labels/[lid]/+server.ts';
@@ -318,5 +319,67 @@ describe('labels (US5, research R6)', () => {
 		]);
 		expect(listVersions(pid, o, { labelsOnly: true, limit: 1 })).toMatchObject({ hasMore: true, versions: [{ id: c.id }] });
 		expect(listVersions(pid, o, { labelsOnly: true, before: c.id }).versions.map((v) => v.id)).toEqual([a.id]);
+	});
+});
+
+describe('performance (SC-002, SC-003)', () => {
+	it('the first page of 1,000 versions loads in under 1 s', async () => {
+		const { server, pid } = await setup();
+		const base = lastVersion(pid)!;
+		const authors = JSON.stringify([user().id, user(B).id]);
+		const edit = (i: number): Changed => ({ id: `f${i}`, path: `ch/part-${i}.tex`, change: 'edited' });
+		const changed = JSON.stringify([0, 1, 2, 3, 4].map(edit));
+		server.db.transaction((tx) => {
+			for (let i = 1; i <= 1000; i++) {
+				const t = base.createdAt + i * 60_000;
+				const kind = i % 7 ? 'edit' : 'compile';
+				const row = { ...base, id: undefined, kind, authors, changed, startedAt: t - 30_000, createdAt: t } as const;
+				const v = tx.insert(versions).values(row).returning().get();
+				if (i % 10 === 0)
+					tx.insert(versionLabels).values({ projectId: pid, versionId: v.id, name: `Draft ${i}`, userId: user(B).id, createdAt: t }).run();
+			}
+		});
+		// a neighbor project's history in the same tables
+		const other = project(OWNER, 'Other');
+		for (let i = 0; i < 200; i++) closeVersion(other, 'restore');
+
+		let t0 = performance.now();
+		const page = listVersions(pid, user().id);
+		expect(performance.now() - t0).toBeLessThan(1000);
+		expect(page).toMatchObject({ hasMore: true, versions: { length: 50 } });
+		expect(page.versions[0].labels).toMatchObject([{ name: 'Draft 1000' }]);
+
+		t0 = performance.now();
+		const labeled = listVersions(pid, user().id, { labelsOnly: true, before: page.versions.at(-1)!.id });
+		expect(performance.now() - t0).toBeLessThan(1000);
+		expect(labeled.versions).toHaveLength(50);
+	});
+
+	it('a whole-project restore of 50 files takes under 2 s', async () => {
+		const { pid } = await setup();
+		const me = user().id;
+		const ctx = { userId: me, projectId: pid };
+		const ch = createEntry(pid, { kind: 'folder', name: 'chapters', parentId: null }, me);
+		const body = (n: number, tag: string) => Array.from({ length: 40 }, (_, l) => `Line ${l} of section ${n}, ${tag}.\n`).join('');
+		const texts = [];
+		for (let i = 0; i < 50; i++) {
+			const f = createEntry(pid, { kind: 'text', name: `s${i}.tex`, parentId: ch.id }, me);
+			await setText(f.id, body(i, 'good'), ctx);
+			texts.push(f);
+		}
+		const good = closeVersion(pid, 'edit')!;
+		// 10 deleted, 10 renamed, 30 edited
+		for (const [i, f] of texts.entries()) {
+			if (i < 10) deleteEntry(pid, f.id, me);
+			else if (i < 20) renameOrMove(pid, f.id, { name: `renamed-${i}.tex` }, me);
+			else await setText(f.id, body(i, 'bad'), ctx);
+		}
+		closeVersion(pid, 'edit');
+
+		const t0 = performance.now();
+		const { version, skipped } = await restoreVersion(pid, good.id, me);
+		expect(performance.now() - t0).toBeLessThan(2000);
+		expect(skipped).toEqual([]);
+		expect(version!.changed).toHaveLength(50);
 	});
 });

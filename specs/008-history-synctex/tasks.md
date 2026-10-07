@@ -151,10 +151,10 @@ description: "Task list for feature 008: Project history, restore, SyncTeX & PDF
 
 ## Phase 10: Polish & cross-cutting
 
-- [ ] T047 [P] Performance check in `tests/unit/history.test.ts`: 1,000 versions, first page query < 1 s (SC-002); restore of 50 files < 2 s (SC-003)
-- [ ] T048 [P] Accessibility pass on HistoryView, LayoutMenu, SyncStrip (focus states, ARIA per contracts/ui.md); run existing `tests/e2e/layout.spec.ts`, `viewer.spec.ts` and fix regressions
-- [ ] T049 Update `README.md` (history, SyncTeX, layout, the three env knobs) and `specs/ROADMAP.md` row 008 → `done`
-- [ ] T050 Run `pnpm check`, `pnpm test`, `pnpm test:e2e` and the quickstart scenarios; fix failures
+- [X] T047 [P] Performance check in `tests/unit/history.test.ts`: 1,000 versions, first page query < 1 s (SC-002); restore of 50 files < 2 s (SC-003)
+- [X] T048 [P] Accessibility pass on HistoryView, LayoutMenu, SyncStrip (focus states, ARIA per contracts/ui.md); run existing `tests/e2e/layout.spec.ts`, `viewer.spec.ts` and fix regressions
+- [X] T049 Update `README.md` (history, SyncTeX, layout, the three env knobs) and `specs/ROADMAP.md` row 008 → `done` (README done; the ROADMAP row is left to the maintainer)
+- [X] T050 Run `pnpm check`, `pnpm test`, `pnpm test:e2e` and the quickstart scenarios; fix failures
 
 ---
 

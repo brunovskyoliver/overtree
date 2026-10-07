@@ -3,8 +3,14 @@
 	import { Menu } from '#lib/menu.svelte.ts';
 
 	// A label on a timeline version (contracts/ui.md "Timeline"): plain for everyone, a menu button with Rename and
-	// Delete when `label.canEdit` (its author or the owner, research R6).
-	let { label, onrename, ondelete }: { label: Label; onrename: (l: Label) => void; ondelete: (l: Label) => void } = $props();
+	// Delete when `label.canEdit` (its author or the owner, research R6). `tabbable`: a Tab stop (the selected version's
+	// chips only, so Tab leaves the timeline instead of walking every label).
+	let {
+		label,
+		tabbable = true,
+		onrename,
+		ondelete
+	}: { label: Label; tabbable?: boolean; onrename: (l: Label) => void; ondelete: (l: Label) => void } = $props();
 	const m = new Menu();
 
 	function pick(action: (l: Label) => void) {
@@ -16,9 +22,9 @@
 <svelte:window onpointerdown={m.onwindowpointerdown} />
 
 {#if label.canEdit}
-	<!-- inside a listbox option: clicks and keys stay with the menu -->
+	<!-- inside a listbox option: clicks and keys stay with the menu (Escape with the menu closed leaves history) -->
 	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-	<span class="wrap" bind:this={m.root} onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+	<span class="wrap" bind:this={m.root} onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
 		<button
 			type="button"
 			class="chip"
@@ -26,6 +32,7 @@
 			aria-label="Label {label.name}"
 			aria-haspopup="menu"
 			aria-expanded={m.open}
+			tabindex={tabbable ? 0 : -1}
 			bind:this={m.toggle}
 			onclick={m.ontoggle}
 			onkeydown={m.ontogglekey}>{label.name}</button

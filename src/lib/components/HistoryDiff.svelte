@@ -104,7 +104,9 @@
 	}
 
 	function jump(f: FileDiff) {
-		document.getElementById(fileAnchor(f))?.scrollIntoView({ block: 'start' });
+		const el = document.getElementById(fileAnchor(f));
+		el?.scrollIntoView({ block: 'start' });
+		el?.focus({ preventScroll: true });
 	}
 </script>
 
@@ -164,7 +166,7 @@
 			{#each legend as id (id)}
 				{@const u = id ? users.get(id) : undefined}
 				<li>
-					<span class="swatch" style:background={colorOf(id)}></span>
+					<span class="swatch" aria-hidden="true" style:background={colorOf(id)}></span>
 					{#if u}<Avatar name={u.name} avatarUrl={u.avatarUrl} color={u.color} size={18} />{/if}
 					{nameOf(id)}
 				</li>
@@ -180,7 +182,7 @@
 			<p class="note">{history.compare === 'current' ? 'No differences from the current state.' : 'No file changes in this version.'}</p>
 		{:else}
 			{#each diff.files as f (f.id)}
-				<article class="file" id={fileAnchor(f)} aria-label={f.path}>
+				<article class="file" id={fileAnchor(f)} aria-label={f.path} tabindex="-1">
 					<header class="file-head">
 						<span class="path">{f.path}</span>
 						{#if f.oldPath}<span class="from">renamed from {f.oldPath}</span>{/if}
@@ -445,6 +447,9 @@
 		overflow: hidden;
 		border: 1px solid var(--border);
 		border-radius: 6px;
+	}
+	.file:focus-visible {
+		outline-offset: -2px;
 	}
 	.file-head {
 		display: flex;
