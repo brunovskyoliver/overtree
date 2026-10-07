@@ -1,8 +1,8 @@
 import { createClerkClient, verifyToken, type ClerkClient } from '@clerk/backend';
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import { getServer } from './collab.ts';
 import type { Tx } from './files.ts';
-import { invites, memberships, projects, settings, users } from './schema.ts';
+import { historyLog, invites, memberships, overrides, projects, settings, users, versionLabels, versions } from './schema.ts';
 
 // Authentication (research R2–R5): Clerk sessions on HTTP and WebSocket, the test bypass, the user mirror and the
 // sign-up policy. Loaded unbundled by server.ts in production: no SvelteKit imports here.
@@ -132,7 +132,10 @@ async function resolve(id: string, identity: () => Promise<Identity>): Promise<A
 	const row = getServer().db.select().from(users).where(eq(users.id, id)).get();
 	if (row && Date.now() - row.syncedAt < REFRESH_MS) return { user: row };
 	try {
-		return { user: mirrorUser(await identity()) };
+		const who = await identity();
+		const holder = getServer().db.select().from(users).where(eq(users.email, who.email.trim().toLowerCase())).get();
+		const adopt = holder && holder.id !== id && (await goneFromClerk(holder.id)) ? holder.id : undefined;
+		return { user: mirrorUser(who, adopt) };
 	} catch (e) {
 		if (e instanceof NotAllowed) return { refused: 'not-allowed' };
 		throw e;
@@ -155,16 +158,48 @@ function allowedToSignUp(tx: Tx, email: string): boolean {
 	return !!tx.select().from(invites).where(eq(invites.email, email)).get();
 }
 
+/** Point every reference to user `from` at `to` and drop `from`, keeping its role, disabled flag and creation time.
+ *  The new row goes in first (under a placeholder email while the old one still holds it) so foreign keys hold. */
+function moveUser(tx: Tx, from: User, to: string) {
+	tx.update(users).set({ email: `${from.email}#moved` }).where(eq(users.id, from.id)).run();
+	tx.insert(users).values({ ...from, id: to }).run();
+	tx.update(projects).set({ ownerId: to }).where(eq(projects.ownerId, from.id)).run();
+	tx.update(memberships).set({ userId: to }).where(eq(memberships.userId, from.id)).run();
+	tx.update(overrides).set({ userId: to }).where(eq(overrides.userId, from.id)).run();
+	tx.update(historyLog).set({ userId: to }).where(eq(historyLog.userId, from.id)).run();
+	tx.update(versionLabels).set({ userId: to }).where(eq(versionLabels.userId, from.id)).run();
+	tx.update(versions)
+		.set({ authors: sql`replace(${versions.authors}, ${JSON.stringify(from.id)}, ${JSON.stringify(to)})` })
+		.where(sql`${versions.authors} like ${'%' + JSON.stringify(from.id) + '%'}`)
+		.run();
+	tx.delete(users).where(eq(users.id, from.id)).run();
+}
+
+/** The Clerk account behind a mirrored user no longer exists (deleted, or the app moved to another Clerk instance). */
+async function goneFromClerk(id: string): Promise<boolean> {
+	if (id.startsWith('test_')) return false;
+	try {
+		await clerkClient().users.getUser(id);
+		return false;
+	} catch (e) {
+		return (e as { status?: number }).status === 404;
+	}
+}
+
 /** Insert or refresh the user in one transaction (research R5): first user and ADMIN_EMAILS become admins (never
  *  demoted here), unknown emails pass the sign-up policy or get NotAllowed, pending invites become memberships,
- *  and projects without an owner go to the first admin. Disabled users are returned as they are. */
-export function mirrorUser(identity: Identity): User {
+ *  and projects without an owner go to the first admin. Disabled users are returned as they are.
+ *  `adopt`: the id of a user with this email whose Clerk account is gone; it moves to `identity.id` with everything
+ *  it had. Any other user already holding the email makes this NotAllowed. */
+export function mirrorUser(identity: Identity, adopt?: string): User {
 	const email = identity.email.trim().toLowerCase();
 	const name = identity.name?.trim() || email.slice(0, email.indexOf('@')) || email;
 	const avatarUrl = identity.avatarUrl ?? null;
 	const now = Date.now();
 	const seeded = adminEmails().includes(email);
 	return getServer().db.transaction((tx) => {
+		const prior = adopt && tx.select().from(users).where(and(eq(users.id, adopt), eq(users.email, email))).get();
+		if (prior && !tx.select().from(users).where(eq(users.id, identity.id)).get()) moveUser(tx, prior, identity.id);
 		const existing = tx.select().from(users).where(eq(users.id, identity.id)).get();
 		let user: User;
 		if (existing) {
@@ -183,8 +218,7 @@ export function mirrorUser(identity: Identity): User {
 		} else {
 			const first = tx.select({ n: count() }).from(users).get()!.n === 0;
 			if (!first && !seeded && !allowedToSignUp(tx, email)) throw new NotAllowed(email);
-			// ponytail: a second Clerk account with an email we already have (deleted and recreated in Clerk) is refused;
-			// moving the old row to the new id needs every foreign key rewritten
+			// a second account with an email we already have, while the first still exists in Clerk (see `adopt`)
 			if (tx.select().from(users).where(eq(users.email, email)).get()) throw new NotAllowed(email);
 			user = { id: identity.id, email, name, avatarUrl, role: first || seeded ? 'admin' : 'user', disabled: false, createdAt: now, lastSeenAt: now, syncedAt: now };
 			tx.insert(users).values(user).run();

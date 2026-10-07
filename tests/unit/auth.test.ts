@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { authConfigProblem, authenticateRequest, authenticateToken, mirrorUser, NotAllowed, testAuth } from '../../src/lib/server/auth.ts';
-import { joinByLink } from '../../src/lib/server/projects.ts';
-import { invites, memberships, projects, settings, users } from '../../src/lib/server/schema.ts';
+import { inviteMember, joinByLink } from '../../src/lib/server/projects.ts';
+import { historyLog, invites, memberships, projects, settings, users, versionLabels, versions } from '../../src/lib/server/schema.ts';
 import { handle } from '../../src/hooks.server.ts';
 import { OWNER, project, start, user } from './helpers.ts';
 
@@ -53,6 +53,36 @@ describe('test bypass', () => {
 });
 
 describe('mirrorUser', () => {
+	it('a new account with a known email is refused, unless it adopts the old one, which moves with everything it had', async () => {
+		const { db } = await start();
+		const old = user(OWNER);
+		const b = user('b@test.local');
+		const pid = project();
+		inviteMember(pid, b.email, 'reader');
+		const now = Date.now();
+		const log = db.insert(historyLog).values({ projectId: pid, docName: null, userId: old.id, kind: 'tree', createdAt: now }).returning().get();
+		const v = db
+			.insert(versions)
+			.values({ projectId: pid, kind: 'edit', watermark: 0, manifestHash: 'x', authors: JSON.stringify([b.id, old.id]), changed: '[]', startedAt: now, createdAt: now })
+			.returning()
+			.get();
+		db.insert(versionLabels).values({ projectId: pid, versionId: v.id, name: 'draft', userId: old.id, createdAt: now }).run();
+
+		expect(() => mirrorUser({ id: 'user_new', email: OWNER })).toThrow(NotAllowed);
+		expect(() => mirrorUser({ id: 'user_new', email: OWNER }, b.id)).toThrow(NotAllowed); // adopt must match the email
+		const moved = mirrorUser({ id: 'user_new', email: OWNER, name: 'New Name' }, old.id);
+		expect(moved).toMatchObject({ id: 'user_new', email: OWNER, role: 'admin', name: 'New Name', createdAt: old.createdAt });
+		expect(db.select().from(users).where(eq(users.id, old.id)).get()).toBeUndefined();
+		expect(db.select().from(projects).where(eq(projects.id, pid)).get()!.ownerId).toBe('user_new');
+		expect(db.select().from(historyLog).where(eq(historyLog.id, log.id)).get()!.userId).toBe('user_new');
+		expect(JSON.parse(db.select().from(versions).where(eq(versions.id, v.id)).get()!.authors)).toEqual([b.id, 'user_new']);
+		expect(db.select().from(versionLabels).get()!.userId).toBe('user_new');
+
+		const movedB = mirrorUser({ id: 'user_b', email: b.email }, b.id);
+		expect(movedB.role).toBe('user');
+		expect(db.select().from(memberships).where(eq(memberships.projectId, pid)).all().map((m) => [m.userId, m.role])).toEqual([['user_b', 'reader']]);
+	});
+
 	it('creates the user, name falling back to the email local part; the first user is admin', async () => {
 		await start();
 		const a = mirrorUser(identity('first@test.local'));
