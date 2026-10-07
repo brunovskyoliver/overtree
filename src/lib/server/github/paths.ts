@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import picomatch from 'picomatch';
 import type { FileKind } from '../../files.ts';
+import { COMPILE_OUTPUT_PDF, DEFAULT_IGNORE } from '../../github-types.ts';
 import { getServer } from '../collab.ts';
 import { putBlob, readBlob } from '../files.ts';
 import { currentText, manifestPaths } from '../history.ts';
@@ -67,22 +68,7 @@ export function projectFiles(pid: string): Map<string, ProjectFile> {
 
 // --- filters (research R8) ------------------------------------------------------------------------------------------
 
-/** "`X.pdf` when `X.tex` is in the same folder": the CI workflow's output (R8). */
-export const COMPILE_OUTPUT_PDF = '<compile-output-pdf>';
-
-export const DEFAULT_IGNORE = [
-	'.github/**',
-	'**/*.aux',
-	'**/*.log',
-	'**/*.out',
-	'**/*.toc',
-	'**/*.fls',
-	'**/*.fdb_latexmk',
-	'**/*.synctex.gz',
-	'**/*.bbl',
-	'**/*.blg',
-	COMPILE_OUTPUT_PDF
-];
+export { COMPILE_OUTPUT_PDF, DEFAULT_IGNORE };
 
 // picomatch rather than node:path matchesGlob: matchesGlob has no `dot` option, so `**/*.aux` misses `.x/a.aux`,
 // and it was still experimental on some Node 24 releases (the image's runtime).

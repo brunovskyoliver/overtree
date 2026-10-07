@@ -12,6 +12,7 @@ Updated: 2026-10-07
 - Applied H1 (pending_push), H2 (first-sync base in T020), M1 (filter both sides), M2 (repo id lookup). L1/L2 left as noted.
 - Phase 2: path filters use `picomatch` with `dot: true`, not `node:path` `matchesGlob` (no dot option, so `**/*.aux` missed `.x/a.aux`; experimental on some Node 24). User moves (`moveUser`, the only place a users row is deleted) move the GitHub account, links and runs to the new id instead of deleting them.
 - Empty repositories refuse Git Data calls (found by phase 1's faithful fake): first push to an empty repo seeds one file with the Contents API, then the normal Git Data commit (two commits once). Added `@octokit/request` (auth-app needs `request.defaults({ baseUrl })`).
+- Phase 3: the editor has no project menu (ProjectActions is the dashboard's row menu), so the dialog opens from a "GitHub" button in the top bar left of History: always for the owner, for other members only when linked (read-only view). Phase 6's indicator can replace it. GitHub errors in routes map in `api()`: needs-reconnect 409 + `reconnect`, needs-access 422, conflict 409, retry 502. OAuth authorize omits `redirect_uri` (GitHub uses the App's callback URL). `sync.ts` is a stub (`requestSync` records, answers `noop`); confirm 'merge' requests `pull` then `push` with trigger `link`, and Phase 4/5 must let that first pull diff against the base map even though head equals `base_commit`.
 
 ## Log
 - 2026-10-07 specify: spec.md (4 stories, 21 FRs) + checklists/requirements.md (all pass).
@@ -21,5 +22,7 @@ Updated: 2026-10-07
 - 2026-10-07 analyze: 0 critical, 2 high, 2 medium, 2 low; checklist 16/16; waiting at gate 2.
 - 2026-10-07 phase 1 setup (T001–T005): deps, env, schema + 0005 migration, fake GitHub + self-test, Playwright wiring. d8c6ffd. check clean; vitest 295 pass, 31 fail = Docker-only (OrbStack off).
 - 2026-10-07 phase 2 foundational (T006–T015): github/config, crypto, api, paths; `github` event; `closeVersion` source; `applyTree` extracted from restore; delete/move cleanup; `/api/me` github. check clean; vitest 307 pass, 31 fail = Docker-only.
+- 2026-10-07 phase 2 foundational (T006–T015): config, crypto, api, paths, applyTree extraction, cleanup hooks, /api/me flag. 6d7d2ef. check clean; vitest 307 pass, 31 Docker-only fail.
+- 2026-10-07 phase 3 US1 (T016–T023): accounts.ts, links.ts, sync.ts stub, connect/callback/account/repos/branches routes, project link + confirm routes, github.svelte.ts, GitHubDialog + top-bar button. check clean; vitest 350 pass, 31 Docker-only fail; playwright github 1 pass.
 
 ## Report

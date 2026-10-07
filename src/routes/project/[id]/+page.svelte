@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { EditorView } from '@codemirror/view';
 	import { onMount, tick, untrack } from 'svelte';
+	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { auth, onSignOut, watchSession } from '#lib/auth.svelte.ts';
 	import Editor from '#lib/components/Editor.svelte';
+	import GitHubDialog from '#lib/components/GitHubDialog.svelte';
 	import HistoryView from '#lib/components/HistoryView.svelte';
 	import Outline from '#lib/components/Outline.svelte';
 	import ShareDialog from '#lib/components/ShareDialog.svelte';
 	import TopBar from '#lib/components/TopBar.svelte';
 	import Workspace from '#lib/components/Workspace.svelte';
 	import { CompileState } from '#lib/compile.svelte.ts';
+	import { GitHub } from '#lib/github.svelte.ts';
 	import { History } from '#lib/history.svelte.ts';
 	import { Layout } from '#lib/layout.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
@@ -24,13 +27,31 @@
 	project.load();
 	let share = $state<ShareDialog>();
 	const history = new History(project.id);
+	// GitHub sync (012): only when the server has it configured (`/api/me`), FR-004
+	const github = new GitHub(project.id);
+	let githubDialog = $state<GitHubDialog>();
+	const githubOn = $derived(!!auth.me?.github);
 	// live project events (research R8); a role change refetches what the role decides (FR-036)
 	const session = new Session(project.id, {
-		access: () => (project.loadDetails(), project.load(), share?.refresh()),
+		access: () => (project.loadDetails(), project.load(), share?.refresh(), githubOn && github.load()),
 		tree: () => project.load(),
 		// the main document lives in the files list
 		project: () => (project.loadDetails(), project.load()),
-		history: () => history.refresh()
+		history: () => history.refresh(),
+		github: () => (github.load(), githubDialog?.refresh())
+	});
+	$effect(() => {
+		if (githubOn) untrack(() => github.load());
+	});
+	// back from GitHub's authorization (`?github=1`): reopen the dialog once, then drop the flag from the address
+	let githubReturn = page.url.searchParams.has('github');
+	$effect(() => {
+		if (!githubReturn || !githubOn || !githubDialog || !project.details) return;
+		githubReturn = false;
+		const url = new URL(page.url.href);
+		url.searchParams.delete('github');
+		replaceState(url, page.state);
+		untrack(() => githubDialog?.open());
 	});
 	// the others see who is here and in which file (research R8)
 	$effect(() => session.present(auth.me, project.active));
@@ -150,6 +171,9 @@
 		offline={!ended && session.offline}
 		history={project.details && !ended ? { on: history.open, toggle: () => history.toggle() } : undefined}
 		layout={project.details && !ended ? layout : undefined}
+		github={githubOn && project.details && !ended && (project.details.role === 'owner' || github.status?.link)
+			? { open: () => githubDialog?.open(), linked: !!github.status?.link }
+			: undefined}
 	/>
 	{#if ended}
 		<!-- contracts/ui.md "Other pages": the project closed under the user (FR-036) -->
@@ -198,6 +222,9 @@
 			</div>
 		</main>
 		<ShareDialog bind:this={share} {project} />
+		{#if githubOn}
+			<GitHubDialog bind:this={githubDialog} {github} email={auth.me?.email ?? ''} />
+		{/if}
 	{/if}
 </div>
 
