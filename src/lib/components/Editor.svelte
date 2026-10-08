@@ -28,6 +28,7 @@
 	import { kindLabel, latexSource } from '#lib/completion/source.ts';
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
 	import { cursorLabels, editorTheme } from '#lib/editor/theme.ts';
+	import { followRemoteTyping } from '#lib/editor/follow.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { isLatexName } from '#lib/files.ts';
 	import { lightColor } from '#lib/presence.ts';
@@ -138,6 +139,7 @@
 		keymap.of([...undoKeys, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap, ...completionKeymap]),
 		editorTheme,
 		cursorLabels,
+		followRemoteTyping,
 		EditorView.lineWrapping,
 		EditorView.updateListener.of((u) => {
 			// remote Yjs changes carry ySyncAnnotation and don't count as the user's typing
