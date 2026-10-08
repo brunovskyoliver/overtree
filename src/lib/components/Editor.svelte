@@ -28,7 +28,7 @@
 	import { kindLabel, latexSource } from '#lib/completion/source.ts';
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
 	import { cursorLabels, editorTheme } from '#lib/editor/theme.ts';
-	import { followRemoteTyping } from '#lib/editor/follow.ts';
+	import { followRemoteTyping, newlineBelow } from '#lib/editor/follow.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { isLatexName } from '#lib/files.ts';
 	import { lightColor } from '#lib/presence.ts';
@@ -129,9 +129,10 @@
 		crosshairCursor(),
 		highlightActiveLine(),
 		highlightSelectionMatches(),
-		// before defaultKeymap, which binds Mod-Enter to insertBlankLine
+		// before defaultKeymap, which binds Mod-Enter to insertBlankLine and Enter to insertNewlineAndIndent
 		keymap.of([
 			{ key: 'Mod-Enter', run: compileKey },
+			{ key: 'Enter', run: newlineBelow },
 			{ key: 'Mod-s', run: compileKey },
 			// not ⌘⌥→: it switches tabs in some browsers (research R10)
 			{ key: 'Mod-Alt-j', run: () => (onSyncForward?.(), true) }
