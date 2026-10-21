@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
-import { bold, figure, italic, link, section, table } from '../../src/lib/editor/commands.ts';
+import { bold, figuresCommand, italic, link, section, symbolCommand, tableCommand, tableSnippet } from '../../src/lib/editor/commands.ts';
 
 /** Run `cmd` on `doc` where `[` `]` mark the selection and `|` a cursor; return the result in the same notation. */
 function run(cmd: StateCommand, doc: string) {
@@ -60,37 +60,68 @@ describe('wrapping commands', () => {
 	});
 });
 
-const FIGURE = `\\begin{figure}[h]
+const FIGURE = `\\begin{figure}[htbp]
     \\centering
-    \\includegraphics[width=0.5\\linewidth]{[example-image]}
-    \\caption{Caption}
-    \\label{fig:label}
+    \\includegraphics[width=0.8\\linewidth]{figures/plot.png}
+    \\caption{|}
+    \\label{fig:plot}
 \\end{figure}`;
 
-const TABLE = `\\begin{table}[h]
+const TABLE_3x2 = `\\begin{table}[htbp]
     \\centering
-    \\begin{tabular}{|c|c|}
-        \\hline
-        [A] & B \\\\
-        \\hline
-        C & D \\\\
-        \\hline
+    \\begin{tabular}{ll}
+        \\toprule
+        | &  \\\\
+        \\midrule
+         &  \\\\
+         &  \\\\
+        \\bottomrule
     \\end{tabular}
-    \\caption{Caption}
-    \\label{tab:label}
+    \\caption{}
+    \\label{tab:}
 \\end{table}`;
 
-describe('block commands (US4-5)', () => {
-	it('Figure on an empty line selects the image placeholder', () => {
-		expect(run(figure, 'a\n|\nb')).toBe(`a\n${FIGURE}\nb`);
-	});
+const plot = { path: 'figures/plot.png', label: 'plot' };
 
-	it('Table on an empty line selects the first cell', () => {
-		expect(run(table, '|')).toBe(TABLE);
+describe('figure and table blocks (015)', () => {
+	it('a figure on an empty line puts the caret in the caption', () => {
+		expect(run(figuresCommand([plot]), 'a\n|\nb')).toBe(`a\n${FIGURE}\nb`);
 	});
 
 	it('starts a new line when the cursor line has text, and replaces a selection', () => {
-		expect(run(figure, 'Some text|')).toBe(`Some text\n${FIGURE}`);
-		expect(run(table, 'keep [drop] tail')).toBe(`keep \n${TABLE}\n tail`);
+		expect(run(figuresCommand([plot]), 'Some text|')).toBe(`Some text\n${FIGURE}`);
+		expect(run(tableCommand(3, 2), 'keep [drop] tail')).toBe(`keep \n${TABLE_3x2}\n tail`);
+	});
+
+	it('a 3 × 2 table: header rule after the first row, the caret in the first cell', () => {
+		expect(run(tableCommand(3, 2), '|')).toBe(TABLE_3x2);
+		expect(tableSnippet(1, 3)).not.toContain('\\midrule');
+		expect(tableSnippet(1, 3)).toContain('\\begin{tabular}{lll}');
+	});
+
+	it('caption, width and braces in user text: the caret after the caption, the text as typed', () => {
+		const out = run(figuresCommand([{ path: 'figures/a.png', label: 'a', caption: 'Set {x} ${y}', width: 0.5 }]), '|');
+		expect(out).toContain('\\includegraphics[width=0.5\\linewidth]{figures/a.png}');
+		expect(out).toContain('\\caption{Set {x} ${y}|}');
+	});
+
+	it('two figures: the first caption gets the caret', () => {
+		const out = run(figuresCommand([plot, { path: 'figures/b.png', label: 'b' }]), '|');
+		expect(out.match(/\\begin\{figure\}/g)).toHaveLength(2);
+		expect(out.indexOf('|')).toBeLessThan(out.indexOf('figures/b.png'));
+	});
+});
+
+describe('symbol insertion (015)', () => {
+	it('outside math wraps the command in $…$', () => {
+		expect(run(symbolCommand('\\alpha'), 'x |')).toBe('x $\\alpha$|');
+		expect(run(symbolCommand('\\alpha'), 'x [sel] y')).toBe('x $\\alpha$| y');
+	});
+
+	it('inside math inserts it bare, spaced from a following letter', () => {
+		expect(run(symbolCommand('\\alpha'), '$x + |$')).toBe('$x + \\alpha|$');
+		expect(run(symbolCommand('\\alpha'), '$|x$')).toBe('$\\alpha |x$');
+		// `[` `]` mark selections in `run`: \( \) here
+		expect(run(symbolCommand('\\{'), '\\(|x\\)')).toBe('\\(\\{|x\\)');
 	});
 });

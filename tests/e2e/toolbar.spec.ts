@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { openEditor, resetDoc, SEED, test, text } from './helpers.ts';
+import { openEditor, resetDoc, SEED, setDoc, test, text } from './helpers.ts';
 
 test.afterEach(async ({ page }) => {
 	if (await page.evaluate(() => !!window.__overtree)) await resetDoc(page);
@@ -73,38 +73,37 @@ test('Bold with no selection puts the cursor between the braces (US4-2)', async 
 	expect(await text(page)).toBe(SEED + '\\textbf{x}');
 });
 
-test('Figure and Table on an empty line select their first placeholder (US4-5)', async ({ page }) => {
+// Figure and Table open dialogs since 015 (tests/e2e/insert-media.spec.ts); here only the table's first cell
+test('Insert table on an empty line puts the caret in the first cell (US4-5)', async ({ page }) => {
 	const editor = await openEditor(page);
 	await editor.press('ControlOrMeta+End');
-	await button(page, 'Figure').click();
-	expect(await selected(page)).toBe('example-image');
-	expect(await text(page)).toContain('\\includegraphics[width=0.5\\linewidth]{example-image}');
-
-	await page.evaluate(() => {
-		const { view } = window.__overtree!;
-		view.dispatch({ changes: { from: view.state.doc.length, insert: '\n' }, selection: { anchor: view.state.doc.length + 1 } });
-	});
-	await button(page, 'Table').click();
-	expect(await selected(page)).toBe('A');
-	expect(await text(page)).toContain('        A & B \\\\\n');
-	expect(await text(page)).toMatch(/\\label\{tab:label\}\n\\end\{table\}$/);
+	await button(page, 'Insert table').click();
+	await page.getByRole('dialog', { name: 'Insert table' }).getByRole('button', { name: '2 rows × 2 columns' }).click();
+	await page.keyboard.type('A');
+	expect(await text(page)).toContain('        A &  \\\\\n');
+	expect(await text(page)).toMatch(/\\label\{tab:\}\n\\end\{table\}$/);
 });
 
 test('one undo reverts a whole insertion (US4-7)', async ({ page }) => {
 	await openEditor(page);
+	// booktabs already there: the table doesn't add it to the document (an edit undo wouldn't take back)
+	const doc = SEED.replace('\\usepackage{graphicx}', '\\usepackage{booktabs}\n\\usepackage{graphicx}');
+	await setDoc(page, doc);
 	await typeAndSelect(page, 'word');
-	await button(page, 'Table').click();
+	await button(page, 'Insert table').click();
+	await page.getByRole('dialog', { name: 'Insert table' }).getByRole('button', { name: '2 rows × 2 columns' }).click();
+	await page.keyboard.press('Escape'); // leave the table's tab stops
 	await page.keyboard.press('ControlOrMeta+z');
-	expect(await text(page)).toBe(SEED + 'word');
+	expect(await text(page)).toBe(doc + 'word');
 
 	await page.keyboard.press('ControlOrMeta+End');
 	for (const _ of 'word') await page.keyboard.press('Shift+ArrowLeft');
 	await button(page, 'Bold').click();
 	await page.keyboard.type('er'); // typing right after is its own step
 	await page.keyboard.press('ControlOrMeta+z');
-	expect(await text(page)).toBe(SEED + '\\textbf{word}');
+	expect(await text(page)).toBe(doc + '\\textbf{word}');
 	await page.keyboard.press('ControlOrMeta+z');
-	expect(await text(page)).toBe(SEED + 'word');
+	expect(await text(page)).toBe(doc + 'word');
 });
 
 test('search button and the find shortcut open find/replace (US4-6)', async ({ page }) => {

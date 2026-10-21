@@ -1,13 +1,24 @@
 <script lang="ts">
 	import { openSearchPanel } from '@codemirror/search';
 	import type { StateCommand } from '@codemirror/state';
-	import { bold, figure, italic, link, section, table } from '#lib/editor/commands.ts';
+	import { bold, figuresCommand, italic, link, section, symbolCommand, tableCommand, type FigureSpec } from '#lib/editor/commands.ts';
+	import { insertStep } from '#lib/editor/figures.ts';
 	import { FONT_SIZES, prefs } from '#lib/editor/prefs.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { wordCount } from '#lib/editor/words.ts';
+	import type { Project } from '#lib/project.svelte.ts';
+	import FigureDialog from './FigureDialog.svelte';
+	import SymbolPalette from './SymbolPalette.svelte';
+	import TableDialog from './TableDialog.svelte';
 
-	// readOnly: the file can't be edited, every button that changes text is disabled (search stays)
-	let { editor, readOnly = false }: { editor?: EditorHandle; readOnly?: boolean } = $props();
+	// readOnly: the file can't be edited, every button that changes text is disabled (search stays).
+	// palette: the symbol palette is open (Editor.svelte toggles it with Ctrl/Cmd+Shift+Y too)
+	let {
+		editor,
+		project,
+		readOnly = false,
+		palette = $bindable(false)
+	}: { editor?: EditorHandle; project: Project; readOnly?: boolean; palette?: boolean } = $props();
 
 	function run(action: (h: EditorHandle) => unknown) {
 		if (!editor) return;
@@ -16,12 +27,32 @@
 	}
 
 	// stopCapturing on both sides: the insertion is its own undo step and the next typing starts a new one
-	const insert = (cmd: StateCommand) =>
-		run((h) => {
-			h.undoManager.stopCapturing();
-			cmd(h.view);
-			h.undoManager.stopCapturing();
-		});
+	const insert = (cmd: StateCommand) => run((h) => insertStep(h, cmd));
+
+	let figureDialog: FigureDialog;
+	let tableDialog: TableDialog;
+
+	function insertFigure(figure: FigureSpec) {
+		insert(figuresCommand([figure]));
+		void project.addPackages(['graphicx']);
+	}
+
+	function insertTable(rows: number, cols: number) {
+		insert(tableCommand(rows, cols));
+		void project.addPackages(['booktabs']);
+	}
+
+	/** A palette symbol at the caret; `keep`: focus stays in the palette (keyboard use). */
+	function insertSymbol(cmd: string, keep: boolean) {
+		if (!editor || readOnly) return;
+		insertStep(editor, symbolCommand(cmd));
+		if (!keep) editor.view.focus();
+	}
+
+	function closePalette() {
+		palette = false;
+		editor?.view.focus();
+	}
 
 	const insertions: { label: string; cmd: StateCommand; icon: string; key?: string }[] = [
 		{ label: 'Bold', key: 'B', cmd: bold, icon: 'M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z' },
@@ -31,9 +62,7 @@
 			label: 'Link',
 			cmd: link,
 			icon: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'
-		},
-		{ label: 'Figure', cmd: figure, icon: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01' },
-		{ label: 'Table', cmd: table, icon: 'M4 5h16v14H4zM4 10h16M4 14.5h16M10 5v14' }
+		}
 	];
 
 	// words in the open file, counted again a moment after typing stops
@@ -82,6 +111,22 @@
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d={icon} /></svg>
 		</button>
 	{/each}
+	<button type="button" aria-label="Insert figure" title="Insert figure" aria-haspopup="dialog" disabled={readOnly} onclick={() => figureDialog.open()}>
+		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" /></svg>
+	</button>
+	<button type="button" aria-label="Insert table" title="Insert table" aria-haspopup="dialog" disabled={readOnly} onclick={() => tableDialog.open()}>
+		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 10h16M4 14.5h16M10 5v14" /></svg>
+	</button>
+	<button
+		type="button"
+		aria-label="Symbols"
+		title="Symbols (Ctrl/Cmd+Shift+Y)"
+		aria-pressed={palette && !readOnly}
+		disabled={readOnly}
+		onclick={() => (palette ? closePalette() : (palette = true))}
+	>
+		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h4.5v-2.2A6.5 6.5 0 1 1 14.5 16.8V19H19" /></svg>
+	</button>
 	<span class="words" aria-live="off">{words.toLocaleString()} {words === 1 ? 'word' : 'words'}</span>
 	<button
 		type="button"
@@ -110,6 +155,9 @@
 		</label>
 	</div>
 </div>
+{#if palette && !readOnly}<SymbolPalette oninsert={insertSymbol} onclose={closePalette} />{/if}
+<FigureDialog {project} oninsert={insertFigure} bind:this={figureDialog} />
+<TableDialog oninsert={insertTable} bind:this={tableDialog} />
 
 <style>
 	.toolbar {

@@ -184,8 +184,9 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 		'button:Italic',
 		'button:Section',
 		'button:Link',
-		'button:Figure',
-		'button:Table',
+		'button:Insert figure',
+		'button:Insert table',
+		'button:Symbols',
 		'button:Search',
 		'button:Collapse sidebar',
 		'button:Collapse PDF'

@@ -36,8 +36,10 @@
 	import { environments } from '#lib/completion/environments.ts';
 	import { kindLabel, latexSource } from '#lib/completion/source.ts';
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
-	import { bold, italic } from '#lib/editor/commands.ts';
+	import { bold, figuresCommand, italic } from '#lib/editor/commands.ts';
+	import { insertStep, latexPath, pickImages, refusedMessage, uploadFigures } from '#lib/editor/figures.ts';
 	import { prefs } from '#lib/editor/prefs.svelte.ts';
+	import { referenceFor, usesBiblatex } from '#lib/media.ts';
 	import { cursorLabels, editorTheme } from '#lib/editor/theme.ts';
 	import { followRemoteTyping, newlineBelow } from '#lib/editor/follow.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
@@ -133,6 +135,81 @@
 		return false;
 	};
 
+	// --- images and project files into the text (feature 015) ------------------------------------
+
+	let palette = $state(false); // the symbol palette under the toolbar
+	let insertError = $state('');
+
+	/** Upload `images` into figures/ and put a figure block for each at `pos` (kept through edits meanwhile, as a
+	 *  Yjs position). ponytail: if the user switched tabs during the upload, the files stay uploaded and nothing is
+	 *  inserted; the upgrade is writing the block into that tab's Y.Text. */
+	async function insertFigures(images: File[], refused: string[], pos: number) {
+		const h = editor;
+		if (!h) return;
+		const ytext = h.provider.document.getText('content');
+		const anchor = Y.createRelativePositionFromTypeIndex(ytext, pos);
+		insertError = refused.length ? refusedMessage(refused) : '';
+		if (!images.length) return;
+		const { figures, errors } = await uploadFigures(project, images);
+		if (errors.length) insertError = [insertError, ...errors].filter(Boolean).join(' ');
+		if (!figures.length) return;
+		void project.addPackages(['graphicx']);
+		const now = editor;
+		if (!now || now.provider !== h.provider || now.view.state.readOnly) return;
+		const at = Y.createAbsolutePositionFromRelativePosition(anchor, ytext.doc!)?.index ?? now.view.state.selection.main.head;
+		now.view.dispatch({ selection: { anchor: Math.min(at, now.view.state.doc.length) } });
+		insertStep(now, figuresCommand(figures));
+		now.view.focus();
+	}
+
+	// a clipboard holding only images (a screenshot, "Copy image"): figures. With text too (Word, Excel put a picture
+	// of the selection next to it) the text is pasted as usual.
+	function onpaste(e: ClipboardEvent, v: EditorView) {
+		const data = e.clipboardData;
+		if (v.state.readOnly || !data?.files.length || data.getData('text/plain')) return false;
+		const { images, refused } = pickImages([...data.files], true);
+		if (!images.length && !refused.length) return false;
+		e.preventDefault();
+		insertFigures(images, refused, v.state.selection.main.head);
+		return true;
+	}
+
+	const TREE_TYPE = 'application/x-overtree-id'; // set by FileTree.svelte's drag
+	const ondragover = (e: DragEvent, v: EditorView) => {
+		const types = e.dataTransfer?.types ?? [];
+		if (!v.state.readOnly && (types.includes(TREE_TYPE) || types.includes('Files'))) e.preventDefault();
+		return false; // dropCursor still shows where it lands
+	};
+
+	// a project file from the tree: a reference to it; images from the desktop: figures. Other desktop files keep
+	// CodeMirror's own drop (their text is inserted).
+	function ondrop(e: DragEvent, v: EditorView) {
+		const data = e.dataTransfer;
+		if (v.state.readOnly || !data) return false;
+		const pos = v.posAtCoords({ x: e.clientX, y: e.clientY }) ?? v.state.selection.main.head;
+		const id = data.getData(TREE_TYPE);
+		if (id) {
+			e.preventDefault();
+			const f = project.files.find((x) => x.id === id);
+			// ponytail: biblatex is looked for in the open file only (usually the main document); the upgrade is the
+			// main document's text from the server
+			const ref = f && f.kind !== 'folder' ? referenceFor(latexPath(project, id), usesBiblatex(v.state.doc.toString())) : null;
+			if (!ref || !editor) return true;
+			insertStep(editor, ({ state, dispatch }) => {
+				dispatch(state.update({ changes: { from: pos, insert: ref }, selection: { anchor: pos + ref.length }, userEvent: 'input.drop' }));
+				return true;
+			});
+			if (ref.startsWith('\\includegraphics')) void project.addPackages(['graphicx']);
+			v.focus();
+			return true;
+		}
+		const { images, refused } = pickImages([...data.files], false);
+		if (!images.length && !refused.length) return false;
+		e.preventDefault();
+		insertFigures(images, refused, pos);
+		return true;
+	}
+
 	// svelte-ignore state_referenced_locally (the page is keyed on the project: `project` never changes here)
 	const symbols = new Symbols(project.id);
 	// LaTeX tabs get the stex mode plus \begin/\end support; completion checks the language itself
@@ -188,8 +265,10 @@
 			{ key: 'Mod-b', run: format(bold) },
 			{ key: 'Mod-i', run: format(italic) },
 			// not ⌘⌥→: it switches tabs in some browsers (research R10)
-			{ key: 'Mod-Alt-j', run: () => (onSyncForward?.(), true) }
+			{ key: 'Mod-Alt-j', run: () => (onSyncForward?.(), true) },
+			{ key: 'Mod-Shift-y', run: (v) => (!v.state.readOnly && latex && (palette = !palette), true) }
 		]),
+		EditorView.domEventHandlers({ paste: onpaste, dragover: ondragover, drop: ondrop }),
 		keymap.of([...undoKeys, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap, ...completionKeymap]),
 		// Tab indents (after completion and snippet fields took theirs); Escape then Tab still leaves the editor
 		keymap.of([indentWithTab]),
@@ -413,7 +492,13 @@
 	{#if activeFile && readOnly}
 		<p class="notice">Read only: you can view and compile but not edit.</p>
 	{/if}
-	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} {readOnly} />{/if}
+	{#if insertError}
+		<p class="notice lost" role="alert">
+			{insertError}
+			<button type="button" aria-label="Dismiss" onclick={() => (insertError = '')}>×</button>
+		</p>
+	{/if}
+	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} {readOnly} {project} bind:palette />{/if}
 	<div class="host" bind:this={host} hidden={activeFile?.kind !== 'text'} style:--editor-font-size="{prefs.fontSize}px"></div>
 	{#if activeFile && activeFile.kind !== 'text'}
 		{#key activeFile.id}<FilePreview file={activeFile} url={project.rawUrl(activeFile)} />{/key}
