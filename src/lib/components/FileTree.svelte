@@ -23,6 +23,8 @@
 	};
 
 	let expanded = $state<string[]>(stored());
+	// ROOT: the empty space below the rows was clicked; new entries and uploads then go to the top level
+	const ROOT = '';
 	let selected = $state<string | null>(null);
 	let editing = $state<Editing | null>(null);
 	let draft = $state('');
@@ -55,7 +57,7 @@
 	// owner only, once someone is named on the project (link-only users get the link role everywhere)
 	const canSetPermissions = $derived(project.details?.role === 'owner' && !!project.members?.members.some((x) => x.via === 'invite'));
 	// nothing clicked yet: the editor's file counts as selected
-	const sel = $derived(byId(selected) ?? byId(activeId));
+	const sel = $derived(selected === ROOT ? null : (byId(selected) ?? byId(activeId)));
 	const tabStop = $derived(sel?.id ?? project.children(null)[0]?.id);
 
 	const siblings = $derived(
@@ -483,6 +485,7 @@
 		class:drop={dropTarget === null}
 		bind:this={tree}
 		{onkeydown}
+		onclick={(e) => e.target === tree && (selected = ROOT)}
 		ondragover={(e) => ondragover(e, null)}
 		ondragleave={(e) => !tree.contains(e.relatedTarget as Node) && (dropTarget = undefined)}
 		{ondrop}

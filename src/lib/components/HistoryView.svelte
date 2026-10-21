@@ -39,6 +39,8 @@
 	.history {
 		display: grid;
 		grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) 300px;
+		/* one row exactly as tall as the view: Safari grew an auto row to a long diff and scrolled the page off */
+		grid-template-rows: minmax(0, 1fr);
 		height: 100%;
 		min-height: 0;
 	}

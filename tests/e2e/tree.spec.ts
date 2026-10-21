@@ -78,6 +78,28 @@ test('new folder expands and collapses (US1-2)', async ({ page }) => {
 	await expect(item(page, 'intro.tex')).toHaveCount(0);
 });
 
+test('after a folder is selected, clicking the empty tree space makes new entries go to the top level', async ({ page }) => {
+	const chapters = await create(page, 'folder', 'chapters');
+	await page.reload();
+	await openEditor(page);
+	await row(page, 'chapters').click();
+	// the tree's empty space below the rows, not a row
+	const box = (await tree(page).boundingBox())!;
+	await page.mouse.click(box.x + box.width / 2, box.y + box.height - 10);
+	await page.getByRole('button', { name: 'New folder' }).click();
+	await page.getByRole('textbox', { name: 'New folder name' }).fill('figures');
+	await page.keyboard.press('Enter');
+	await expect(item(page, 'figures')).toHaveAttribute('aria-level', '1');
+	expect((await files(page)).find((f) => f.name === 'figures')?.parentId).toBeNull();
+
+	// a folder selected again: back to creating inside it
+	await row(page, 'chapters').click();
+	await page.getByRole('button', { name: 'New folder' }).click();
+	await page.getByRole('textbox', { name: 'New folder name' }).fill('part1');
+	await page.keyboard.press('Enter');
+	await expect.poll(async () => (await files(page)).find((f) => f.name === 'part1')?.parentId).toBe(chapters.id);
+});
+
 test('rename via the kebab menu and F2; a folder keeps its contents (US1-3)', async ({ page }) => {
 	const dir = await create(page, 'folder', 'chapters');
 	await create(page, 'text', 'intro.tex', dir.id);

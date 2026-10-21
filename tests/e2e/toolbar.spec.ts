@@ -22,7 +22,7 @@ async function typeAndSelect(page: Page, word: string) {
 	for (const _ of word) await page.keyboard.press('Shift+ArrowLeft');
 }
 
-test('Bold, Italic, Section and Link wrap the selection (US4-1, US4-3, US4-4)', async ({ page }) => {
+test('Bold, Italic and Link wrap the selection (US4-1, US4-4)', async ({ page }) => {
 	await openEditor(page);
 	await typeAndSelect(page, 'important');
 	await button(page, 'Bold').click();
@@ -32,14 +32,37 @@ test('Bold, Italic, Section and Link wrap the selection (US4-1, US4-3, US4-4)', 
 
 	await button(page, 'Italic').click();
 	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{important}}');
-	await button(page, 'Section').click();
-	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{\\section{important}}}');
 
 	await button(page, 'Link').click();
-	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{\\section{\\href{}{important}}}}');
+	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{\\href{}{important}}}');
 	// cursor in the URL braces
 	await page.keyboard.type('url');
-	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{\\section{\\href{url}{important}}}}');
+	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{\\href{url}{important}}}');
+});
+
+test('Ctrl/Cmd+B and Ctrl/Cmd+I toggle bold and italic, one undo step each', async ({ page }) => {
+	await openEditor(page);
+	await typeAndSelect(page, 'word');
+	await page.keyboard.press('ControlOrMeta+b');
+	expect(await text(page)).toBe(SEED + '\\textbf{word}');
+	await page.keyboard.press('ControlOrMeta+i');
+	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{word}}');
+	await page.keyboard.press('ControlOrMeta+i');
+	expect(await text(page)).toBe(SEED + '\\textbf{word}');
+	expect(await selected(page)).toBe('word');
+	await page.keyboard.press('ControlOrMeta+z');
+	expect(await text(page)).toBe(SEED + '\\textbf{\\textit{word}}');
+});
+
+test('Section puts the heading on its own line (US4-3)', async ({ page }) => {
+	await openEditor(page);
+	await typeAndSelect(page, 'Intro');
+	await page.keyboard.press('Home');
+	await page.keyboard.type('Text ');
+	for (const _ of 'Intro') await page.keyboard.press('Shift+ArrowRight');
+	await button(page, 'Section').click();
+	expect(await text(page)).toBe(SEED + 'Text \n\\section{Intro}');
+	expect(await selected(page)).toBe('Intro');
 });
 
 test('Bold with no selection puts the cursor between the braces (US4-2)', async ({ page }) => {

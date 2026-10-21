@@ -57,7 +57,7 @@ test('reader: listed, read-only editor and tree, compiles and downloads; editor 
 	await expect(bob.getByRole('link', { name: 'Untitled project' }).first()).toBeVisible();
 	await openAs(bob, pid);
 	await expect(bob.getByText(READ_ONLY)).toBeVisible();
-	await expect(bob.locator('.cm-content')).toHaveAttribute('contenteditable', 'false');
+	await expect(bob.locator('.cm-content')).toHaveAttribute('aria-readonly', 'true');
 	await expect(bob.getByRole('button', { name: 'Bold' })).toBeDisabled();
 	await expect(bob.getByRole('button', { name: 'New file' })).toBeDisabled();
 	await expect(bob.getByRole('button', { name: 'Upload' })).toBeDisabled();
@@ -82,7 +82,7 @@ test('reader: listed, read-only editor and tree, compiles and downloads; editor 
 	await shareDialog(page);
 	await page.getByRole('combobox', { name: `Role for ${b}` }).selectOption('editor');
 	await expect(bob.getByText(READ_ONLY)).toBeHidden({ timeout: 2_000 });
-	await expect(bob.locator('.cm-content')).toHaveAttribute('contenteditable', 'true');
+	await expect(bob.locator('.cm-content')).not.toHaveAttribute('aria-readonly', 'true');
 	await expect(bob.getByRole('status')).toHaveText('Saved');
 	const marker = `% by-bob-${tag()}`;
 	await bob.locator('.cm-content').press('ControlOrMeta+End');

@@ -155,7 +155,11 @@ async function tabThrough(page: Page, browserName: string) {
 			return { name: `${el.getAttribute('role') ?? el.tagName.toLowerCase()}:${name}`, outline: getComputedStyle(ringed).outlineStyle };
 		});
 		if (info.name.startsWith('body:')) continue; // focus left the page
-		if (info.name.startsWith('textbox:')) continue; // CodeMirror content, ringed by its own theme
+		if (info.name.startsWith('textbox:')) {
+			// CodeMirror content, ringed by its own theme; Tab indents there, Escape first lets the next Tab leave
+			await page.keyboard.press('Escape');
+			continue;
+		}
 		expect(info.outline, info.name).not.toBe('none');
 		seen.add(info.name);
 	}

@@ -40,6 +40,20 @@ describe('wrapping commands', () => {
 		expect(run(section, 'x\n|')).toBe('x\n\\section{|}');
 	});
 
+	it('Section in the middle of a paragraph goes on a line of its own', () => {
+		expect(run(section, 'text [Intro] more')).toBe('text \n\\section{[Intro]}\n more');
+	});
+
+	it('Bold and Italic unwrap what they wrapped, like a word processor', () => {
+		expect(run(bold, 'a \\textbf{[word]} b')).toBe('a [word] b');
+		expect(run(bold, 'a [\\textbf{word}] b')).toBe('a [word] b');
+		expect(run(italic, '\\textit{|}')).toBe('|');
+		// two separate groups selected together are wrapped, not mangled
+		expect(run(bold, '[\\textbf{a} \\textbf{b}]')).toBe('\\textbf{[\\textbf{a} \\textbf{b}]}');
+		// a different command around the selection: wrap
+		expect(run(bold, '\\textit{[w]}')).toBe('\\textit{\\textbf{[w]}}');
+	});
+
 	it('Link puts the selection in the text and the cursor in the URL (US4-4)', () => {
 		expect(run(link, 'see [here] now')).toBe('see \\href{|}{here} now');
 		expect(run(link, '|')).toBe('\\href{|}{}');

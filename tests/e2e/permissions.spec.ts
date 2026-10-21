@@ -84,7 +84,7 @@ test('editor with Reader overrides: set from the tree, listed in Share, locks, r
 	await openAs(bob, pid);
 	await expect(lock(bob, MAIN)).toBeVisible();
 	await expect(bob.getByText(READ_ONLY)).toBeVisible();
-	await expect(bob.locator('.cm-content')).toHaveAttribute('contenteditable', 'false');
+	await expect(bob.locator('.cm-content')).toHaveAttribute('aria-readonly', 'true');
 	const before = await text(bob);
 	await bob.locator('.cm-content').click();
 	await bob.keyboard.type('nope');
@@ -111,7 +111,7 @@ test('editor with Reader overrides: set from the tree, listed in Share, locks, r
 	await expect(lock(bob, 'intro.tex')).toHaveCount(0);
 	await item(bob, 'intro.tex').click();
 	await expect(bob.getByText(READ_ONLY)).toHaveCount(0);
-	await expect(bob.locator('.cm-content')).toHaveAttribute('contenteditable', 'true');
+	await expect(bob.locator('.cm-content')).not.toHaveAttribute('aria-readonly', 'true');
 	await bob.locator('.cm-content').click();
 	await bob.keyboard.type('by bob');
 	await bob.waitForFunction(() => !window.__overtree!.provider.hasUnsyncedChanges && window.__overtree!.view.state.doc.toString() === 'by bob');
@@ -148,11 +148,11 @@ test('reader raised to Editor on chapters/; removing the override restores the p
 	await expect(item(bob, 'new.tex')).toBeVisible();
 	await item(bob, 'intro.tex').click();
 	await expect(bob.getByText(READ_ONLY)).toHaveCount(0);
-	await expect(bob.locator('.cm-content')).toHaveAttribute('contenteditable', 'true');
+	await expect(bob.locator('.cm-content')).not.toHaveAttribute('aria-readonly', 'true');
 	await item(bob, MAIN).click();
 	await expect(bob.getByRole('button', { name: 'New file' })).toBeDisabled();
 	await item(bob, 'intro.tex').click();
-	await expect(bob.locator('.cm-content')).toHaveAttribute('contenteditable', 'true');
+	await expect(bob.locator('.cm-content')).not.toHaveAttribute('aria-readonly', 'true');
 
 	// the owner removes it from the Share dialog: B is a Reader everywhere again within 2 s, no reload
 	await page.getByRole('button', { name: 'Share', exact: true }).click();
@@ -160,7 +160,7 @@ test('reader raised to Editor on chapters/; removing the override restores the p
 	await share.getByText('File permissions (1)').click();
 	await share.getByRole('button', { name: `Remove permission on chapters for ${b}` }).click();
 	await expect(bob.getByText(READ_ONLY)).toBeVisible({ timeout: 2_000 });
-	await expect(bob.locator('.cm-content')).toHaveAttribute('contenteditable', 'false');
+	await expect(bob.locator('.cm-content')).toHaveAttribute('aria-readonly', 'true');
 	await expect(lock(bob, 'chapters')).toBeVisible();
 	await expect(share.getByText(/File permissions/)).toHaveCount(0);
 	await bob.context().close();

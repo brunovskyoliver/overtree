@@ -22,11 +22,12 @@ const latexClasses = tagHighlighter([
 const theme = EditorView.theme(
 	{
 		'&': { height: '100%', backgroundColor: 'var(--bg-editor)', color: '#d7dae0' },
-		'.cm-scroller': { fontFamily: 'var(--font-mono)', fontSize: '13px', lineHeight: '1.65' },
+		'.cm-scroller': { fontFamily: 'var(--font-mono)', fontSize: 'var(--editor-font-size, 13px)', lineHeight: '1.65' },
 		'.cm-content': { caretColor: 'var(--accent-bright)' },
 		'.cm-cursor, .cm-dropCursor': { borderLeft: '2px solid var(--accent-bright)' },
 		'.cm-gutters': { backgroundColor: 'var(--bg-editor)', color: '#6b7385', border: 'none' },
-		'.cm-activeLine': { backgroundColor: '#2a3040' },
+		// translucent: the selection layer sits behind the text, an opaque line background would hide it
+		'.cm-activeLine': { backgroundColor: 'rgb(255 255 255 / 0.045)' },
 		'.cm-activeLineGutter': { backgroundColor: '#2a3040', color: '#c3c8d2' },
 		'&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, ::selection':
 			{ backgroundColor: '#3a4a6b' },
@@ -60,7 +61,8 @@ const theme = EditorView.theme(
 		'.cm-button:hover': { backgroundColor: 'var(--handle)' },
 		'.cm-searchMatch': { backgroundColor: '#5c4a1e', outline: '1px solid #a8862f' },
 		'.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#2f6a31', outline: '1px solid var(--accent-bright)' },
-		'.cm-selectionMatch': { backgroundColor: '#33405a' },
+		// an outline, so other matches never look like the selection itself
+		'.cm-selectionMatch': { backgroundColor: 'transparent', outline: '1px solid #5a6680', borderRadius: '2px' },
 		// completion popup (reference-autocomplete.png): 8 rows of 23 px, label left, kind right
 		'.cm-tooltip.cm-tooltip-autocomplete': {
 			backgroundColor: '#23262e',

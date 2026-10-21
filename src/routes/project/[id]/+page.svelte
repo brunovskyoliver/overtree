@@ -247,6 +247,7 @@
 		position: absolute;
 		inset: 0;
 		z-index: 10;
+		overflow: clip; /* scrollIntoView in the panes must not scroll the page under the top bar */
 	}
 	.noaccess {
 		display: flex;
