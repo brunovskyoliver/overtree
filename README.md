@@ -187,6 +187,8 @@ The sidebar holds the file tree and an outline. Upload files or drag them in fro
 
 Compiling runs `latexmk` (with bibtex or biber as needed). Clicking a log entry opens the file at that line. Ctrl/Cmd+Alt+J jumps from the cursor to the PDF; double-clicking the PDF jumps back to the source. The Layout menu switches between side-by-side, editor only, PDF only and a separate PDF window.
 
+Appearance (Dark, Light or System) is in the account menu and in the editor settings ("Aa" in the toolbar), next to font size and spelling. These settings are saved per browser. The PDF toolbar's "Dark pages" toggle works separately in either appearance.
+
 ### History
 
 Every edit and tree change is logged with its author and grouped into versions: after 5 minutes of quiet, after 30 minutes of continuous editing, or on compile. Open History in the top bar to browse versions, compare with the current state, label a version, download it as a zip, or restore a file or the whole project. A restore is a new edit; it never rewrites history.

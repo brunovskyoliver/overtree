@@ -79,7 +79,7 @@
 	.toggle {
 		border: 0;
 		background: var(--accent);
-		color: var(--text);
+		color: var(--on-accent);
 		font: inherit;
 		cursor: pointer;
 	}
@@ -101,7 +101,7 @@
 		margin-left: 6px;
 		padding: 0 5px;
 		border-radius: 9px;
-		background: #e05252;
+		background: var(--danger);
 		font-size: 12px;
 		line-height: 18px;
 		text-align: center;
@@ -109,7 +109,7 @@
 	.recompile:hover:not(:disabled),
 	.toggle:hover,
 	.toggle[aria-expanded='true'] {
-		background: #367a39;
+		background: var(--accent-hover);
 	}
 	.recompile:disabled {
 		cursor: progress;
@@ -127,7 +127,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.menu [role='group'] {
 		display: flex;

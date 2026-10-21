@@ -84,7 +84,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.menu button {
 		display: flex;
@@ -120,9 +120,9 @@
 		margin: 0;
 		padding: 6px 8px 6px 12px;
 		border-radius: 6px;
-		background: #5a2a2a;
+		background: var(--danger-surface-strong);
 		color: var(--text);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.notice button {
 		padding: 0 4px;

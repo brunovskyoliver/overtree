@@ -76,10 +76,10 @@
 		border-radius: 8px;
 		background: var(--panel);
 		color: var(--text);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+		box-shadow: var(--shadow-dialog);
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.5);
+		background: var(--backdrop);
 	}
 	h2 {
 		margin: 0 0 12px;

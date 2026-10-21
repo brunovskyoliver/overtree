@@ -90,7 +90,7 @@
 		background: var(--panel-raised);
 	}
 	button[aria-current='location'] {
-		background: var(--accent);
+		background: var(--selected);
 	}
 	button:focus-visible {
 		outline-offset: -2px;

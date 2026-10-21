@@ -630,7 +630,7 @@
 		background: var(--panel-raised);
 	}
 	.row.active {
-		background: var(--accent);
+		background: var(--selected);
 	}
 	.row.drop {
 		outline: 2px dashed var(--accent-bright);
@@ -646,7 +646,7 @@
 	.main {
 		padding: 0 5px;
 		border-radius: 8px;
-		background: rgb(0 0 0 / 0.25);
+		background: var(--sunken);
 		color: var(--text-muted);
 		font-size: 11px;
 		line-height: 16px;
@@ -663,14 +663,14 @@
 		font: inherit;
 	}
 	.name-input[aria-invalid='true'] {
-		border-color: #e05252;
+		border-color: var(--danger);
 	}
 	.error {
 		margin: 2px 4px 4px;
 		padding: 4px 8px;
 		border-radius: 4px;
-		background: rgb(224 82 82 / 0.15);
-		color: #f08a8a;
+		background: var(--danger-tint);
+		color: var(--error-alt);
 		font-size: 12px;
 	}
 	.notice {
@@ -750,7 +750,7 @@
 		stroke: none;
 	}
 	.kebab:hover {
-		background: rgb(255 255 255 / 0.1);
+		background: var(--hover-tint);
 	}
 	.row:hover .kebab,
 	[aria-selected='true'] > .row .kebab,
@@ -768,7 +768,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.menu [role='menuitem'] {
 		padding: 5px 14px;
@@ -786,7 +786,7 @@
 		outline: none;
 	}
 	.menu .danger {
-		color: #f08a8a;
+		color: var(--error-alt);
 	}
 	.menu [aria-disabled='true'] {
 		color: var(--text-muted);

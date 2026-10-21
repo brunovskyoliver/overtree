@@ -118,7 +118,7 @@
 		flex: none;
 		margin: 0;
 		padding: 6px 12px;
-		background: #5a2a2a;
+		background: var(--danger-surface-strong);
 		color: var(--text);
 	}
 	.logs-toggle {

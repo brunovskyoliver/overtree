@@ -277,10 +277,10 @@
 		border-radius: 8px;
 		background: var(--panel);
 		color: var(--text);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+		box-shadow: var(--shadow-dialog);
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.5);
+		background: var(--backdrop);
 	}
 	.head {
 		display: flex;
@@ -341,7 +341,7 @@
 		cursor: pointer;
 	}
 	button:hover:not(:disabled) {
-		background: #3a4252;
+		background: var(--button-hover);
 	}
 	button:disabled {
 		opacity: 0.5;
@@ -350,14 +350,15 @@
 	button.primary {
 		border-color: transparent;
 		background: var(--accent);
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	button.primary:hover:not(:disabled) {
-		background: #367a39;
+		background: var(--accent-hover);
 	}
 	.error {
 		margin: 8px 0 0;
-		color: #f28b82;
+		color: var(--error);
 	}
 	.notice {
 		margin: 8px 0 0;
@@ -463,7 +464,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.menu button {
 		height: auto;
@@ -506,7 +507,7 @@
 		width: 16px;
 		height: 16px;
 		border-radius: 50%;
-		background: var(--text);
+		background: var(--on-accent);
 		transition: transform 0.15s;
 	}
 	.switch[aria-checked='true'] .knob {

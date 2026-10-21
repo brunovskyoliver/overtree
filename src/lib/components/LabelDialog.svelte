@@ -75,10 +75,10 @@
 		border-radius: 8px;
 		background: var(--panel);
 		color: var(--text);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+		box-shadow: var(--shadow-dialog);
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.5);
+		background: var(--backdrop);
 	}
 	form {
 		display: flex;
@@ -103,11 +103,11 @@
 		font: inherit;
 	}
 	input[aria-invalid='true'] {
-		border-color: #f28b82;
+		border-color: var(--error);
 	}
 	.error {
 		margin: 8px 0 0;
-		color: #f28b82;
+		color: var(--error);
 	}
 	.buttons {
 		display: flex;
@@ -125,11 +125,12 @@
 		cursor: pointer;
 	}
 	button:hover:not(:disabled) {
-		background: #3a4252;
+		background: var(--button-hover);
 	}
 	button.primary {
 		border-color: transparent;
 		background: var(--accent);
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	button:disabled {

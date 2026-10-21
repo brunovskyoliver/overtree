@@ -327,16 +327,16 @@
 		background: #8a8a8a;
 	}
 	.dot.in-sync {
-		background: #4caf50;
+		background: var(--accent-bright);
 	}
 	.dot.unpushed {
-		background: #e0a526;
+		background: var(--warn-dot);
 	}
 	.dot.failed,
 	.dot.needs-reconnect,
 	.dot.needs-access,
 	.dot.owner-changed {
-		background: #f28b82;
+		background: var(--error);
 	}
 	.spinner {
 		flex: none;
@@ -373,7 +373,7 @@
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 		font-size: 13px;
 	}
 	.popover:focus {
@@ -401,7 +401,7 @@
 		font-weight: 600;
 	}
 	a {
-		color: var(--accent-bright, #8ab4f8);
+		color: var(--accent-bright);
 	}
 	.sha {
 		font-family: var(--mono, monospace);
@@ -410,7 +410,7 @@
 		color: var(--text-muted);
 	}
 	.error {
-		color: #f28b82;
+		color: var(--error);
 	}
 	.note {
 		padding: 8px 10px;
@@ -464,6 +464,7 @@
 	.buttons .primary {
 		border-color: var(--accent);
 		background: var(--accent);
+		color: var(--on-accent);
 	}
 	.buttons button:hover:not(:disabled),
 	.button:hover {
@@ -477,7 +478,7 @@
 		padding: 0;
 		border: 0;
 		background: none;
-		color: var(--accent-bright, #8ab4f8);
+		color: var(--accent-bright);
 		font: inherit;
 		cursor: pointer;
 	}
@@ -495,7 +496,7 @@
 		margin-right: 6px;
 	}
 	.runs li.failed > span:first-child {
-		color: #f28b82;
+		color: var(--error);
 	}
 	.run-error {
 		display: block;

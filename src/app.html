@@ -1,9 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			// 018: the stored appearance picks the theme before first paint (resolveTheme in lib/editor/prefs.svelte.ts;
+			// tests/unit/appearance.test.ts keeps the two in step). It also follows the system on pages without the app.
+			(function () {
+				var light = matchMedia('(prefers-color-scheme: light)');
+				function apply() {
+					var a;
+					try {
+						a = JSON.parse(localStorage.getItem('overtree:editor-prefs') || '{}').appearance;
+					} catch (e) {}
+					document.documentElement.dataset.theme = a === 'light' || (a === 'system' && light.matches) ? 'light' : 'dark';
+				}
+				apply();
+				light.addEventListener('change', apply);
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

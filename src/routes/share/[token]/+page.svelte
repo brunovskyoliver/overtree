@@ -55,7 +55,7 @@
 		padding: 6px 18px;
 		border-radius: 14px;
 		background: var(--accent);
-		color: var(--text);
+		color: var(--on-accent);
 		font-weight: 600;
 		text-decoration: none;
 	}

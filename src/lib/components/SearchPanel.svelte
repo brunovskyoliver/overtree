@@ -372,7 +372,7 @@
 		outline: none; /* the field's border shows focus */
 	}
 	input[aria-invalid='true'] {
-		color: var(--error-text);
+		color: var(--error-alt);
 	}
 	.toggles {
 		display: flex;
@@ -426,8 +426,8 @@
 	.error {
 		padding: 4px 8px;
 		border-radius: 4px;
-		background: var(--error-bg);
-		color: var(--error-text);
+		background: var(--danger-tint);
+		color: var(--error-alt);
 	}
 	.replace-error {
 		margin: 0 8px 6px;
@@ -521,7 +521,7 @@
 	}
 	mark {
 		border-radius: 2px;
-		background: var(--search-match);
+		background: var(--project-search-match);
 		color: inherit;
 	}
 	/* the per-match replace button shows on hover and focus, so rows stay readable in a narrow sidebar */

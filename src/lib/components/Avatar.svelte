@@ -21,7 +21,7 @@
 		place-items: center;
 		overflow: hidden;
 		border-radius: 50%;
-		color: #1b1e26;
+		color: var(--on-presence);
 		font-weight: 600;
 		line-height: 1;
 		user-select: none;

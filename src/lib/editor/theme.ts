@@ -1,4 +1,5 @@
-// Dark editor theme modeled on reference-layout.png.
+// Editor theme modeled on reference-layout.png. Every color is an app.css token, so the same theme serves dark and
+// light; `colorScheme` tells CodeMirror which of its own base styles (tooltips, panels) to use.
 import { syntaxHighlighting } from '@codemirror/language';
 import type { Range } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view';
@@ -21,21 +22,21 @@ const latexClasses = tagHighlighter([
 
 const theme = EditorView.theme(
 	{
-		'&': { height: '100%', backgroundColor: 'var(--bg-editor)', color: '#d7dae0' },
+		'&': { height: '100%', backgroundColor: 'var(--bg-editor)', color: 'var(--editor-text)' },
 		'.cm-scroller': { fontFamily: 'var(--font-mono)', fontSize: 'var(--editor-font-size, 13px)', lineHeight: '1.65' },
 		'.cm-content': { caretColor: 'var(--accent-bright)' },
 		'.cm-cursor, .cm-dropCursor': { borderLeft: '2px solid var(--accent-bright)' },
-		'.cm-gutters': { backgroundColor: 'var(--bg-editor)', color: '#6b7385', border: 'none' },
+		'.cm-gutters': { backgroundColor: 'var(--bg-editor)', color: 'var(--gutter-text)', border: 'none' },
 		// translucent: the selection layer sits behind the text, an opaque line background would hide it
-		'.cm-activeLine': { backgroundColor: 'rgb(255 255 255 / 0.045)' },
-		'.cm-activeLineGutter': { backgroundColor: '#2a3040', color: '#c3c8d2' },
+		'.cm-activeLine': { backgroundColor: 'var(--active-line)' },
+		'.cm-activeLineGutter': { backgroundColor: 'var(--active-gutter)', color: 'var(--active-gutter-text)' },
 		'&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, ::selection':
-			{ backgroundColor: '#3a4a6b' },
+			{ backgroundColor: 'var(--selection)' },
 		'.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
 			backgroundColor: 'transparent',
-			outline: '1px solid #e5c07b'
+			outline: '1px solid var(--bracket-match)'
 		},
-		'.cm-nonmatchingBracket, &.cm-focused .cm-nonmatchingBracket': { outline: '1px solid #e06c75' },
+		'.cm-nonmatchingBracket, &.cm-focused .cm-nonmatchingBracket': { outline: '1px solid var(--bracket-mismatch)' },
 		'.cm-panels': { backgroundColor: 'var(--panel)', color: 'var(--text)' },
 		'.cm-panels-top': { borderBottom: '1px solid var(--border)' },
 		'.cm-panels-bottom': { borderTop: '1px solid var(--border)' },
@@ -59,16 +60,16 @@ const theme = EditorView.theme(
 			padding: '3px 10px'
 		},
 		'.cm-button:hover': { backgroundColor: 'var(--handle)' },
-		'.cm-searchMatch': { backgroundColor: '#5c4a1e', outline: '1px solid #a8862f' },
-		'.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#2f6a31', outline: '1px solid var(--accent-bright)' },
+		'.cm-searchMatch': { backgroundColor: 'var(--search-match)', outline: '1px solid var(--search-match-outline)' },
+		'.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--search-match-current)', outline: '1px solid var(--accent-bright)' },
 		// an outline, so other matches never look like the selection itself
-		'.cm-selectionMatch': { backgroundColor: 'transparent', outline: '1px solid #5a6680', borderRadius: '2px' },
+		'.cm-selectionMatch': { backgroundColor: 'transparent', outline: '1px solid var(--selection-match-outline)', borderRadius: '2px' },
 		// completion popup (reference-autocomplete.png): 8 rows of 23 px, label left, kind right
 		'.cm-tooltip.cm-tooltip-autocomplete': {
-			backgroundColor: '#23262e',
+			backgroundColor: 'var(--popup)',
 			border: '1px solid var(--border)',
 			borderRadius: '2px',
-			boxShadow: '0 4px 12px rgb(0 0 0 / 0.4)'
+			boxShadow: 'var(--shadow-popup)'
 		},
 		'.cm-tooltip.cm-tooltip-autocomplete > ul': {
 			fontFamily: 'var(--font-mono)',
@@ -82,21 +83,23 @@ const theme = EditorView.theme(
 			alignItems: 'center',
 			height: '23px',
 			padding: '0 8px',
-			color: '#d7dae0'
+			color: 'var(--editor-text)'
 		},
 		'.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: 'var(--accent)', color: '#fff' },
 		'.cm-completionLabel': { whiteSpace: 'pre', overflow: 'hidden', textOverflow: 'ellipsis' },
-		'.cm-completionMatchedText': { textDecoration: 'none', fontWeight: '700', color: '#fff' },
+		'.cm-completionMatchedText': { textDecoration: 'none', fontWeight: '700', color: 'var(--editor-text-strong)' },
+		'li[aria-selected] .cm-completionMatchedText': { color: 'inherit' },
 		'.cm-completionDetail': { marginLeft: '12px', color: 'var(--text-muted)', fontStyle: 'normal', overflow: 'hidden', textOverflow: 'ellipsis' },
 		'.cm-completionKind': { marginLeft: 'auto', paddingLeft: '16px', color: 'var(--text-muted)' },
-		'li[aria-selected] .cm-completionKind': { color: '#c9d6c9' },
-		// remote cursors (y-codemirror): the name label sits on the caret in the user's color (R9 palette, dark text)
-		'.cm-ySelectionCaret': { borderLeftWidth: '2px', borderRightWidth: '0', marginRight: '0' },
+		'li[aria-selected] .cm-completionKind': { color: 'var(--completion-kind-selected)' },
+		// remote cursors (y-codemirror): the name label sits on the caret in the user's color (R9 palette, dark text); the light
+		// theme darkens caret and label through a filter and turns the label text white (plan.md, presence contrast)
+		'.cm-ySelectionCaret': { borderLeftWidth: '2px', borderRightWidth: '0', marginRight: '0', filter: 'var(--presence-caret-filter)' },
 		'.cm-ySelectionInfo': {
 			top: '-1.35em',
 			padding: '1px 5px',
 			borderRadius: '3px 3px 3px 0',
-			color: '#1b1e26',
+			color: 'var(--presence-label-text)',
 			fontFamily: 'var(--font-ui)',
 			fontSize: '11px',
 			fontWeight: '600'
@@ -127,18 +130,20 @@ const theme = EditorView.theme(
 			borderRight: '4px solid transparent',
 			borderTop: '5px solid var(--tc-color)'
 		},
-		'.tok-command': { color: '#d27fb3' },
-		'.tok-argument': { color: '#e5a85c', fontStyle: 'italic' },
-		'.tok-math': { color: '#7fc8a9' },
-		'.tok-comment': { color: '#5f6b85' },
-		'.tok-bracket': { color: '#c3c8d2' },
-		'.tok-number': { color: '#d19a66' },
-		'.tok-invalid': { color: '#e06c75' }
-	},
-	{ dark: true }
+		'.tok-command': { color: 'var(--syntax-command)' },
+		'.tok-argument': { color: 'var(--syntax-argument)', fontStyle: 'italic' },
+		'.tok-math': { color: 'var(--syntax-math)' },
+		'.tok-comment': { color: 'var(--syntax-comment)' },
+		'.tok-bracket': { color: 'var(--syntax-bracket)' },
+		'.tok-number': { color: 'var(--syntax-number)' },
+		'.tok-invalid': { color: 'var(--syntax-invalid)' }
+	}
 );
 
 export const editorTheme = [theme, syntaxHighlighting(latexClasses)];
+
+/** CodeMirror's base styles for the resolved app theme; goes in a compartment next to `editorTheme`. */
+export const colorScheme = (theme: 'dark' | 'light') => EditorView.darkTheme.of(theme === 'dark');
 
 const LABEL_MS = 2000;
 

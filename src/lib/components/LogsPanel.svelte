@@ -99,10 +99,10 @@
 		background: var(--panel);
 	}
 	.error {
-		--stripe: #e05252;
+		--stripe: var(--danger);
 	}
 	.warning {
-		--stripe: #e0a030;
+		--stripe: var(--warn-stripe);
 	}
 	.typesetting {
 		--stripe: var(--text-muted);

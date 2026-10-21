@@ -3,7 +3,7 @@
 	import type { StateCommand } from '@codemirror/state';
 	import { bold, figuresCommand, italic, link, section, symbolCommand, tableCommand, type FigureSpec } from '#lib/editor/commands.ts';
 	import { insertStep } from '#lib/editor/figures.ts';
-	import { FONT_SIZES, prefs } from '#lib/editor/prefs.svelte.ts';
+	import { APPEARANCES, FONT_SIZES, prefs, type Appearance } from '#lib/editor/prefs.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { wordCount } from '#lib/editor/words.ts';
 	import type { Project } from '#lib/project.svelte.ts';
@@ -158,6 +158,12 @@
 			Check spelling
 			<input type="checkbox" checked={prefs.spellcheck} onchange={(e) => prefs.setSpellcheck(e.currentTarget.checked)} />
 		</label>
+		<label class="row">
+			Appearance
+			<select value={prefs.appearance} onchange={(e) => prefs.setAppearance(e.currentTarget.value as Appearance)}>
+				{#each APPEARANCES as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
+			</select>
+		</label>
 	</div>
 </div>
 {#if palette && !readOnly}<SymbolPalette oninsert={insertSymbol} onclose={closePalette} />{/if}
@@ -207,7 +213,7 @@
 		border-radius: 6px;
 		background: var(--panel);
 		color: var(--text);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 		font-size: 13px;
 	}
 	.row {
@@ -226,6 +232,15 @@
 		height: 24px;
 		border: 1px solid var(--border);
 		font-size: 15px;
+	}
+	select {
+		height: 24px;
+		padding: 0 4px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		background: var(--bg-editor);
+		color: var(--text);
+		font: inherit;
 	}
 	output {
 		min-width: 36px;

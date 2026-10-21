@@ -277,20 +277,20 @@
 		line-height: 16px;
 	}
 	.badge.added {
-		background: #23402a;
-		color: #81c995;
+		background: var(--success-surface);
+		color: var(--success-text);
 	}
 	.badge.deleted {
-		background: #4a2a2a;
-		color: #f28b82;
+		background: var(--danger-surface);
+		color: var(--error);
 	}
 	.badge.edited {
-		background: #2a3b55;
-		color: #8ab4f8;
+		background: var(--info-surface);
+		color: var(--info-text);
 	}
 	.badge.renamed {
-		background: #44391f;
-		color: #fbbc04;
+		background: var(--warn-surface);
+		color: var(--warn-text);
 	}
 	.diff {
 		display: flex;
@@ -347,7 +347,7 @@
 	}
 	.toggle button[aria-pressed='true'] {
 		background: var(--accent);
-		color: var(--text);
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	.toggle button:focus-visible {
@@ -373,7 +373,7 @@
 		cursor: pointer;
 	}
 	.action:hover:not(:disabled) {
-		background: #3a4252;
+		background: var(--button-hover);
 	}
 	.action:disabled {
 		opacity: 0.6;
@@ -383,12 +383,12 @@
 		position: relative;
 		padding: 6px 36px 6px 12px;
 		border-bottom: 1px solid var(--border);
-		background: #23402a;
+		background: var(--success-surface);
 		font-size: 13px;
 	}
 	.restore-note.error {
-		background: #4a2a2a;
-		color: #f28b82;
+		background: var(--danger-surface);
+		color: var(--error);
 	}
 	.restore-note p {
 		margin: 2px 0;
@@ -440,7 +440,7 @@
 		color: var(--text-muted);
 	}
 	.error {
-		color: #f28b82;
+		color: var(--error);
 	}
 	.file {
 		margin-bottom: 16px;
