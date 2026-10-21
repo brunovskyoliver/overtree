@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `track_changes` integer DEFAULT false NOT NULL;

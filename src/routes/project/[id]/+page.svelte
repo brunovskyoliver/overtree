@@ -117,6 +117,11 @@
 	layout.mirror(compile);
 	onMount(() => () => layout.destroy());
 
+	// track changes (013): the switch is the project's (everyone's), the review panel this tab's
+	let reviewOpen = $state(false);
+	// ponytail: a refused or failed toggle only leaves the switch as it was; no message
+	const toggleTrack = () => project.details && void project.setTrackChanges(!project.details.trackChanges);
+
 	let workspace = $state<ReturnType<typeof Workspace>>();
 	/** The editor's file and cursor line, for SyncTeX's "→". */
 	function cursor() {
@@ -170,6 +175,10 @@
 		onjump={jumpTo}
 		offline={!ended && session.offline}
 		history={project.details && !ended ? { on: history.open, toggle: () => history.toggle() } : undefined}
+		track={project.details && !ended
+			? { on: project.details.trackChanges, canToggle: project.details.permissions.canEdit, toggle: toggleTrack }
+			: undefined}
+		review={project.details && !ended ? { on: reviewOpen, toggle: () => (reviewOpen = !reviewOpen) } : undefined}
 		layout={project.details && !ended ? layout : undefined}
 		github={githubOn && project.details && !ended ? { state: github, open: (opts) => githubDialog?.open(opts) } : undefined}
 	/>
@@ -212,6 +221,8 @@
 						onLocalEdit={() => (compile.onLocalEdit(), githubOn && github.touched())}
 						onCompile={() => compile.compile()}
 						onSyncForward={() => workspace?.forward()}
+						review={reviewOpen}
+						onreviewclose={() => (reviewOpen = false)}
 					/>
 					{#snippet outline()}
 						<Outline {editor} enabled={outlined} />
