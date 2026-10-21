@@ -372,7 +372,7 @@
 		border-bottom: 0;
 	}
 	tbody tr:hover {
-		background: rgb(255 255 255 / 0.02);
+		background: var(--row-hover);
 	}
 	tr.off td:not(.actions) {
 		opacity: 0.55;
@@ -405,14 +405,14 @@
 		font-size: 12px;
 	}
 	.badge.admin {
-		background: var(--accent);
+		background: var(--selected);
 	}
 	.status {
 		background: none;
 		color: var(--accent-bright);
 	}
 	.status.disabled {
-		color: #f28b82;
+		color: var(--error);
 	}
 	.actions {
 		text-align: right;
@@ -437,7 +437,7 @@
 		cursor: pointer;
 	}
 	button:not([role='tab']):hover:not(:disabled) {
-		background: #3a4252;
+		background: var(--button-hover);
 	}
 	button:disabled {
 		opacity: 0.45;
@@ -445,15 +445,17 @@
 	}
 	button.danger:hover:not(:disabled) {
 		border-color: transparent;
-		background: #b23b3b;
+		background: var(--danger-button);
+		color: var(--on-accent);
 	}
 	button.primary {
 		border-color: transparent;
 		background: var(--accent);
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	button.primary:hover:not(:disabled) {
-		background: #367a39;
+		background: var(--accent-hover);
 	}
 	.hint {
 		margin: 0 0 12px;
@@ -461,7 +463,7 @@
 	}
 	.error {
 		margin: 0 0 12px;
-		color: #f28b82;
+		color: var(--error);
 	}
 	.settings {
 		display: flex;
@@ -512,7 +514,7 @@
 		resize: vertical;
 	}
 	textarea[aria-invalid='true'] {
-		border-color: #f28b82;
+		border-color: var(--error);
 	}
 	.save {
 		display: flex;

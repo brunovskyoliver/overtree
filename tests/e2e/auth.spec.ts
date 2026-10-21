@@ -28,11 +28,11 @@ plain('signed out: any page goes to sign-in, and signing in returns to the reque
 	await expect(page.getByRole('status')).toHaveText('Saved');
 });
 
-plain('a redirect to another site is ignored', async ({ page }) => {
+plain('a redirect to another site is ignored', async ({ page, baseURL }) => {
 	await page.goto('/sign-in?redirect=//example.com/x');
 	await page.getByLabel('Test email').fill(USER);
 	await page.getByRole('button', { name: 'Test sign-in' }).click();
-	await expect(page).toHaveURL((u) => u.host === '127.0.0.1:4173' && !u.pathname.startsWith('/sign-in'));
+	await expect(page).toHaveURL((u) => u.host === new URL(baseURL!).host && !u.pathname.startsWith('/sign-in'));
 });
 
 test('account menu shows the user, reload keeps the session (scenarios 2, 3)', async ({ page }) => {
@@ -98,21 +98,21 @@ test('sign out ends the session and disconnects the editor (scenario 4)', async 
 	await expect(page).toHaveURL(/\/sign-in\?redirect=/);
 });
 
-test('without a session the API and the live connection refuse (scenario 5)', async ({ page, pid, playwright }) => {
+test('without a session the API and the live connection refuse (scenario 5)', async ({ page, pid, playwright, baseURL }) => {
 	const { mainFileId } = await (await page.request.get(api(pid))).json();
-	const anon = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:4173' });
+	const anon = await playwright.request.newContext({ baseURL });
 	for (const path of ['/api/me', '/api/projects', api(pid), `${api(pid)}/files`, `${api(pid)}/files/${mainFileId}/raw`, `${api(pid)}/zip`, `${api(pid)}/compile/output.pdf`]) {
 		const res = await anon.get(path);
 		expect(res.status(), path).toBe(401);
 		expect(await res.text()).not.toContain('documentclass');
 	}
-	expect((await anon.post(`${api(pid)}/compile`, { headers: { origin: 'http://127.0.0.1:4173' } })).status()).toBe(401);
+	expect((await anon.post(`${api(pid)}/compile`, { headers: { origin: baseURL! } })).status()).toBe(401);
 	await anon.dispose();
 
 	// a raw provider without a token, and one of a user without access
 	for (const token of [null, 'test:stranger@test.local']) {
 		const doc = new Y.Doc();
-		const provider = new HocuspocusProvider({ url: 'ws://127.0.0.1:4173/collab', name: mainFileId, document: doc, token });
+		const provider = new HocuspocusProvider({ url: `${baseURL!.replace(/^http/, 'ws')}/collab`, name: mainFileId, document: doc, token });
 		const outcome = await new Promise<string>((resolve) => {
 			provider.on('authenticationFailed', () => resolve('authenticationFailed'));
 			provider.on('synced', () => resolve('synced'));

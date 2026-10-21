@@ -222,7 +222,7 @@
 	}
 	:global(.handle[data-active]),
 	:global(.handle:hover) {
-		background-color: #5a6375;
+		background-color: var(--handle-hover);
 	}
 
 	.collapse {
@@ -259,7 +259,7 @@
 		right: 24px;
 	}
 	.collapse:hover {
-		background: #5a6375;
+		background: var(--handle-hover);
 	}
 	.collapse.left {
 		left: 0;

@@ -342,7 +342,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 		text-align: left;
 	}
 	.menu button {
@@ -396,7 +396,7 @@
 		border-bottom: 0;
 	}
 	tbody tr:hover {
-		background: rgb(255 255 255 / 0.02);
+		background: var(--row-hover);
 	}
 	.title {
 		width: 45%;
@@ -427,7 +427,7 @@
 		font-size: 12px;
 	}
 	.badge.owner {
-		background: var(--accent);
+		background: var(--selected);
 	}
 	.actions {
 		width: 1%;
@@ -462,7 +462,7 @@
 	}
 	.error {
 		margin: 0 0 12px;
-		color: #f28b82;
+		color: var(--error);
 	}
 	button {
 		display: inline-flex;
@@ -483,10 +483,11 @@
 	button.primary {
 		border-color: transparent;
 		background: var(--accent);
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	button.primary:hover:not(:disabled) {
-		background: #367a39;
+		background: var(--accent-hover);
 	}
 	dialog {
 		width: 400px;
@@ -495,10 +496,10 @@
 		border-radius: 8px;
 		background: var(--panel);
 		color: var(--text);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+		box-shadow: var(--shadow-dialog);
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.5);
+		background: var(--backdrop);
 	}
 	dialog h2 {
 		margin: 0;
@@ -525,7 +526,7 @@
 		font: inherit;
 	}
 	dialog input[aria-invalid='true'] {
-		border-color: #f28b82;
+		border-color: var(--error);
 	}
 	dialog .error {
 		margin: 8px 0 0;

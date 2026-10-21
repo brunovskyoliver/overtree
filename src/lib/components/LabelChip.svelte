@@ -60,8 +60,8 @@
 		overflow: hidden;
 		border: 0;
 		border-radius: 10px;
-		background: #2a3b55;
-		color: #8ab4f8;
+		background: var(--info-surface);
+		color: var(--info-text);
 		font: inherit;
 		font-size: 11px;
 		text-overflow: ellipsis;
@@ -72,7 +72,7 @@
 	}
 	button.chip:hover,
 	button.chip[aria-expanded='true'] {
-		background: #34496a;
+		background: var(--info-surface-hover);
 	}
 	.menu {
 		position: absolute;
@@ -86,7 +86,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.menu button {
 		padding: 5px 12px;
@@ -104,6 +104,6 @@
 		outline: none;
 	}
 	.menu button.danger {
-		color: #f28b82;
+		color: var(--error);
 	}
 </style>

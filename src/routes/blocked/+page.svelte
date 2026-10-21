@@ -46,6 +46,6 @@
 		cursor: pointer;
 	}
 	button:hover {
-		background: #3a4252;
+		background: var(--button-hover);
 	}
 </style>

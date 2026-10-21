@@ -1,4 +1,6 @@
-/* Dark theme tokens, sampled from reference-layout.png */
+/* Theme tokens. Dark is the default, sampled from reference-layout.png; the light set below overrides the same
+   names when <html data-theme="light"> (set before paint by the script in app.html, then by prefs.svelte.ts).
+   Components take every color from here: a new color gets a token in both sets, not a literal. */
 :root {
 	color-scheme: dark;
 	--bg: #1b1e26; /* top bar, rails */
@@ -7,14 +9,157 @@
 	--panel-raised: #2f3542; /* hover, active line */
 	--border: #3a404d;
 	--handle: #4b5363; /* pane borders and drag handles */
+	--handle-hover: #5a6375;
 	--pdf: #313a4a; /* PDF pane */
-	--accent: #2f6a31; /* selected item, primary buttons */
-	--accent-bright: #4caf50;
+	--accent: #2f6a31; /* primary buttons */
+	--accent-hover: #367a39;
+	--accent-bright: #4caf50; /* checks, switches, links, the caret */
+	--on-accent: #e6e8ec; /* text on accent and danger buttons */
+	--selected: #2f6a31; /* current file, outline entry, role badges */
 	--text: #e6e8ec;
 	--text-muted: #9aa1ad;
 	--focus: #7cb8ff;
+	--button-hover: #3a4252; /* secondary buttons */
+	--hover-tint: rgb(255 255 255 / 0.1); /* small icon buttons on any surface */
+	--row-hover: rgb(255 255 255 / 0.02); /* table rows */
+	--sunken: rgb(0 0 0 / 0.25); /* inputs set into a panel */
+	--shadow-menu: 0 6px 18px rgb(0 0 0 / 0.4);
+	--shadow-popup: 0 4px 12px rgb(0 0 0 / 0.4);
+	--shadow-dialog: 0 10px 30px rgb(0 0 0 / 0.5);
+	--backdrop: rgb(0 0 0 / 0.5);
+
+	/* states */
+	--error: #f28b82; /* error text, invalid field borders */
+	--error-alt: #f08a8a; /* file tree errors */
+	--danger: #e05252; /* error badges and stripes */
+	--danger-tint: rgb(224 82 82 / 0.15);
+	--danger-surface: #4a2a2a; /* offline pill, deleted, failed notes */
+	--danger-surface-strong: #5a2a2a; /* banners */
+	--danger-button: #b23b3b;
+	--danger-button-hover: #c64646;
+	--success-surface: #23402a;
+	--success-text: #81c995;
+	--info-surface: #2a3b55;
+	--info-surface-hover: #34496a;
+	--info-text: #8ab4f8;
+	--warn-surface: #44391f;
+	--warn-tint: rgba(251, 188, 4, 0.15);
+	--warn-text: #fbbc04;
+	--warn-text-alt: #f0c36d; /* GitHub dialog notes */
+	--warn-badge: #f0b35a; /* editor tab badge */
+	--warn-stripe: #e0a030; /* log entries */
+	--warn-dot: #e0a526; /* GitHub status */
+	--on-presence: #1b1e26; /* initials on a presence color (presence.ts), both themes */
+
+	/* editor (lib/editor/theme.ts) */
+	--editor-text: #d7dae0;
+	--editor-text-strong: #fff; /* matched letters in completions */
+	--gutter-text: #6b7385;
+	--active-line: rgb(255 255 255 / 0.045);
+	--active-gutter: #2a3040;
+	--active-gutter-text: #c3c8d2;
+	--selection: #3a4a6b;
+	--bracket-match: #e5c07b;
+	--bracket-mismatch: #e06c75;
+	--search-match: #5c4a1e;
+	--search-match-outline: #a8862f;
+	--search-match-current: #2f6a31;
+	--selection-match-outline: #5a6680;
+	--popup: #23262e; /* completion list */
+	--completion-kind-selected: #c9d6c9;
+	--presence-label-text: #1b1e26;
+	--presence-caret-filter: none;
+	--syntax-command: #d27fb3;
+	--syntax-argument: #e5a85c;
+	--syntax-math: #7fc8a9;
+	--syntax-comment: #5f6b85;
+	--syntax-bracket: #c3c8d2;
+	--syntax-number: #d19a66;
+	--syntax-invalid: #e06c75;
+
 	--font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* pdf.js's viewer CSS (project page) sets :root { color-scheme: light dark }: native controls follow the theme */
+:root[data-theme='dark'] {
+	color-scheme: dark;
+}
+
+/* Light set: text and syntax colors meet WCAG AA (4.5:1) on their surfaces (specs/018-light-theme/plan.md) */
+:root[data-theme='light'] {
+	color-scheme: light;
+	--bg: #eceef2;
+	--bg-editor: #ffffff;
+	--panel: #f5f6f8;
+	--panel-raised: #e3e6ec;
+	--border: #d2d6dd;
+	--handle: #c3c8d1;
+	--handle-hover: #9aa2af;
+	--pdf: #d9dde4;
+	--accent: #2e7d32;
+	--accent-hover: #276b2b;
+	--accent-bright: #22722a;
+	--on-accent: #ffffff;
+	--selected: #cfe8d0;
+	--text: #1f2328;
+	--text-muted: #555c67;
+	--focus: #1a66cc;
+	--button-hover: #d8dce3;
+	--hover-tint: rgb(0 0 0 / 0.08);
+	--row-hover: rgb(0 0 0 / 0.03);
+	--sunken: rgb(0 0 0 / 0.05);
+	--shadow-menu: 0 6px 18px rgb(0 0 0 / 0.16);
+	--shadow-popup: 0 4px 12px rgb(0 0 0 / 0.16);
+	--shadow-dialog: 0 10px 30px rgb(0 0 0 / 0.22);
+	--backdrop: rgb(0 0 0 / 0.3);
+
+	--error: #c5221f;
+	--error-alt: #c5221f;
+	--danger: #d32f2f;
+	--danger-tint: rgb(211 47 47 / 0.1);
+	--danger-surface: #fbe1df;
+	--danger-surface-strong: #f7d2ce;
+	--danger-button: #c62828;
+	--danger-button-hover: #b02020;
+	--success-surface: #dcefdc;
+	--success-text: #1e6b2e;
+	--info-surface: #dde8fb;
+	--info-surface-hover: #c8d9f6;
+	--info-text: #1a56b8;
+	--warn-surface: #fbefcc;
+	--warn-tint: rgb(251 188 4 / 0.2);
+	--warn-text: #7a5000;
+	--warn-text-alt: #7a5000;
+	--warn-badge: #8a5a00;
+	--warn-stripe: #c98a00;
+	--warn-dot: #c98a00;
+
+	--editor-text: #1f2328;
+	--editor-text-strong: #000;
+	--gutter-text: #6b7280;
+	--active-line: rgb(0 0 0 / 0.035);
+	--active-gutter: #eef0f4;
+	--active-gutter-text: #1f2328;
+	--selection: #c9d8f5;
+	--bracket-match: #b58900;
+	--bracket-mismatch: #d03a3a;
+	--search-match: #fbe7a6;
+	--search-match-outline: #c9a227;
+	--search-match-current: #b5e0b8;
+	--selection-match-outline: #9aa3b5;
+	--popup: #ffffff;
+	--completion-kind-selected: #ffffff;
+	/* pastel presence colors are too faint on white: darken caret and label, white label text */
+	--presence-label-text: #ffffff;
+	--presence-caret-filter: brightness(0.55);
+	--syntax-command: #a32b84;
+	--syntax-argument: #8f5200;
+	--syntax-math: #00745a;
+	--syntax-comment: #636a76;
+	--syntax-bracket: #4b5260;
+	--syntax-number: #a14a00;
+	--syntax-invalid: #c5221f;
 }
 
 *,

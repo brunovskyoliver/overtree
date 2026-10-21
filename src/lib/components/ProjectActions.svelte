@@ -95,7 +95,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.menu button {
 		padding: 5px 12px;
@@ -112,6 +112,6 @@
 		outline: none;
 	}
 	.menu button.danger {
-		color: #f28b82;
+		color: var(--error);
 	}
 </style>

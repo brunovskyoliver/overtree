@@ -90,7 +90,7 @@
 		border-radius: 4px;
 	}
 	.close:hover {
-		background: rgb(255 255 255 / 0.1);
+		background: var(--hover-tint);
 	}
 	button:focus-visible {
 		outline-offset: -2px;
@@ -111,6 +111,6 @@
 		color: var(--text-muted);
 	}
 	.badge.offline {
-		color: #f0b35a;
+		color: var(--warn-badge);
 	}
 </style>

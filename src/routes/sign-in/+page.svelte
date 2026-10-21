@@ -4,29 +4,34 @@
 	import { PUBLIC_CLERK_PUBLISHABLE_KEY, PUBLIC_TEST_HOOKS } from '$app/env/public';
 	import { auth, loadClerk, safeRedirect, testSignIn } from '#lib/auth.svelte.ts';
 
-	// contracts/ui.md "Other pages": Clerk's sign-in widget on the dark background (research R1); with test hooks
+	// contracts/ui.md "Other pages": Clerk's sign-in widget on the app background (research R1); with test hooks
 	// also a test-only form that sets the bypass cookie (research R4)
 	const redirect = safeRedirect(page.url.searchParams.get('redirect'));
 	let widget = $state<HTMLDivElement>();
 	let error = $state('');
 	let email = $state('');
 
-	// theme tokens from app.css; Clerk wants literal colors
-	const appearance = {
-		variables: {
-			colorPrimary: '#2f6a31',
-			colorPrimaryForeground: '#e6e8ec',
-			colorBackground: '#262b36',
-			colorForeground: '#e6e8ec',
-			colorMutedForeground: '#9aa1ad',
-			colorInput: '#1e2230',
-			colorInputForeground: '#e6e8ec',
-			colorBorder: '#3a404d',
-			colorRing: '#7cb8ff',
-			fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-			borderRadius: '6px'
-		}
-	};
+	// theme tokens from app.css, read when the widget mounts (Clerk wants literal colors)
+	// ponytail: a system light/dark switch while this page is open recolors the page, not the widget; reload fixes it
+	function appearance() {
+		const css = getComputedStyle(document.documentElement);
+		const token = (name: string) => css.getPropertyValue(name).trim();
+		return {
+			variables: {
+				colorPrimary: token('--accent'),
+				colorPrimaryForeground: token('--on-accent'),
+				colorBackground: token('--panel'),
+				colorForeground: token('--text'),
+				colorMutedForeground: token('--text-muted'),
+				colorInput: token('--bg-editor'),
+				colorInputForeground: token('--text'),
+				colorBorder: token('--border'),
+				colorRing: token('--focus'),
+				fontFamily: token('--font-ui'),
+				borderRadius: '6px'
+			}
+		};
+	}
 
 	onMount(() => {
 		let el: HTMLDivElement | undefined;
@@ -44,7 +49,7 @@
 					withSignUp: true,
 					forceRedirectUrl: redirect,
 					signUpForceRedirectUrl: redirect,
-					appearance: { theme: dark, ...appearance }
+					appearance: { ...(document.documentElement.dataset.theme === 'light' ? {} : { theme: dark }), ...appearance() }
 				});
 			} catch (e) {
 				error = `Sign-in could not load: ${(e as Error).message}`;
@@ -98,7 +103,7 @@
 	}
 	p[role='alert'] {
 		margin: 0;
-		color: #f28b82;
+		color: var(--error);
 	}
 	.test {
 		display: flex;
@@ -122,7 +127,7 @@
 		border: 0;
 		border-radius: 13px;
 		background: var(--accent);
-		color: var(--text);
+		color: var(--on-accent);
 		font: inherit;
 		font-weight: 600;
 		cursor: pointer;

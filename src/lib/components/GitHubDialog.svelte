@@ -402,13 +402,13 @@
 		border-radius: 8px;
 		background: var(--panel);
 		color: var(--text);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+		box-shadow: var(--shadow-dialog);
 	}
 	dialog:focus {
 		outline: none;
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.5);
+		background: var(--backdrop);
 	}
 	.head {
 		display: flex;
@@ -437,10 +437,10 @@
 		font-size: 12px;
 	}
 	.error {
-		color: #f28b82;
+		color: var(--error);
 	}
 	.warn {
-		color: #f0c36d;
+		color: var(--warn-text-alt);
 	}
 	.close {
 		/* the dialog's button rule makes it inline-flex: center the × in its box */
@@ -568,7 +568,7 @@
 	}
 	button:hover:not(:disabled),
 	.button:hover {
-		background: #3a4252;
+		background: var(--button-hover);
 	}
 	button:disabled {
 		opacity: 0.5;
@@ -577,13 +577,14 @@
 	.primary {
 		border-color: transparent;
 		background: var(--accent);
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	.primary:hover:not(:disabled) {
-		background: #367a39;
+		background: var(--accent-hover);
 	}
 	button.danger {
-		color: #f28b82;
+		color: var(--error);
 	}
 	.link-button {
 		display: inline;

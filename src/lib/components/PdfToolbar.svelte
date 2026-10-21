@@ -164,7 +164,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.menu button {
 		position: relative;

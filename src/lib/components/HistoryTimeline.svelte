@@ -375,7 +375,7 @@
 		color: var(--text-muted);
 	}
 	.restore {
-		color: #fbbc04;
+		color: var(--warn-text);
 	}
 	.gh {
 		fill: var(--text);
@@ -399,8 +399,8 @@
 	.warn {
 		padding: 1px 6px;
 		border-radius: 8px;
-		background: rgba(251, 188, 4, 0.15);
-		color: #fbbc04;
+		background: var(--warn-tint);
+		color: var(--warn-text);
 		font-size: 11px;
 	}
 	.labels {
@@ -414,7 +414,7 @@
 		font-size: 13px;
 	}
 	.error {
-		color: #f28b82;
+		color: var(--error);
 	}
 	.end {
 		height: 1px;

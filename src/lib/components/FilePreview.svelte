@@ -59,7 +59,7 @@
 		padding: 3px 10px;
 		border-radius: 4px;
 		background: var(--accent);
-		color: var(--text);
+		color: var(--on-accent);
 		text-decoration: none;
 	}
 	.download:hover {

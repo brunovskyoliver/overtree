@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { auth, signOut } from '#lib/auth.svelte.ts';
+	import { APPEARANCES, prefs, type Appearance } from '#lib/editor/prefs.svelte.ts';
 	import type { GitHub } from '#lib/github.svelte.ts';
 	import type { Layout } from '#lib/layout.svelte.ts';
 	import { Menu } from '#lib/menu.svelte.ts';
@@ -92,6 +93,11 @@
 	function go(href: string) {
 		m.open = false;
 		location.assign(href);
+	}
+
+	function appearance(a: Appearance) {
+		m.close();
+		prefs.setAppearance(a);
 	}
 </script>
 
@@ -209,6 +215,15 @@
 					{#if auth.me.role === 'admin'}
 						<button type="button" role="menuitem" tabindex="-1" onclick={() => go('/admin')}>Admin</button>
 					{/if}
+					<div class="group" role="group" aria-labelledby="appearance-label">
+						<span id="appearance-label" class="group-label">Appearance</span>
+						{#each APPEARANCES as a (a.value)}
+							<button type="button" role="menuitemradio" tabindex="-1" aria-checked={prefs.appearance === a.value} onclick={() => appearance(a.value)}>
+								<span class="check" aria-hidden="true">{prefs.appearance === a.value ? '✓' : ''}</span>
+								{a.label}
+							</button>
+						{/each}
+					</div>
 					<button type="button" role="menuitem" tabindex="-1" onclick={() => ((m.open = false), signOut())}>Sign out</button>
 				</div>
 			{/if}
@@ -282,7 +297,7 @@
 		text-align: center;
 	}
 	.rename[aria-invalid='true'] {
-		border-color: #f28b82;
+		border-color: var(--error);
 	}
 	.right {
 		display: flex;
@@ -327,7 +342,7 @@
 	.offline {
 		padding: 3px 10px;
 		border-radius: 12px;
-		background: #4a2a2a;
+		background: var(--danger-surface);
 		color: var(--text);
 		font-size: 12px;
 		white-space: nowrap;
@@ -368,13 +383,13 @@
 		border: 0;
 		border-radius: 14px;
 		background: var(--accent);
-		color: var(--text);
+		color: var(--on-accent);
 		font: inherit;
 		font-weight: 600;
 		cursor: pointer;
 	}
 	.share:hover {
-		background: #367a39;
+		background: var(--accent-hover);
 	}
 	.share svg {
 		fill: none;
@@ -413,7 +428,7 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--panel);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+		box-shadow: var(--shadow-menu);
 	}
 	.who {
 		display: flex;
@@ -442,5 +457,27 @@
 	.menu button:focus-visible {
 		background: var(--panel-raised);
 		outline: none;
+	}
+	.group {
+		display: flex;
+		flex-direction: column;
+		margin: 4px 0;
+		padding: 4px 0;
+		border-block: 1px solid var(--border);
+	}
+	.group-label {
+		padding: 2px 12px 4px;
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.group button {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding-left: 8px;
+	}
+	.check {
+		width: 14px;
+		color: var(--accent-bright);
 	}
 </style>

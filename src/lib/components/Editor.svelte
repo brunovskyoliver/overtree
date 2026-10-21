@@ -38,7 +38,7 @@
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
 	import { bold, italic } from '#lib/editor/commands.ts';
 	import { prefs } from '#lib/editor/prefs.svelte.ts';
-	import { cursorLabels, editorTheme } from '#lib/editor/theme.ts';
+	import { colorScheme, cursorLabels, editorTheme } from '#lib/editor/theme.ts';
 	import { followRemoteTyping, newlineBelow } from '#lib/editor/follow.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { isLatexName } from '#lib/files.ts';
@@ -148,6 +148,9 @@
 	const spellOn: Extension = EditorView.contentAttributes.of({ spellcheck: 'true' });
 	const spellOff: Extension = [];
 	const spelling = new Compartment();
+	// CodeMirror's dark or light base styles, after the app theme (018)
+	const schemes = { dark: colorScheme('dark'), light: colorScheme('light') };
+	const scheme = new Compartment();
 	// Y.UndoManager changes the Yjs text directly, past CodeMirror's readOnly: no undo in a read-only file
 	const undoKeys = yUndoManagerKeymap.map((b) => ({ ...b, run: (v: EditorView) => v.state.readOnly || b.run!(v) }));
 
@@ -230,6 +233,7 @@
 				language.of(isLatexName(name) ? latexExtensions : plainText),
 				editable.of(unlocked),
 				spelling.of(prefs.spellcheck ? spellOn : spellOff),
+				scheme.of(schemes[prefs.theme]),
 				yCollab(ytext, provider.awareness, { undoManager })
 			]
 		});
@@ -348,6 +352,8 @@
 		if (editable.get(v.state) !== lock) v.dispatch({ effects: editable.reconfigure(lock) });
 		const spell = prefs.spellcheck ? spellOn : spellOff;
 		if (spelling.get(v.state) !== spell) v.dispatch({ effects: spelling.reconfigure(spell) });
+		const colors = schemes[prefs.theme];
+		if (scheme.get(v.state) !== colors) v.dispatch({ effects: scheme.reconfigure(colors) });
 		if (handleFor !== id) {
 			handleFor = id;
 			editor = { view: v, undoManager: tab.undoManager, provider: tab.provider, fileId: id, listen };
@@ -452,7 +458,7 @@
 		font-size: 13px;
 	}
 	.notice.lost {
-		background: #4a2a2a;
+		background: var(--danger-surface);
 		color: var(--text);
 	}
 	.notice button {

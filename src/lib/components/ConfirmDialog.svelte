@@ -42,10 +42,10 @@
 		border-radius: 8px;
 		background: var(--panel);
 		color: var(--text);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+		box-shadow: var(--shadow-dialog);
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.5);
+		background: var(--backdrop);
 	}
 	h2 {
 		margin: 0 0 8px;
@@ -73,17 +73,18 @@
 		cursor: pointer;
 	}
 	button:hover {
-		background: #3a4252;
+		background: var(--button-hover);
 	}
 	button[value='confirm'] {
 		border-color: transparent;
 		background: var(--accent);
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	button.danger {
-		background: #b23b3b;
+		background: var(--danger-button);
 	}
 	button.danger:hover {
-		background: #c64646;
+		background: var(--danger-button-hover);
 	}
 </style>
