@@ -4,6 +4,8 @@ import { pathOf, sortEntries, type FileEntry, type FileKind, type ProjectInfo } 
 
 /** One line of the upload progress list (contracts/ui.md). */
 export type Upload = { id: number; name: string; loaded: number; total: number; error?: string };
+/** JSON of an upload response: the new entry, or the error message (with `existingId` on a name clash). */
+export type UploadBody = Partial<FileEntry> & { message?: string; existingId?: string };
 let uploadIds = 0;
 
 /** `GET /api/projects/:pid` (contracts/http-api.md). */
@@ -191,12 +193,20 @@ export class Project {
 
 	/** Upload one file (research R6) as one XMLHttpRequest, because fetch has no upload progress. Resolves with the
 	 *  status and the JSON body; the line is removed on success and keeps the error otherwise, except for a name
-	 *  clash (409 with `existingId`: the caller asks Replace/Cancel and calls again or `dismiss`es). */
-	send(line: Upload, file: File, parentId: string | null, replace = false): Promise<{ status: number; body: { message?: string; existingId?: string } }> {
+	 *  clash (409 with `existingId`: the caller asks Replace/Cancel and calls again or `dismiss`es).
+	 *  `replace: 'rename'` takes a free name instead; `folder`: into that subfolder of `parentId`, made if missing. */
+	send(
+		line: Upload,
+		file: File,
+		parentId: string | null,
+		replace: boolean | 'rename' = false,
+		folder?: string
+	): Promise<{ status: number; body: UploadBody }> {
 		const form = new FormData();
 		form.append('file', file);
 		form.append('parentId', parentId ?? '');
-		if (replace) form.append('replace', '1');
+		if (replace) form.append('replace', replace === 'rename' ? 'rename' : '1');
+		if (folder) form.append('folder', folder);
 		return new Promise((resolve) => {
 			const xhr = new XMLHttpRequest();
 			xhr.open('POST', this.api('/files'));
@@ -205,7 +215,7 @@ export class Project {
 				line.total = e.total;
 			};
 			xhr.onloadend = () => {
-				let body: { message?: string; existingId?: string } = {};
+				let body: UploadBody = {};
 				try {
 					body = JSON.parse(xhr.responseText);
 				} catch {
@@ -218,6 +228,13 @@ export class Project {
 			};
 			xhr.send(form);
 		});
+	}
+
+	/** Have the main document load `packages` (015); best effort: a failure leaves the document as it is. */
+	async addPackages(packages: string[]) {
+		const init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packages }) };
+		const res = await fetch(this.api('/packages'), init).catch(() => undefined);
+		await blockedBy(res);
 	}
 
 	dismiss(line: Upload) {

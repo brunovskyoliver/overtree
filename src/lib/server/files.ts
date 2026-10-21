@@ -5,6 +5,7 @@ import { and, count, eq, inArray, isNull, ne } from 'drizzle-orm';
 import diff from 'fast-diff';
 import * as Y from 'yjs';
 import { kindForName, limits, validateName, type FileEntry, type FileKind } from '../files.ts';
+import { freeName, packageEdit } from '../media.ts';
 import type { ConnectionContext } from './access.ts';
 import { getServer } from './collab.ts';
 import type { Db } from './db.ts';
@@ -164,13 +165,14 @@ export function deleteEntry(pid: string, id: string, actor: string) {
 }
 
 /** Upload one file (research R6): text when the extension is a text one and the bytes are UTF-8, else a blob.
- *  A name clash is a 409 with `existingId` unless `replace`; replacing keeps the id and refuses a kind change. */
+ *  A name clash is a 409 with `existingId` unless `replace`; replacing keeps the id and refuses a kind change.
+ *  `replace: 'rename'` never clashes: the file gets the first free name of `name-2.ext`, `name-3.ext`, … (015). */
 export async function uploadFile(
 	pid: string,
 	parentId: string | null,
 	name: string,
 	bytes: Uint8Array,
-	replace: boolean,
+	replace: boolean | 'rename',
 	actor: string
 ): Promise<{ entry: FileEntry; replaced: boolean }> {
 	if (bytes.length > limits.uploadMaxFileMb * 1024 * 1024) fail(413, `A file can be at most ${limits.uploadMaxFileMb} MB.`);
@@ -198,7 +200,8 @@ export async function uploadFile(
 			.all();
 		const existing = siblings.find((f) => f.name.toLowerCase() === lower);
 		const now = Date.now();
-		if (existing) {
+		if (existing && replace === 'rename') name = freeName(name, siblings.map((f) => f.name));
+		else if (existing) {
 			if (!replace) throw new FileError(409, `"${name}" already exists here.`, existing.id);
 			if (existing.kind !== kind) fail(409, 'Replacing can’t turn a text file into a binary file or back.');
 			const row = { ...existing, hash, size, updatedAt: now };
@@ -216,6 +219,25 @@ export async function uploadFile(
 	// through Yjs: open editors see a replaced text at once
 	if (text !== null) await setText(result.entry.id, text, { userId: actor, projectId: pid });
 	return result;
+}
+
+/** The folder `name` inside `parentId`, created when missing (015: pasted images go to `figures/`). A file with
+ *  that name is a 409. Access is the caller's: edit on the folder if it exists, else on `parentId`. */
+export function findFolder(pid: string, parentId: string | null, name: string, tx: Tx = db()): Row | null {
+	const lower = name.toLowerCase();
+	const row = tx
+		.select()
+		.from(files)
+		.where(and(eq(files.projectId, pid), parentId === null ? isNull(files.parentId) : eq(files.parentId, parentId)))
+		.all()
+		.find((f) => f.name.toLowerCase() === lower);
+	if (row && row.kind !== 'folder') fail(409, `"${row.name}" is a file, not a folder.`);
+	return row ?? null;
+}
+
+export function ensureFolder(pid: string, parentId: string | null, name: string, actor: string): FileEntry {
+	const row = findFolder(pid, parentId, name);
+	return row ? toEntry(row) : createEntry(pid, { kind: 'folder', name, parentId }, actor);
 }
 
 // ponytail: blobs are never garbage-collected (research R1); history (008) needs old ones, cleanup comes with backups (011)
@@ -252,6 +274,27 @@ export async function setText(id: string, text: string, ctx: ConnectionContext) 
 	} finally {
 		await conn.disconnect();
 	}
+}
+
+/** Adds `\usepackage{…}` for each of `packages` the main document lacks, after `\documentclass` (015). One Yjs
+ *  insert, computed inside the transaction, so concurrent typing is kept. Returns the packages added. */
+export async function addPackages(pid: string, packages: string[], ctx: ConnectionContext): Promise<string[]> {
+	const main = getMainFileId(pid);
+	if (!main) return [];
+	let added: string[] = [];
+	const conn = await getServer().hocuspocus.openDirectConnection(main, ctx);
+	try {
+		await conn.transact((doc) => {
+			const t = doc.getText('content');
+			const edit = packageEdit(t.toString(), packages);
+			if (!edit) return;
+			t.insert(edit.at, edit.insert);
+			added = edit.added;
+		});
+	} finally {
+		await conn.disconnect();
+	}
+	return added;
 }
 
 /** Turns `t` into `text` with the fewest deletes and inserts (fast-diff): untouched runs keep their Yjs items, so
