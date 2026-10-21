@@ -13,12 +13,14 @@
 
 	// readOnly: the file can't be edited, every button that changes text is disabled (search stays).
 	// palette: the symbol palette is open (Editor.svelte toggles it with Ctrl/Cmd+Shift+Y too)
+	// onreference: opens "Add reference" (017); unset for people who can't edit the project
 	let {
 		editor,
 		project,
 		readOnly = false,
-		palette = $bindable(false)
-	}: { editor?: EditorHandle; project: Project; readOnly?: boolean; palette?: boolean } = $props();
+		palette = $bindable(false),
+		onreference
+	}: { editor?: EditorHandle; project: Project; readOnly?: boolean; palette?: boolean; onreference?: () => void } = $props();
 
 	function run(action: (h: EditorHandle) => unknown) {
 		if (!editor) return;
@@ -126,6 +128,9 @@
 		onclick={() => (palette ? closePalette() : (palette = true))}
 	>
 		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h4.5v-2.2A6.5 6.5 0 1 1 14.5 16.8V19H19" /></svg>
+	</button>
+	<button type="button" aria-label="Add reference" title="Add reference (DOI, arXiv, Zotero)" disabled={readOnly || !onreference} onclick={onreference}>
+		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H17v14H7.5A2.5 2.5 0 0 0 5 19.5zM5 19.5A2.5 2.5 0 0 0 7.5 22H17M11 7v6M8 10h6" /></svg>
 	</button>
 	<span class="words" aria-live="off">{words.toLocaleString()} {words === 1 ? 'word' : 'words'}</span>
 	<button

@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
-import { bold, figuresCommand, italic, link, section, symbolCommand, tableCommand, tableSnippet } from '../../src/lib/editor/commands.ts';
+import { bold, cite, figuresCommand, italic, link, section, symbolCommand, tableCommand, tableSnippet } from '../../src/lib/editor/commands.ts';
 
 /** Run `cmd` on `doc` where `[` `]` mark the selection and `|` a cursor; return the result in the same notation. */
 function run(cmd: StateCommand, doc: string) {
@@ -123,5 +123,18 @@ describe('symbol insertion (015)', () => {
 		expect(run(symbolCommand('\\alpha'), '$|x$')).toBe('$\\alpha |x$');
 		// `[` `]` mark selections in `run`: \( \) here
 		expect(run(symbolCommand('\\{'), '\\(|x\\)')).toBe('\\(\\{|x\\)');
+	});
+});
+
+describe('cite (017 US1)', () => {
+	it('inserts \\cite{keys} at the cursor or in place of the selection', () => {
+		expect(run(cite(['smith2021deep']), 'as shown |.')).toBe('as shown \\cite{smith2021deep}|.');
+		expect(run(cite(['a', 'b']), 'see [here] now')).toBe('see \\cite{a,b}| now');
+	});
+
+	it('inside a citation argument, puts the keys there, replacing the half-typed key', () => {
+		expect(run(cite(['smith2021deep']), 'x \\cite{|}')).toBe('x \\cite{smith2021deep|}');
+		// (the notation's [ ] mark a selection, so no optional argument here; the completion tests cover those)
+		expect(run(cite(['b2']), 'x \\citep{a, sm|}')).toBe('x \\citep{a, b2|}');
 	});
 });

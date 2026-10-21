@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { COMMANDS, ENVIRONMENTS, PACKAGES } from '../../src/lib/completion/data.ts';
 import { closeEnvironment, environments } from '../../src/lib/completion/environments.ts';
 import { scanTex, type ProjectSymbols } from '../../src/lib/completion/scan.ts';
-import { latexSource } from '../../src/lib/completion/source.ts';
+import { addReferenceSource, latexSource } from '../../src/lib/completion/source.ts';
 import { Symbols } from '../../src/lib/completion/symbols.svelte.ts';
 
 // The popup's own matcher: @codemirror/autocomplete doesn't export FuzzyMatcher, so take the class from its
@@ -336,5 +336,29 @@ describe('argument completion (US6)', () => {
 			vi.useRealTimers();
 			vi.unstubAllGlobals();
 		}
+	});
+});
+
+describe('"Add reference…" in citations (017 US1)', () => {
+	const offer = (doc: string, readOnly = false) => {
+		const state = EditorState.create({
+			doc: doc.replace('|', ''),
+			selection: { anchor: doc.indexOf('|') },
+			extensions: [stexLanguage, EditorState.readOnly.of(readOnly)]
+		});
+		return addReferenceSource(() => {})(new CompletionContext(state, state.selection.main.head, false));
+	};
+
+	it('is offered in \\cite{…} whatever key is typed, below the keys that match, and nowhere else', () => {
+		expect(offer('\\cite{|')).toMatchObject({ from: 6, options: [{ label: 'Add reference…', type: 'action' }] });
+		const typed = offer('\\parencite[p.~3]{a, smi|')!;
+		expect(typed).toMatchObject({ from: 23, options: [{ label: 'Add reference…' }] });
+		// ranked like the popup: the empty pattern at the cursor matches, below a key starting with "smi"
+		const action = new FuzzyMatcher('').match('Add reference…')!.score + (typed.options[0].boost ?? 0);
+		expect(action).toBeLessThan(new FuzzyMatcher('smi').match('smith2021deep')!.score);
+		expect(offer('\\ref{|')).toBeNull();
+		expect(offer('% \\cite{|')).toBeNull();
+		expect(offer('\\\\cite{|')).toBeNull();
+		expect(offer('\\cite{|', true)).toBeNull();
 	});
 });

@@ -31,6 +31,10 @@ services:
       GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
       GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
       GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      # Add reference (017): where DOIs, arXiv ids and Zotero libraries are looked up; the defaults are the public services
+      DOI_URL: ${DOI_URL:-https://doi.org}
+      ARXIV_API_URL: ${ARXIV_API_URL:-https://export.arxiv.org/api/query}
+      ZOTERO_API_URL: ${ZOTERO_API_URL:-https://api.zotero.org}
     restart: unless-stopped
 
   # pulls the TeX image on `up` so the first compile doesn't pull inside its timeout; exits at once

@@ -34,7 +34,7 @@
 	import { yCollab, ySyncAnnotation, ySyncFacet, yUndoManagerKeymap } from 'y-codemirror.next';
 	import * as Y from 'yjs';
 	import { environments } from '#lib/completion/environments.ts';
-	import { kindLabel, latexSource } from '#lib/completion/source.ts';
+	import { addReferenceSource, kindLabel, latexSource } from '#lib/completion/source.ts';
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
 	import { bold, figuresCommand, italic } from '#lib/editor/commands.ts';
 	import { insertStep, latexPath, pickImages, refusedMessage, uploadFigures } from '#lib/editor/figures.ts';
@@ -52,6 +52,7 @@
 	import EditorTabs from './EditorTabs.svelte';
 	import FilePreview from './FilePreview.svelte';
 	import ReviewPanel from './ReviewPanel.svelte';
+	import ReferenceDialog from './ReferenceDialog.svelte';
 	import Toolbar from './Toolbar.svelte';
 
 	// One EditorView; each open text file keeps its own EditorState, Yjs doc, provider and undo (research R9).
@@ -112,6 +113,9 @@
 	const latex = $derived(!!activeFile && isLatexName(activeFile.name));
 	// per-file edit right from the API (research R10); the server refuses edits anyway (R7)
 	const readOnly = $derived(activeFile?.canEdit === false);
+	// "Add reference" (017) writes into the project's .bib files: editors and the owner only
+	let references = $state<ReferenceDialog>();
+	const canReference = $derived(!readOnly && project.details?.permissions.canEdit !== false);
 
 	const listeners = new Set<(u: ViewUpdate) => void>();
 	const listen = (fn: (u: ViewUpdate) => void) => (listeners.add(fn), () => void listeners.delete(fn));
@@ -252,7 +256,7 @@
 		// above autocompletion's own Enter (same precedence, earlier wins)
 		Prec.highest(keymap.of([{ key: 'Enter', run: enterPastTyped }])),
 		autocompletion({
-			override: [latexSource(symbols)],
+			override: [latexSource(symbols), addReferenceSource(() => references?.open())],
 			icons: false,
 			addToOptions: [{ position: 90, render: kindLabel }],
 			activateOnTyping: true,
@@ -510,7 +514,7 @@
 			<button type="button" aria-label="Dismiss" onclick={() => (insertError = '')}>×</button>
 		</p>
 	{/if}
-	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} {readOnly} {project} bind:palette />{/if}
+	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} {readOnly} {project} bind:palette onreference={canReference ? () => references?.open() : undefined} />{/if}
 	<div class="body" hidden={activeFile?.kind !== 'text'}>
 		<div class="host" bind:this={host} style:--editor-font-size="{prefs.fontSize}px"></div>
 		{#if review && activeFile?.kind === 'text'}
@@ -522,6 +526,9 @@
 	{:else if !activeFile}
 		<p class="hint">Open a file from the file tree.</p>
 	{/if}
+	<!-- new keys reach \cite completion at once: the server's copy of the .bib counts, also when a tab of it is
+	     open in the background (its live scan only runs while it is shown) -->
+	<ReferenceDialog bind:this={references} {project} {editor} onadded={(r) => (symbols.forget(r.fileId), symbols.refresh())} />
 </section>
 
 <style>

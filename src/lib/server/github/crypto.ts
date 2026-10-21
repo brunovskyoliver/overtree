@@ -23,22 +23,26 @@ function tokenKey(): Buffer {
 	return cached.key;
 }
 
-/** `text` encrypted with AES-256-GCM: iv ‖ tag ‖ ciphertext. */
-export function seal(text: string): Buffer {
+/** `text` encrypted with AES-256-GCM under a 32-byte `key`: iv ‖ tag ‖ ciphertext. Also seals Zotero keys (017). */
+export function sealWith(key: Buffer, text: string): Buffer {
 	const iv = randomBytes(IV);
-	const cipher = createCipheriv('aes-256-gcm', tokenKey(), iv);
+	const cipher = createCipheriv('aes-256-gcm', key, iv);
 	const body = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
 	return Buffer.concat([iv, cipher.getAuthTag(), body]);
 }
 
-/** The text `seal` encrypted; throws when `buf` was altered or sealed with another key. */
-export function open(buf: Uint8Array): string {
+/** The text `sealWith(key, …)` encrypted; throws when `buf` was altered or sealed with another key. */
+export function openWith(key: Buffer, buf: Uint8Array): string {
 	const b = Buffer.from(buf);
 	if (b.length < IV + TAG) throw new Error('sealed token too short');
-	const decipher = createDecipheriv('aes-256-gcm', tokenKey(), b.subarray(0, IV));
+	const decipher = createDecipheriv('aes-256-gcm', key, b.subarray(0, IV));
 	decipher.setAuthTag(b.subarray(IV, IV + TAG));
 	return Buffer.concat([decipher.update(b.subarray(IV + TAG)), decipher.final()]).toString('utf8');
 }
+
+/** A GitHub token sealed under the App-derived key. */
+export const seal = (text: string) => sealWith(tokenKey(), text);
+export const open = (buf: Uint8Array) => openWith(tokenKey(), buf);
 
 export type OAuthState = { userId: string; return: string; nonce: string; exp: number };
 

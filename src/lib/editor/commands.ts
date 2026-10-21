@@ -2,6 +2,7 @@
 import { snippet } from '@codemirror/autocomplete';
 import { EditorSelection, type EditorState, type StateCommand, type Transaction } from '@codemirror/state';
 import { inMath } from './math.ts';
+import { CITE_ARGUMENT } from '../completion/source.ts';
 
 /** `before[sel]after`; the selection (or cursor) moves inside. Already wrapped in exactly that (the markup right
  *  around the selection, or the selection is the whole `before…after`): unwraps instead, like Bold in a word processor. */
@@ -157,6 +158,27 @@ export const symbolCommand =
 			state.update({
 				changes: { from, to, insert },
 				selection: EditorSelection.cursor(from + insert.length),
+				scrollIntoView: true,
+				userEvent: 'input'
+			})
+		);
+		return true;
+	};
+
+/** `\cite{keys}` in place of the selection (017 US1). With the cursor in a citation's argument already (the dialog
+ *  opened from "Add reference…" in `\cite{|}`), the keys go there instead, replacing the key half typed. */
+export const cite =
+	(keys: string[]): StateCommand =>
+	({ state, dispatch }) => {
+		const { from, to, head, empty } = state.selection.main;
+		const line = state.doc.lineAt(head);
+		const inside = empty ? CITE_ARGUMENT.exec(line.text.slice(0, head - line.from)) : null;
+		const start = inside ? head - inside[1].length : from;
+		const insert = inside ? keys.join(',') : `\\cite{${keys.join(',')}}`;
+		dispatch(
+			state.update({
+				changes: { from: start, to: inside ? head : to, insert },
+				selection: EditorSelection.cursor(start + insert.length),
 				scrollIntoView: true,
 				userEvent: 'input'
 			})

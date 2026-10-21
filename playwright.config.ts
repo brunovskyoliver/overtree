@@ -7,6 +7,9 @@ const PORT = 4173;
 // the fake GitHub (tests/fake-github/main.ts, 012 research R11); API and web paths on one origin
 const GITHUB_PORT = 4175;
 const GITHUB = `http://127.0.0.1:${GITHUB_PORT}`;
+// fake doi.org, arXiv and Zotero (tests/fake-refs/main.ts, 017)
+const REFS_PORT = Number(process.env.FAKE_REFS_PORT ?? 4176);
+const REFS = `http://127.0.0.1:${REFS_PORT}`;
 // fresh data per run; exported so specs can delete compile output (clearCompileOutput)
 // ponytail: the config is evaluated again in each worker, keep the first dir
 const DATA_DIR = (process.env.OVERTREE_E2E_DATA_DIR ??= mkdtempSync(join(tmpdir(), 'overtree-e2e-')));
@@ -72,8 +75,20 @@ export default defineConfig({
 				GITHUB_GRACE_MS: '1500',
 				GITHUB_LONG_MS: '6000',
 				GITHUB_PULL_MS: '1500',
-				GITHUB_TICK_MS: '250'
+				GITHUB_TICK_MS: '250',
+				// references (017) against the fake below
+				DOI_URL: `${REFS}/doi`,
+				ARXIV_API_URL: `${REFS}/arxiv`,
+				ZOTERO_API_URL: `${REFS}/zotero`
 			}
+		},
+		// after the app server, so configs that take the first two entries (fake GitHub, app) keep working
+		{
+			command: 'node tests/fake-refs/main.ts',
+			url: `${REFS}/`,
+			reuseExistingServer: false,
+			timeout: 10_000,
+			env: { FAKE_REFS_PORT: String(REFS_PORT) }
 		},
 		// started after the app server (Playwright sets web servers up in order), so it reuses that build
 		...(clerkKeys

@@ -16,6 +16,8 @@
 	--search-match: rgb(255 200 60 / 0.35); /* a match in project search results */
 	--error-bg: rgb(224 82 82 / 0.15); /* inline error notes */
 	--error-text: #f08a8a;
+	--button-hover: #3a4252; /* hover on raised buttons */
+	--accent-hover: #367a39;
 	--font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
