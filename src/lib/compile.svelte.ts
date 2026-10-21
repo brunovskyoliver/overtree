@@ -14,6 +14,10 @@ export class CompileState {
 	compiler = $state<Compiler>('pdflatex');
 	autoCompile = $state(false);
 	stopOnFirstError = $state(false);
+	/** run ChkTeX with each compile (016), a project setting like the compiler */
+	chktex = $state(false);
+	/** whether the TeX image has ChkTeX; null: not known (yet) */
+	chktexAvailable = $state<boolean | null>(null);
 	/** the compiler is a project setting: readers see it but can't change it (FR-037); set by the page */
 	canConfigure = $state(true);
 	/** the standalone .tex shown and compiled instead of the main document (the focused one); null: the main one */
@@ -69,12 +73,21 @@ export class CompileState {
 	async setCompiler(compiler: Compiler) {
 		const previous = this.compiler;
 		this.compiler = compiler;
+		if (!(await this.#putSettings({ compiler }))) this.compiler = previous;
+	}
+
+	async setChktex(on: boolean) {
+		this.chktex = on;
+		if (!(await this.#putSettings({ chktex: on }))) this.chktex = !on;
+	}
+
+	async #putSettings(body: { compiler?: Compiler; chktex?: boolean }) {
 		const res = await fetch(`${this.#base}/settings`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ compiler })
+			body: JSON.stringify(body)
 		}).catch(() => undefined);
-		if (!res?.ok) this.compiler = previous;
+		return !!res?.ok;
 	}
 
 	/** A local edit: (re)start the idle timer (research R11). */
@@ -87,7 +100,7 @@ export class CompileState {
 		const root = this.root;
 		const res = await fetch(`${this.#base}${this.#q(root)}`);
 		if (!res.ok || this.root !== root) return; // switched documents meanwhile
-		({ compiler: this.compiler, last: this.last } = await res.json());
+		({ compiler: this.compiler, chktex: this.chktex, chktexAvailable: this.chktexAvailable, last: this.last } = await res.json());
 	}
 
 	async compile() {

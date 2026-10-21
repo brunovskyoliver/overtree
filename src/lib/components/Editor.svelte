@@ -13,7 +13,8 @@
 	import { bracketMatching, foldGutter, foldKeymap, indentOnInput, StreamLanguage } from '@codemirror/language';
 	import { stex } from '@codemirror/legacy-modes/mode/stex';
 	import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-	import { Compartment, EditorState, Prec, type Extension, type StateCommand, type StateEffect } from '@codemirror/state';
+	import type { Diagnostic } from '@codemirror/lint';
+	import { Compartment, EditorState, Prec, Text, type Extension, type StateCommand, type StateEffect } from '@codemirror/state';
 	import {
 		drawSelection,
 		dropCursor,
@@ -36,7 +37,9 @@
 	import { environments } from '#lib/completion/environments.ts';
 	import { kindLabel, latexSource } from '#lib/completion/source.ts';
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
+	import type { CompileResult, LogEntry } from '#lib/compile-types.ts';
 	import { bold, italic } from '#lib/editor/commands.ts';
+	import { codeCheckDiagnostics, entryDiagnostic, entryRange, latexLint, relint } from '#lib/editor/lint.ts';
 	import { prefs } from '#lib/editor/prefs.svelte.ts';
 	import { cursorLabels, editorTheme } from '#lib/editor/theme.ts';
 	import { followRemoteTyping, newlineBelow } from '#lib/editor/follow.ts';
@@ -54,6 +57,7 @@
 		project,
 		session,
 		editor = $bindable(),
+		compiled,
 		onLocalEdit,
 		onCompile,
 		onSyncForward
@@ -61,6 +65,8 @@
 		project: Project;
 		session: Session;
 		editor?: EditorHandle;
+		/** the shown compile result: its entries become markers in their files (016) */
+		compiled?: CompileResult | null;
 		onLocalEdit?: () => void;
 		onCompile?: () => void;
 		/** Ctrl/⌘+Alt+J: show the cursor's place in the PDF (SyncTeX) */
@@ -102,6 +108,48 @@
 	const latex = $derived(!!activeFile && isLatexName(activeFile.name));
 	// per-file edit right from the API (research R10); the server refuses edits anyway (R7)
 	const readOnly = $derived(activeFile?.canEdit === false);
+
+	// Compile markers (016): each entry of the last compile anchored in its file's Yjs text, so markers move with
+	// everyone's edits until the next compile replaces them. Built per file on first use after a compile.
+	type Anchors = { compile: string; marks: { entry: LogEntry; start: Y.RelativePosition; end: Y.RelativePosition }[] };
+	const anchors = new Map<string, Anchors>();
+
+	function compileDiagnostics(id: string): Diagnostic[] {
+		const tab = tabs.get(id);
+		const result = compiled;
+		if (!tab || !result) return [];
+		let a = anchors.get(id);
+		if (a?.compile !== result.id) {
+			const entries = result.entries.filter((e) => e.fileId === id && e.line);
+			// before the first sync the lines aren't known yet: built on the run after it
+			if (entries.length && !tab.provider.isSynced) return [];
+			const doc = Text.of(tab.ytext.toString().split('\n'));
+			a = {
+				compile: result.id,
+				marks: entries.map((entry) => {
+					const { from, to } = entryRange(doc, entry);
+					return { entry, start: Y.createRelativePositionFromTypeIndex(tab.ytext, from), end: Y.createRelativePositionFromTypeIndex(tab.ytext, to, -1) };
+				})
+			};
+			anchors.set(id, a);
+		}
+		const ydoc = tab.ytext.doc!;
+		const length = tab.ytext.length;
+		const at = (rel: Y.RelativePosition) => Math.min(Y.createAbsolutePositionFromRelativePosition(rel, ydoc)?.index ?? 0, length);
+		return a.marks.map(({ entry, start, end }) => {
+			const from = at(start);
+			return entryDiagnostic(entry, from, Math.max(from, at(end)));
+		});
+	}
+
+	/** Everything the shown document's markers come from: the code check (a .tex with it on) and the last compile. */
+	function diagnostics(v: EditorView): Diagnostic[] {
+		const id = shown;
+		if (!id) return [];
+		const name = project.files.find((f) => f.id === id)?.name.toLowerCase() ?? '';
+		const check = prefs.codeCheck && name.endsWith('.tex') ? codeCheckDiagnostics(v.state.doc.toString()) : [];
+		return [...check, ...compileDiagnostics(id)];
+	}
 
 	const listeners = new Set<(u: ViewUpdate) => void>();
 	const listen = (fn: (u: ViewUpdate) => void) => (listeners.add(fn), () => void listeners.delete(fn));
@@ -197,6 +245,7 @@
 		cursorLabels,
 		followRemoteTyping,
 		EditorView.lineWrapping,
+		latexLint(diagnostics),
 		EditorView.updateListener.of((u) => {
 			// remote Yjs changes carry ySyncAnnotation and don't count as the user's typing
 			if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ySyncAnnotation))) onLocalEdit?.();
@@ -290,6 +339,7 @@
 		clearTimeout(tab.savingTimer);
 		delete statuses[id];
 		delete saving[id];
+		anchors.delete(id);
 		symbols.forget(id);
 		// unbind yCollab from the doc we're about to destroy
 		if (shown === id) {
@@ -321,6 +371,7 @@
 				annotations: ySyncAnnotation.of(v.state.facet(ySyncFacet))
 			});
 		if (tab.scroll) v.dispatch({ effects: tab.scroll });
+		relint(v);
 		v.focus();
 	}
 
@@ -359,6 +410,13 @@
 	$effect(() => {
 		void [project.files, project.active];
 		symbols.refresh();
+	});
+
+	// a new compile result or the code check switched: the markers again (a tab synced later gets its own run
+	// with its first changes)
+	$effect(() => {
+		void [compiled?.id, prefs.codeCheck];
+		if (view) relint(view);
 	});
 
 	// the font size is a CSS variable on the host: CodeMirror has to measure its lines again

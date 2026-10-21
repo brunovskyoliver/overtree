@@ -1,14 +1,20 @@
 import { error, json } from '@sveltejs/kit';
 import { requireProject } from '#lib/server/access.ts';
 import { api } from '#lib/server/api.ts';
-import { compileProject, compileRoot, getCompiler, getLastResult } from '#lib/server/compile.ts';
+import { chktexAvailable, compileProject, compileRoot, getChktex, getCompiler, getLastResult } from '#lib/server/compile.ts';
 import { closeVersion } from '#lib/server/history.ts';
 import type { RequestHandler } from './$types';
 
 /** `?root=<file id>`: the last compile of that standalone document instead of the main one. */
-export const GET: RequestHandler = ({ locals, params, url }) => {
+// `chktexAvailable`: whether the TeX image has ChkTeX (016); null when Docker couldn't tell.
+export const GET: RequestHandler = async ({ locals, params, url }) => {
 	const root = api(() => (requireProject(locals, params.pid, 'read'), compileRoot(params.pid, url.searchParams.get('root'))));
-	return json({ compiler: getCompiler(params.pid), last: getLastResult(params.pid, root) });
+	return json({
+		compiler: getCompiler(params.pid),
+		chktex: getChktex(params.pid),
+		chktexAvailable: await chktexAvailable(),
+		last: getLastResult(params.pid, root)
+	});
 };
 
 // Readers may compile too (FR-037). Blocks until the compile (or the queued one it joined) finishes; compile

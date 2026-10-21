@@ -209,6 +209,7 @@
 						{project}
 						{session}
 						bind:editor
+						compiled={compile.last}
 						onLocalEdit={() => (compile.onLocalEdit(), githubOn && github.touched())}
 						onCompile={() => compile.compile()}
 						onSyncForward={() => workspace?.forward()}

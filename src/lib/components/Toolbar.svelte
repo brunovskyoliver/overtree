@@ -108,6 +108,10 @@
 			Check spelling
 			<input type="checkbox" checked={prefs.spellcheck} onchange={(e) => prefs.setSpellcheck(e.currentTarget.checked)} />
 		</label>
+		<label class="row" title="Mark unmatched \begin/\end, braces and $ while you type">
+			Code check
+			<input type="checkbox" checked={prefs.codeCheck} onchange={(e) => prefs.setCodeCheck(e.currentTarget.checked)} />
+		</label>
 	</div>
 </div>
 
