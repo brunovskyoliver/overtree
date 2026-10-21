@@ -260,3 +260,17 @@ export const githubRuns = sqliteTable(
 	},
 	(t) => [index('github_runs_project_idx').on(t.projectId, t.id)]
 );
+
+// --- references (017 plan.md) --------------------------------------------------------------------------------------
+
+// One Zotero library per Overtree user; the API key AES-GCM sealed like GitHub tokens, never sent to the browser.
+export const zoteroAccounts = sqliteTable('zotero_accounts', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => users.id),
+	zoteroUserId: text('zotero_user_id').notNull(), // numeric, from zotero.org/settings/keys
+	username: text('username').notNull(),
+	apiKey: blob('api_key', { mode: 'buffer' }).notNull(),
+	createdAt: integer('created_at').notNull(),
+	updatedAt: integer('updated_at').notNull()
+});

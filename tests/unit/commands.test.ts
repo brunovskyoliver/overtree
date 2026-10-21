@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
-import { bold, figure, italic, link, section, table } from '../../src/lib/editor/commands.ts';
+import { bold, cite, figure, italic, link, section, table } from '../../src/lib/editor/commands.ts';
 
 /** Run `cmd` on `doc` where `[` `]` mark the selection and `|` a cursor; return the result in the same notation. */
 function run(cmd: StateCommand, doc: string) {
@@ -92,5 +92,18 @@ describe('block commands (US4-5)', () => {
 	it('starts a new line when the cursor line has text, and replaces a selection', () => {
 		expect(run(figure, 'Some text|')).toBe(`Some text\n${FIGURE}`);
 		expect(run(table, 'keep [drop] tail')).toBe(`keep \n${TABLE}\n tail`);
+	});
+});
+
+describe('cite (017 US1)', () => {
+	it('inserts \\cite{keys} at the cursor or in place of the selection', () => {
+		expect(run(cite(['smith2021deep']), 'as shown |.')).toBe('as shown \\cite{smith2021deep}|.');
+		expect(run(cite(['a', 'b']), 'see [here] now')).toBe('see \\cite{a,b}| now');
+	});
+
+	it('inside a citation argument, puts the keys there, replacing the half-typed key', () => {
+		expect(run(cite(['smith2021deep']), 'x \\cite{|}')).toBe('x \\cite{smith2021deep|}');
+		// (the notation's [ ] mark a selection, so no optional argument here; the completion tests cover those)
+		expect(run(cite(['b2']), 'x \\citep{a, sm|}')).toBe('x \\citep{a, b2|}');
 	});
 });

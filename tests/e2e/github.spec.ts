@@ -7,7 +7,7 @@ test('the owner connects GitHub and links a repository from the dialog (US1)', a
 	// The app server and the fake GitHub are shared by every browser project and live for the whole run: the GitHub
 	// connection belongs to USER and `octo/paper` keeps what an earlier run's Sync now pushed. Start from scratch: a
 	// fresh `octo/paper` (the used one renamed out of the way, its name without "pap") and USER not connected.
-	const FAKE = 'http://127.0.0.1:4175';
+	const FAKE = process.env.FAKE_GITHUB_URL ?? 'http://127.0.0.1:4175'; // the fake's port from the config
 	const fake = async (helper: string, ...args: unknown[]) => (await page.request.post(`${FAKE}/_fake/${helper}`, { data: { args } })).json();
 	await page.goto(`/api/github/connect?return=${encodeURIComponent(`/project/${pid}`)}`);
 	const { accounts } = await (await page.request.get('/api/github/repos')).json();
@@ -60,7 +60,7 @@ test('the owner connects GitHub and links a repository from the dialog (US1)', a
 });
 
 test('a GitHub commit reaches two open editors and history shows "Merged from GitHub" (US3)', async ({ page, pid, browser }) => {
-	const FAKE = 'http://127.0.0.1:4175';
+	const FAKE = process.env.FAKE_GITHUB_URL ?? 'http://127.0.0.1:4175'; // the fake's port from the config
 	const fake = async (helper: string, ...args: unknown[]) => (await page.request.post(`${FAKE}/_fake/${helper}`, { data: { args } })).json();
 
 	// connected through the fake's OAuth (redirects end on the project), a fresh repository linked and confirmed
@@ -97,7 +97,7 @@ test('a GitHub commit reaches two open editors and history shows "Merged from Gi
 });
 
 test('the indicator shows the sync state; Push now with a title; readers only look; failures show the reason (US4)', async ({ page, pid, browser }) => {
-	const FAKE = 'http://127.0.0.1:4175';
+	const FAKE = process.env.FAKE_GITHUB_URL ?? 'http://127.0.0.1:4175'; // the fake's port from the config
 	const fake = async (helper: string, ...args: unknown[]) => (await page.request.post(`${FAKE}/_fake/${helper}`, { data: { args } })).json();
 
 	await page.goto(`/api/github/connect?return=${encodeURIComponent(`/project/${pid}`)}`);
@@ -167,7 +167,7 @@ test('the indicator shows the sync state; Push now with a title; readers only lo
 });
 
 test('an empty project imports a repository from the preview (US5)', async ({ page, pid }) => {
-	const FAKE = 'http://127.0.0.1:4175';
+	const FAKE = process.env.FAKE_GITHUB_URL ?? 'http://127.0.0.1:4175'; // the fake's port from the config
 	const fake = async (helper: string, ...args: unknown[]) => (await page.request.post(`${FAKE}/_fake/${helper}`, { data: { args } })).json();
 
 	await page.goto(`/api/github/connect?return=${encodeURIComponent(`/project/${pid}`)}`);

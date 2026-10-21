@@ -75,5 +75,17 @@ export const variables = defineEnvVars({
 	GITHUB_TICK_MS: {
 		description: 'Tests only: GitHub scheduler tick; default 15000.',
 		schema: optional
+	},
+	DOI_URL: {
+		description: 'Where "Add reference" looks DOIs up (BibTeX by content negotiation); default https://doi.org (017).',
+		schema: optional
+	},
+	ARXIV_API_URL: {
+		description: 'The arXiv API query URL for "Add reference"; default https://export.arxiv.org/api/query (017).',
+		schema: optional
+	},
+	ZOTERO_API_URL: {
+		description: 'The Zotero Web API for "Add from Zotero"; default https://api.zotero.org (017).',
+		schema: optional
 	}
 });

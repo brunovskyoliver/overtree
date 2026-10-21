@@ -30,7 +30,7 @@ export function scanTex(text: string): TexSymbols {
 }
 
 /** The text from `open` (an opening brace or quote) to its match, without the delimiters; `end` is after the match. */
-function delimited(text: string, open: number): { value: string; end: number } {
+export function delimited(text: string, open: number): { value: string; end: number } {
 	const quote = text[open] === '"';
 	let depth = 0;
 	for (let i = open + 1; i < text.length; i++) {

@@ -9,6 +9,7 @@ A self-hosted LaTeX editor in the spirit of Overleaf. Write LaTeX with other peo
 - PDF preview with SyncTeX jumps in both directions
 - Full history: browse versions, diff, label, restore a file or the whole project
 - Optional two-way sync with a GitHub repository
+- Add references from a DOI, an arXiv id or your Zotero library, without writing BibTeX by hand
 
 ## Install
 
@@ -91,6 +92,7 @@ erDiagram
     projects ||--o{ versions : groups
     versions ||--o{ version_labels : named
     users ||--o| github_accounts : connects
+    users ||--o| zotero_accounts : connects
     projects ||--o| github_links : "syncs with"
     projects ||--o{ github_runs : logs
 
@@ -157,7 +159,7 @@ erDiagram
     }
 ```
 
-Besides these, `documents` and `updates` hold the live Yjs state, `settings` holds the sign-up policy, `compile_settings` the compiler per project, and `github_accounts` / `github_runs` the encrypted GitHub tokens and the sync log. The schema is in `src/lib/server/schema.ts`.
+Besides these, `documents` and `updates` hold the live Yjs state, `settings` holds the sign-up policy, `compile_settings` the compiler per project, `github_accounts` / `github_runs` the encrypted GitHub tokens and the sync log, and `zotero_accounts` each user's encrypted Zotero key. The schema is in `src/lib/server/schema.ts`.
 
 ## Using it
 
@@ -203,9 +205,17 @@ To turn it on, create a GitHub App (Settings, Developer settings, GitHub Apps):
 
 Set all five `GITHUB_APP_*` variables below and restart. In a project, the owner opens GitHub in the top bar and connects a repository.
 
+### References
+
+The book button in the editor toolbar, or "Add reference…" at the end of the `\cite{` suggestions, opens **Add reference**. Paste a DOI (`10.1145/…` or a doi.org link) or an arXiv id or link and Overtree fetches the BibTeX entry: from doi.org for DOIs, from the arXiv API for preprints. Check the entry, change its key if you like (the default is author, year and first title word, like `smith2021deep`) and add it to a `.bib` file. The default file is the one the main document loads with `\bibliography` or `\addbibresource`; if that file doesn't exist yet, or there is no `.bib` at all, Overtree creates it (`references.bib` next to the main document). A paper already in the project, matched by DOI, arXiv id or title and year, isn't added twice: you get its existing key. The entry is an ordinary edit, so collaborators see it at once and it shows in history. Ticking "Also insert \cite" cites it at the cursor.
+
+The Zotero tab searches your own Zotero library. Connect it once with your user ID and a private API key from [zotero.org/settings/keys](https://www.zotero.org/settings/keys) (read-only library access is enough). The key is stored encrypted on the server, never sent back to the browser, and deleted when you disconnect. Pick any number of items and add them the same way.
+
+Readers can't add references. The server only talks to doi.org (and the Crossref, DataCite and mEDRA services it redirects to), the arXiv API and the Zotero API, with an 8-second limit and a 2 MB cap per answer. The Zotero key is encrypted with a random secret that Overtree creates in the data directory (`secret.key`); keep it with the database in backups, or users reconnect Zotero after a restore.
+
 ## Configuration
 
-Only the two Clerk keys are required. Docker Compose passes the Clerk, admin, port, compile, upload and GitHub App variables from `.env`; the others (`ORIGIN`, `PROTOCOL_HEADER`, `HISTORY_*`, `GITHUB_API_URL`) go in the app's `environment` in `compose.yaml`.
+Only the two Clerk keys are required. Docker Compose passes the Clerk, admin, port, compile, upload, GitHub App and reference lookup variables from `.env`; the others (`ORIGIN`, `PROTOCOL_HEADER`, `HISTORY_*`, `GITHUB_API_URL`) go in the app's `environment` in `compose.yaml`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -234,6 +244,9 @@ Only the two Clerk keys are required. Docker Compose passes the Clerk, admin, po
 | `GITHUB_APP_CLIENT_SECRET` | with the ID | The App's client secret. |
 | `GITHUB_APP_PRIVATE_KEY` | with the ID | The App's private key PEM; one line with literal `\n` works. |
 | `GITHUB_API_URL` / `GITHUB_URL` | GitHub.com | For GitHub Enterprise Server. |
+| `DOI_URL` | `https://doi.org` | Where DOIs are looked up. Tests point it at a local fake. |
+| `ARXIV_API_URL` | `https://export.arxiv.org/api/query` | The arXiv API. |
+| `ZOTERO_API_URL` | `https://api.zotero.org` | The Zotero Web API. |
 
 ## Develop
 

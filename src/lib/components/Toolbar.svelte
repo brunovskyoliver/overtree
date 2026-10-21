@@ -7,7 +7,8 @@
 	import { wordCount } from '#lib/editor/words.ts';
 
 	// readOnly: the file can't be edited, every button that changes text is disabled (search stays)
-	let { editor, readOnly = false }: { editor?: EditorHandle; readOnly?: boolean } = $props();
+	// onreference: opens "Add reference" (017); unset for people who can't edit the project
+	let { editor, readOnly = false, onreference }: { editor?: EditorHandle; readOnly?: boolean; onreference?: () => void } = $props();
 
 	function run(action: (h: EditorHandle) => unknown) {
 		if (!editor) return;
@@ -82,6 +83,9 @@
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d={icon} /></svg>
 		</button>
 	{/each}
+	<button type="button" aria-label="Add reference" title="Add reference (DOI, arXiv, Zotero)" disabled={readOnly || !onreference} onclick={onreference}>
+		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H17v14H7.5A2.5 2.5 0 0 0 5 19.5zM5 19.5A2.5 2.5 0 0 0 7.5 22H17M11 7v6M8 10h6" /></svg>
+	</button>
 	<span class="words" aria-live="off">{words.toLocaleString()} {words === 1 ? 'word' : 'words'}</span>
 	<button
 		type="button"

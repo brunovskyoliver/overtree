@@ -1,6 +1,6 @@
 // LaTeX completion source (research R11): context detection only; CodeMirror does the fuzzy
 // matching, ranking, keyboard handling, ARIA and snippet tab stops.
-import { snippetCompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
+import { closeCompletion, snippetCompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { language } from '@codemirror/language';
 import { stripComment } from '../outline.ts';
 import { COMMANDS, ENVIRONMENTS, PACKAGES } from './data.ts';
@@ -36,13 +36,13 @@ function paths(p: ProjectSymbols, command: string): Completion[] {
 	return named(labels, 'file');
 }
 
+/** A citation command's argument before the cursor; the group is the key being typed, after any commas. */
+export const CITE_ARGUMENT = /\\(?:cite[tp]?|parencite|textcite|autocite|nocite)\*?(?:\[[^\]]*\])*\{(?:[^}]*,)?\s*([^,}]*)$/;
+
 // Argument contexts (research R11, FR-030): the last group is the key being typed, after any commas.
 const ARGUMENTS: [RegExp, (p: ProjectSymbols, command: string) => Completion[]][] = [
 	[/\\(?:ref|eqref|autoref|pageref|cref|Cref|nameref)\{(?:[^}]*,)?\s*([^,}]*)$/, (p) => named(p.labels, 'label')],
-	[
-		/\\(?:cite[tp]?|parencite|textcite|autocite|nocite)\*?(?:\[[^\]]*\])*\{(?:[^}]*,)?\s*([^,}]*)$/,
-		(p) => p.bibKeys.map(({ key, title, author }) => ({ label: key, type: 'cite', detail: title ?? author }))
-	],
+	[CITE_ARGUMENT, (p) => p.bibKeys.map(({ key, title, author }) => ({ label: key, type: 'cite', detail: title ?? author }))],
 	[/\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{(?:[^}]*,)?\s*([^,}]*)$/, () => named(PACKAGES, 'pkg')],
 	[/\\(input|include|includegraphics|bibliography|addbibresource)(?:\[[^\]]*\])?\{([^}]*)$/, paths],
 	[/\\(?:begin|end)\{([^}]*)$/, (p) => named([...ENVIRONMENTS.map((e) => e.name), ...p.environments], 'env')]
@@ -78,6 +78,30 @@ export function latexSource(project: ProjectSymbols) {
 				args ? snippetCompletion(`${label.slice(0, -2 * args)}${'{${}}'.repeat(args)}\${}`, { label, type: 'cmd' }) : { label, type: 'cmd' }
 			);
 		return { from: line.from + m.index, options: own.length ? [...BUNDLED, ...own] : BUNDLED, validFor: /^\\[a-zA-Z@]*$/ };
+	};
+}
+
+/** "Add reference…" in a citation argument (017 US1): opens the dialog, which puts the new key where the cursor is.
+ *  A source of its own, anchored at the cursor rather than at the key being typed: an empty pattern matches it
+ *  whatever was typed, ranked below the keys that match (`filter: false` would rank it first, so Enter after a
+ *  typed key would open the dialog). Not in read-only files. */
+export function addReferenceSource(open: () => void) {
+	const option: Completion = {
+		label: 'Add reference…',
+		type: 'action',
+		boost: -99,
+		apply: (view) => {
+			closeCompletion(view);
+			open();
+		}
+	};
+	return (context: CompletionContext): CompletionResult | null => {
+		if (context.state.readOnly || context.state.facet(language)?.name !== 'stex') return null;
+		const line = context.state.doc.lineAt(context.pos);
+		const before = line.text.slice(0, context.pos - line.from);
+		const a = stripComment(before) === before && CITE_ARGUMENT.exec(before);
+		if (!a || escaped(before, a.index)) return null;
+		return { from: context.pos, options: [option] };
 	};
 }
 
