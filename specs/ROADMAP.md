@@ -62,6 +62,12 @@ One feature covering sign-in, site roles, per-user project spaces, sharing with 
 | 010 | Comments & chat | todo | 005 |
 | 011 | Self-hosting hardening | todo | 005 |
 | 012 | GitHub repository sync | done | 008 |
+| 013 | Track changes (suggest mode) | done | 005 |
+| 014 | Project-wide search and replace | done | 003 |
+| 015 | Images, figures, tables and symbols | done | 003 |
+| 016 | Compile error hints and code check | done | 002 |
+| 017 | References from DOI, arXiv and Zotero | done | 003 |
+| 018 | Light theme and appearance switch | done | 001 |
 
 ### 008 Project history, restore, SyncTeX & PDF navigation
 One feature covering both parts below. Former rows 008 and 009 are bundled here.
@@ -79,11 +85,13 @@ Production Docker Compose with a full TeX Live image, data volume layout, docume
 ### 012 GitHub repository sync
 Two-way sync between a project and one branch of a GitHub repository through a GitHub App. Each user connects their own GitHub account; the owner links the project to a repository they can push to, after a preview of what the first sync does (or imports the repository into a blank project). Overtree pushes one commit per working session (after everyone leaves, during long sessions, or with Push now and an optional title), with the changed files in the message and `Co-authored-by` trailers for everyone whose edits it carries; never a force push. GitHub's commits are pulled on open, every few minutes while open and with Pull now, and merged into the live documents with diff3 (overlapping edits keep both sides between `%` markers), recorded as "Merged from GitHub" versions in history. "Not pulled" patterns keep the repository's own CI output (`.github/`, build files, PDFs compiled from a `.tex`) out of the project and untouched on GitHub. A status button in the top bar shows the sync state, failures with retries and backoff, and the fix for lost access, a deleted branch or an ownership transfer. Off unless the instance configures the App.
 
+### 013–018 Writer tools (2026-10-21)
+From a comparison with Overleaf, OpenAI Prism and the Typst app. Specs and plans in `specs/013-track-changes/` through `specs/018-light-theme/`: suggest mode with a review panel; search and replace across files; image paste/drop, figure and table dialogs and a symbol palette; plain-language hints for TeX errors, inline markers, an instant code check and optional ChkTeX; BibTeX from a DOI or arXiv id and from a Zotero library; a light theme with a Dark / Light / System switch.
+
 ## Later / not planned yet
 
 - Visual (rich-text) editor mode
-- Track changes / review mode
 - Dropbox sync
-- Spell checking and grammar
-- Reference manager integrations (Zotero, Mendeley)
+- Grammar checking (browser spellcheck is on since the editor UX review)
+- Mendeley and other reference managers (Zotero is in 017)
 - AI writing assistant

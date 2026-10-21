@@ -145,7 +145,7 @@ async function tabThrough(page: Page, browserName: string) {
 	const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 	await page.locator('header').click();
 	const seen = new Set<string>();
-	for (let i = 0; i < 30; i++) {
+	for (let i = 0; i < 45; i++) {
 		await page.keyboard.press(tab);
 		const info = await page.evaluate(() => {
 			const el = document.activeElement as HTMLElement;
@@ -171,8 +171,10 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 	await expect(page.getByRole('navigation', { name: 'File outline' }).getByRole('button')).toHaveText(['Introduction']);
 	const seen = await tabThrough(page, browserName);
 	for (const name of [
+		'button:Track changes',
 		'button:New file',
 		'button:New folder',
+		'button:Search project',
 		'treeitem:main.tex, main document',
 		'button:Introduction',
 		'separator:Resize file tree and outline',
@@ -187,6 +189,7 @@ test('Tab reaches every control with a visible focus ring (US2-8, FR-016)', asyn
 		'button:Insert figure',
 		'button:Insert table',
 		'button:Symbols',
+		'button:Add reference',
 		'button:Search',
 		'button:Collapse sidebar',
 		'button:Collapse PDF'
