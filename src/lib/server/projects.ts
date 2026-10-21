@@ -75,6 +75,12 @@ export function renameProject(pid: string, title: unknown) {
 	broadcast(pid, { type: 'project' });
 }
 
+/** Track changes on or off for everyone (013, owner and editors, checked by the route); open editors get `project`. */
+export function setTrackChanges(pid: string, on: boolean) {
+	if (!db().update(projects).set({ trackChanges: on }).where(eq(projects.id, pid)).run().changes) fail(404, 'Project not found.');
+	broadcast(pid, { type: 'project' });
+}
+
 /** A copy owned by `ownerId` titled "Copy of <title>" (cut to 120 characters): new file ids, the same blobs, each
  *  text document's current text as one stored update, the same main file and compiler, no members and no GitHub
  *  link (012 edge case: two projects pushing to one branch would fight). */

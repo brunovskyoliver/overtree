@@ -20,7 +20,8 @@ export const GET: RequestHandler = ({ locals, params }) => {
 		role,
 		mainFileId: p.mainFileId,
 		link: role === 'owner' && p.linkToken ? { token: p.linkToken, role: p.linkRole } : null,
-		permissions: { canEdit: canEdit(role) }
+		permissions: { canEdit: canEdit(role) },
+		trackChanges: p.trackChanges
 	});
 };
 

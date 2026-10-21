@@ -57,6 +57,7 @@ export const projects = sqliteTable('projects', {
 	mainFileId: text('main_file_id'),
 	linkToken: text('link_token').unique(), // null: link sharing off
 	linkRole: text('link_role').$type<MemberRole>(),
+	trackChanges: integer('track_changes', { mode: 'boolean' }).notNull().default(false), // 013: edits become suggestions
 	createdAt: integer('created_at').notNull(),
 	updatedAt: integer('updated_at').notNull()
 });

@@ -6,6 +6,7 @@ import diff from 'fast-diff';
 import * as Y from 'yjs';
 import { kindForName, limits, validateName, type FileEntry, type FileKind } from '../files.ts';
 import { freeName, packageEdit } from '../media.ts';
+import { clearChanges } from '../track-changes.ts';
 import type { ConnectionContext } from './access.ts';
 import { getServer } from './collab.ts';
 import type { Db } from './db.ts';
@@ -266,11 +267,15 @@ export async function getText(id: string): Promise<string> {
 }
 
 /** Sets the text through Hocuspocus (research R3): persisted by onChange, live in open editors. `ctx` is the
- *  connection context onChange sees, so history attributes the edit to `ctx.userId` (008 research R5). */
+ *  connection context onChange sees, so history attributes the edit to `ctx.userId` (008 research R5). Callers
+ *  replace the whole file (restore, an uploaded replacement): its suggestions go with the old text (013 plan.md D6). */
 export async function setText(id: string, text: string, ctx: ConnectionContext) {
 	const conn = await getServer().hocuspocus.openDirectConnection(id, ctx);
 	try {
-		await conn.transact((doc) => editText(doc.getText('content'), text));
+		await conn.transact((doc) => {
+			editText(doc.getText('content'), text);
+			clearChanges(doc);
+		});
 	} finally {
 		await conn.disconnect();
 	}

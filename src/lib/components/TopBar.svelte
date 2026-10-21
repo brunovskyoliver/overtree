@@ -15,6 +15,7 @@
 	// `onshare`: the green "Share" button (editor page) opening the Share dialog
 	// `peers`: the others in the project (avatars, `onjump` goes to their cursor); `offline`: the socket dropped
 	// `history`: the History toggle (008 contracts/ui.md), pressed while the History view is on
+	// `track`: the project's track-changes switch (013), `canToggle` for owners and editors; `review`: the review panel
 	// `layout`: the Layout menu (008 research R12)
 	// `github`: the GitHub sync indicator (012 contracts/ui.md "Top bar indicator"); `open` opens the settings dialog
 	let {
@@ -26,6 +27,8 @@
 		onjump,
 		offline = false,
 		history,
+		track,
+		review,
 		layout,
 		github
 	}: {
@@ -37,6 +40,8 @@
 		onjump?: (peer: Peer) => void;
 		offline?: boolean;
 		history?: { on: boolean; toggle: () => void };
+		track?: { on: boolean; canToggle: boolean; toggle: () => void };
+		review?: { on: boolean; toggle: () => void };
 		layout?: Layout;
 		github?: { state: GitHub; open: (opts?: { changeBranch?: boolean }) => void };
 	} = $props();
@@ -168,6 +173,25 @@
 		{/if}
 		{#if github}
 			<GitHubStatus github={github.state} onsettings={github.open} />
+		{/if}
+		{#if track}
+			<button
+				type="button"
+				class="pill track"
+				aria-pressed={track.on}
+				disabled={!track.canToggle}
+				title={track.canToggle ? 'Record every edit as a suggestion, for everyone' : 'Only owners and editors can turn track changes on or off'}
+				onclick={track.toggle}
+			>
+				<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4M14 20h6" /></svg>
+				Track changes
+			</button>
+		{/if}
+		{#if review}
+			<button type="button" id="review-toggle" class="pill" aria-pressed={review.on} onclick={review.toggle}>
+				<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5" /></svg>
+				Review
+			</button>
 		{/if}
 		{#if history}
 			<button type="button" id="history-toggle" class="history" aria-pressed={history.on} onclick={history.toggle}>
@@ -332,7 +356,8 @@
 		font-size: 12px;
 		white-space: nowrap;
 	}
-	.history {
+	.history,
+	.pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
@@ -345,14 +370,28 @@
 		font: inherit;
 		cursor: pointer;
 	}
-	.history:hover {
+	.history:hover,
+	.pill:hover:not(:disabled) {
 		background: var(--panel-raised);
 	}
-	.history[aria-pressed='true'] {
+	.history[aria-pressed='true'],
+	.pill[aria-pressed='true'] {
 		border-color: var(--accent-bright);
 		background: var(--panel-raised);
 	}
-	.history svg {
+	/* on for everyone: as loud as the primary button, so nobody types without knowing */
+	.track[aria-pressed='true'] {
+		background: var(--accent);
+	}
+	.pill {
+		white-space: nowrap;
+	}
+	.pill:disabled {
+		cursor: default;
+		opacity: 0.7;
+	}
+	.history svg,
+	.pill svg {
 		fill: none;
 		stroke: currentColor;
 		stroke-width: 2;

@@ -17,6 +17,8 @@ export type ProjectDetails = {
 	mainFileId: string | null;
 	link: { token: string; role: 'editor' | 'reader' } | null;
 	permissions: { canEdit: boolean };
+	/** track changes (013): every editor edit is recorded as a suggestion */
+	trackChanges: boolean;
 };
 
 export type Person = { id: string; email: string; name: string; avatarUrl: string | null; color: string };
@@ -101,6 +103,17 @@ export class Project {
 		if (!res) return 'Network error, try again.';
 		if (!res.ok) return (await res.json().catch(() => null))?.message ?? `Rename failed (${res.status}).`;
 		if (this.details) this.details.title = (await res.json()).title;
+		return null;
+	}
+
+	/** Turn track changes on or off for everyone (owner and editors); null when done, else the message. */
+	async setTrackChanges(on: boolean): Promise<string | null> {
+		const init = { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on }) };
+		const res = await fetch(this.api('/track-changes'), init).catch(() => undefined);
+		if (await blockedBy(res)) return null;
+		if (!res) return 'Network error, try again.';
+		if (!res.ok) return (await res.json().catch(() => null))?.message ?? `Request failed (${res.status}).`;
+		if (this.details) this.details.trackChanges = on;
 		return null;
 	}
 

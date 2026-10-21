@@ -102,6 +102,31 @@ const theme = EditorView.theme(
 			fontWeight: '600'
 		},
 		'.cm-yRecent .cm-ySelectionInfo': { opacity: '1' },
+		// track changes (013): suggestions in the author's color (--tc-color, set per mark from the presence palette)
+		'.cm-tcInsert': {
+			backgroundColor: 'color-mix(in srgb, var(--tc-color) 22%, transparent)',
+			borderBottom: '2px solid var(--tc-color)'
+		},
+		// a deletion: a thin bar with a notch on top where the text was; hover shows it (title)
+		'.cm-tcDelete': {
+			position: 'relative',
+			display: 'inline-block',
+			width: '8px',
+			height: '1.2em',
+			margin: '0 -1px',
+			verticalAlign: 'text-bottom',
+			background: 'linear-gradient(var(--tc-color), var(--tc-color)) center / 2px 100% no-repeat',
+			cursor: 'help'
+		},
+		'.cm-tcDelete::before': {
+			content: '""',
+			position: 'absolute',
+			top: '0',
+			left: '0',
+			borderLeft: '4px solid transparent',
+			borderRight: '4px solid transparent',
+			borderTop: '5px solid var(--tc-color)'
+		},
 		'.tok-command': { color: '#d27fb3' },
 		'.tok-argument': { color: '#e5a85c', fontStyle: 'italic' },
 		'.tok-math': { color: '#7fc8a9' },

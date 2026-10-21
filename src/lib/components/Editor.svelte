@@ -42,13 +42,16 @@
 	import { referenceFor, usesBiblatex } from '#lib/media.ts';
 	import { cursorLabels, editorTheme } from '#lib/editor/theme.ts';
 	import { followRemoteTyping, newlineBelow } from '#lib/editor/follow.ts';
+	import { trackChanges } from '#lib/editor/track.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { isLatexName } from '#lib/files.ts';
 	import { lightColor } from '#lib/presence.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import type { Session } from '#lib/session.svelte.ts';
+	import { changesOf, keepAnchors } from '#lib/track-changes.ts';
 	import EditorTabs from './EditorTabs.svelte';
 	import FilePreview from './FilePreview.svelte';
+	import ReviewPanel from './ReviewPanel.svelte';
 	import Toolbar from './Toolbar.svelte';
 
 	// One EditorView; each open text file keeps its own EditorState, Yjs doc, provider and undo (research R9).
@@ -58,7 +61,9 @@
 		editor = $bindable(),
 		onLocalEdit,
 		onCompile,
-		onSyncForward
+		onSyncForward,
+		review = false,
+		onreviewclose
 	}: {
 		project: Project;
 		session: Session;
@@ -67,6 +72,9 @@
 		onCompile?: () => void;
 		/** Ctrl/⌘+Alt+J: show the cursor's place in the PDF (SyncTeX) */
 		onSyncForward?: () => void;
+		/** the review panel (013) is open */
+		review?: boolean;
+		onreviewclose?: () => void;
 	} = $props();
 
 	type Tab = {
@@ -288,7 +296,9 @@
 	function createTab(id: string, name: string): Tab {
 		const doc = new Y.Doc();
 		const ytext = doc.getText('content');
-		const undoManager = new Y.UndoManager(ytext);
+		// the suggestions too (013): undoing a tracked edit takes its record back with it
+		const undoManager = new Y.UndoManager([ytext, changesOf(doc)]);
+		keepAnchors(undoManager, ytext);
 		// every document of the tab shares the session's socket (research R8)
 		const canEdit = project.files.find((f) => f.id === id)?.canEdit !== false;
 		const persistence = canEdit ? new IndexeddbPersistence(DB + id, doc) : null;
@@ -309,7 +319,9 @@
 				language.of(isLatexName(name) ? latexExtensions : plainText),
 				editable.of(unlocked),
 				spelling.of(prefs.spellcheck ? spellOn : spellOff),
-				yCollab(ytext, provider.awareness, { undoManager })
+				yCollab(ytext, provider.awareness, { undoManager }),
+				// after yCollab: records an edit once its sync plugin has written it to ytext
+				trackChanges(ytext, () => (project.details?.trackChanges && auth.me && canEdit ? { id: auth.me.id, name: auth.me.name, color: auth.me.color } : null))
 			]
 		});
 		const tab: Tab = { ytext, provider, persistence, undoManager, state, dirty: false, local: false };
@@ -499,7 +511,12 @@
 		</p>
 	{/if}
 	{#if activeFile?.kind === 'text' && latex}<Toolbar {editor} {readOnly} {project} bind:palette />{/if}
-	<div class="host" bind:this={host} hidden={activeFile?.kind !== 'text'} style:--editor-font-size="{prefs.fontSize}px"></div>
+	<div class="body" hidden={activeFile?.kind !== 'text'}>
+		<div class="host" bind:this={host} style:--editor-font-size="{prefs.fontSize}px"></div>
+		{#if review && activeFile?.kind === 'text'}
+			<ReviewPanel {editor} canReview={!readOnly && project.details?.permissions.canEdit !== false} onclose={() => onreviewclose?.()} />
+		{/if}
+	</div>
 	{#if activeFile && activeFile.kind !== 'text'}
 		{#key activeFile.id}<FilePreview file={activeFile} url={project.rawUrl(activeFile)} />{/key}
 	{:else if !activeFile}
@@ -515,12 +532,17 @@
 		min-height: 0;
 		background: var(--bg-editor);
 	}
-	.host {
+	.body {
+		display: flex;
 		flex: 1;
 		min-height: 0;
 	}
-	.host[hidden] {
+	.body[hidden] {
 		display: none;
+	}
+	.host {
+		flex: 1;
+		min-width: 0;
 	}
 	.host :global(.cm-editor) {
 		height: 100%;
