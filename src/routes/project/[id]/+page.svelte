@@ -17,6 +17,7 @@
 	import { Layout } from '#lib/layout.svelte.ts';
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { Project } from '#lib/project.svelte.ts';
+	import { buildRegExp, matches, type SearchOptions } from '#lib/search.ts';
 	import { Session, type Peer } from '#lib/session.svelte.ts';
 	import * as Y from 'yjs';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
@@ -112,6 +113,25 @@
 		view.focus();
 	}
 
+	/** A project search result (014): open its file and select the match nearest `from`, searched again in the
+	 *  editor's text since it may have moved since the search; none left, the cursor goes to `from`. */
+	async function openMatch(fileId: string, from: number, options: SearchOptions) {
+		if (!project.files.some((f) => f.id === fileId)) return; // deleted since the search
+		const view = (await opened(fileId))?.view;
+		if (!view) return;
+		const doc = view.state.doc.toString();
+		const re = buildRegExp(options);
+		let best: { from: number; to: number } | undefined;
+		if (re instanceof RegExp)
+			for (const m of matches(doc, re)) {
+				if (!best || Math.abs(m.index - from) < Math.abs(best.from - from)) best = { from: m.index, to: m.index + m[0].length };
+				if (m.index >= from) break; // later ones are only farther
+			}
+		const sel = best ?? { from: Math.min(from, doc.length), to: Math.min(from, doc.length) };
+		view.dispatch({ selection: { anchor: sel.from, head: sel.to }, effects: EditorView.scrollIntoView(sel.from, { y: 'center' }) });
+		view.focus();
+	}
+
 	// Layout menu and the separate PDF window (008 research R12): its double-clicks open the source here
 	const layout = new Layout(project.id, (fileId, line) => void openAt(fileId, line));
 	layout.mirror(compile);
@@ -204,12 +224,13 @@
 					{layout}
 					activeId={project.active}
 					onopen={(id) => project.openFile(id)}
+					onmatch={openMatch}
 				>
 					<Editor
 						{project}
 						{session}
 						bind:editor
-						onLocalEdit={() => (compile.onLocalEdit(), githubOn && github.touched())}
+						onLocalEdit={() => (compile.onLocalEdit(), githubOn && github.touched(), workspace?.searchStale())}
 						onCompile={() => compile.compile()}
 						onSyncForward={() => workspace?.forward()}
 					/>

@@ -8,7 +8,12 @@
 	import PermissionsDialog from './PermissionsDialog.svelte';
 
 	// File tree per contracts/ui.md. `activeId` is the file shown in the editor; `onopen` opens a file in a tab.
-	let { project, activeId, onopen }: { project: Project; activeId?: string | null; onopen?: (id: string) => void } = $props();
+	let {
+		project,
+		activeId,
+		onopen,
+		onsearch
+	}: { project: Project; activeId?: string | null; onopen?: (id: string) => void; onsearch?: () => void } = $props();
 
 	type Editing = { id: string | null; kind: 'folder' | 'text'; parentId: string | null }; // id null = new entry
 
@@ -449,6 +454,11 @@
 		<button type="button" class="tool" aria-label="Upload" title="Upload" disabled={!intoOk(folderOf(sel))} onclick={() => pick(folderOf(sel))}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" /></svg>
 		</button>
+		{#if onsearch}
+			<button type="button" class="tool" aria-label="Search project" title="Search project (Ctrl/⌘+Shift+F)" data-search-button onclick={onsearch}>
+				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5 20 20" /></svg>
+			</button>
+		{/if}
 		<a class="tool" href={project.api('/zip')} download aria-label="Download project as zip" title="Download project as zip">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16" /></svg>
 		</a>

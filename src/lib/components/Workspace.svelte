@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { Pane, PaneGroup, PaneResizer } from 'paneforge';
-	import { onMount, untrack, type Snippet } from 'svelte';
+	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
 	import type { Layout, LayoutMode } from '#lib/layout.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import { RECOMPILE_TO_SYNC, syncToCode, syncToPdf, syncWith } from '#lib/synctex.ts';
 	import FileTree from './FileTree.svelte';
 	import PdfPane from './PdfPane.svelte';
+	import SearchPanel from './SearchPanel.svelte';
+	import type { SearchOptions } from '#lib/search.ts';
 	import SyncNote from './SyncNote.svelte';
 	import SyncStrip from './SyncStrip.svelte';
 
@@ -20,7 +22,8 @@
 		activeId,
 		onopen,
 		cursor,
-		layout
+		layout,
+		onmatch
 	}: {
 		children: Snippet;
 		outline: Snippet;
@@ -33,12 +36,44 @@
 		cursor?: () => { fileId: string; line: number } | undefined;
 		/** the Layout menu's mode (008 research R12) */
 		layout: Layout;
+		/** a project search result was chosen (014) */
+		onmatch: (fileId: string, from: number, options: SearchOptions) => void;
 	} = $props();
 
 	let sidebar = $state<Pane>();
 	let pdf = $state<Pane>();
 	let sidebarOpen = $state(true);
 	let pdfOpen = $state(true);
+
+	// the sidebar shows the Search view (014) instead of the tree and outline; both stay mounted, so the tree keeps
+	// its state and the search its query and results
+	let searching = $state(false);
+	let search = $state<ReturnType<typeof SearchPanel>>();
+	let root = $state<HTMLElement>();
+
+	/** Ctrl/⌘+Shift+F and the tree's search button: show the Search view, the sidebar expanded, the query focused. */
+	export async function openSearch() {
+		if (sidebar?.isCollapsed()) sidebar.expand();
+		searching = true;
+		await tick();
+		search?.focus();
+	}
+
+	async function closeSearch() {
+		searching = false;
+		await tick();
+		root?.querySelector<HTMLElement>('[data-search-button]')?.focus();
+	}
+
+	/** The user typed in a document: open results are searched again after a pause. */
+	export const searchStale = () => search?.stale();
+
+	function onwindowkey(e: KeyboardEvent) {
+		if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey || e.key.toLowerCase() !== 'f') return;
+		if (root?.closest('[inert]') || document.querySelector('dialog[open]')) return; // History view, a dialog
+		e.preventDefault();
+		void openSearch();
+	}
 
 	const toggle = (pane: Pane | undefined) => (pane?.isCollapsed() ? pane.expand() : pane?.collapse());
 
@@ -100,6 +135,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={onwindowkey} />
+
 <!-- paneforge stores under `paneforge:<autoSaveId>`, collapsed panes included (FR-018) -->
 <PaneGroup direction="horizontal" autoSaveId="overtree:layout:main" class="workspace layout-{layout.mode}">
 	<Pane
@@ -113,18 +150,25 @@
 		onExpand={() => (sidebarOpen = true)}
 	>
 		<!-- inert while collapsed so Tab skips the zero-width tree, divider and outline (FR-016) -->
-		<PaneGroup direction="vertical" autoSaveId="overtree:layout:sidebar" class="sidebar" inert={!sidebarOpen}>
-			<Pane id="tree" defaultSize={50} minSize={15}>
-				<FileTree {project} {activeId} {onopen} />
-			</Pane>
-			<PaneResizer class="handle handle-h" aria-label="Resize file tree and outline" />
-			<Pane id="outline" minSize={15}>
-				<section class="outline-panel" aria-labelledby="file-outline-title">
-					<h2 class="pane-header" id="file-outline-title">File outline</h2>
-					{@render outline()}
-				</section>
-			</Pane>
-		</PaneGroup>
+		<div class="sidebar-body" bind:this={root} inert={!sidebarOpen}>
+			<div class="sidebar-view" hidden={searching}>
+				<PaneGroup direction="vertical" autoSaveId="overtree:layout:sidebar" class="sidebar">
+					<Pane id="tree" defaultSize={50} minSize={15}>
+						<FileTree {project} {activeId} {onopen} onsearch={openSearch} />
+					</Pane>
+					<PaneResizer class="handle handle-h" aria-label="Resize file tree and outline" />
+					<Pane id="outline" minSize={15}>
+						<section class="outline-panel" aria-labelledby="file-outline-title">
+							<h2 class="pane-header" id="file-outline-title">File outline</h2>
+							{@render outline()}
+						</section>
+					</Pane>
+				</PaneGroup>
+			</div>
+			<div class="sidebar-view search-view" hidden={!searching}>
+				<SearchPanel bind:this={search} {project} {onmatch} onclose={closeSearch} />
+			</div>
+		</div>
 	</Pane>
 	<PaneResizer class="handle handle-v" aria-label="Resize sidebar" />
 	<Pane id="editor" minSize={25} class="editor-pane">
@@ -184,6 +228,16 @@
 		height: 100%;
 	}
 	:global(.sidebar) {
+		background: var(--bg-editor);
+	}
+	.sidebar-body,
+	.sidebar-view {
+		height: 100%;
+	}
+	.sidebar-view[hidden] {
+		display: none;
+	}
+	.search-view {
 		background: var(--bg-editor);
 	}
 	.outline-panel {
