@@ -191,15 +191,17 @@ test('the options menu works from the keyboard', async ({ page }) => {
 	await expect(item(page, 'Auto compile')).toBeFocused();
 	await page.keyboard.press('ArrowDown');
 	await expect(item(page, 'pdfLaTeX')).toBeFocused();
+	// the last item is ChkTeX (016)
 	await page.keyboard.press('End');
-	await expect(item(page, 'Stop on first error')).toBeFocused();
+	await expect(item(page, 'Check with ChkTeX')).toBeFocused();
 	await page.keyboard.press('ArrowDown');
 	await expect(item(page, 'Auto compile')).toBeFocused();
 	await page.keyboard.press('ArrowUp');
-	await expect(item(page, 'Stop on first error')).toBeFocused();
+	await expect(item(page, 'Check with ChkTeX')).toBeFocused();
 	await page.keyboard.press('Home');
 	await expect(item(page, 'Auto compile')).toBeFocused();
 
+	await page.keyboard.press('End');
 	await page.keyboard.press('ArrowUp');
 	await page.keyboard.press('Space');
 	await expect(item(page, 'Stop on first error')).toHaveAttribute('aria-checked', 'true');

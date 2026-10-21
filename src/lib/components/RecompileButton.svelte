@@ -14,6 +14,17 @@
 	const errors = $derived(compile.last?.entries.filter((e) => e.level === 'error').length ?? 0);
 
 	const m = new Menu();
+
+	const chktexUsable = $derived(compile.chktexAvailable === true);
+	const chktexNote = $derived(
+		compile.chktexAvailable === false
+			? 'ChkTeX isn’t in this TeX image'
+			: compile.chktexAvailable === null
+				? 'Couldn’t check for ChkTeX (compiler unavailable)'
+				: !compile.canConfigure
+					? 'Only editors can change this'
+					: ''
+	);
 </script>
 
 <svelte:window onpointerdown={m.onwindowpointerdown} />
@@ -65,6 +76,18 @@
 				aria-checked={compile.stopOnFirstError}
 				onclick={() => compile.setOption('stopOnFirstError', !compile.stopOnFirstError)}>Stop on first error</button
 			>
+			<!-- 016: a project setting; off and disabled when the TeX image has no ChkTeX -->
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				tabindex="-1"
+				aria-checked={compile.chktex && chktexUsable}
+				aria-disabled={!compile.canConfigure || !chktexUsable || undefined}
+				aria-describedby={chktexNote ? 'chktex-note' : undefined}
+				title={chktexNote || undefined}
+				onclick={() => compile.canConfigure && chktexUsable && compile.setChktex(!compile.chktex)}>Check with ChkTeX</button
+			>
+			{#if chktexNote}<span class="note" id="chktex-note">{chktexNote}</span>{/if}
 		</div>
 	{/if}
 </div>
@@ -138,6 +161,12 @@
 	}
 	.heading {
 		padding: 2px 12px 2px 30px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.note {
+		max-width: 220px;
+		padding: 0 12px 4px 30px;
 		font-size: 12px;
 		color: var(--text-muted);
 	}

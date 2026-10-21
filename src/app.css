@@ -51,6 +51,7 @@
 	--warn-dot: #e0a526; /* GitHub status */
 	--on-presence: #1b1e26; /* initials on a presence color (presence.ts), both themes */
 
+	--info: #7a8aa6; /* log entries and lint markers (016) */
 	--project-search-match: rgb(255 200 60 / 0.35); /* a match in project search results */
 
 	/* editor (lib/editor/theme.ts) */
@@ -146,6 +147,7 @@
 	--selection: #c9d8f5;
 	--bracket-match: #b58900;
 	--bracket-mismatch: #d03a3a;
+	--info: #56637d;
 	--project-search-match: rgb(230 170 0 / 0.3);
 	--search-match: #fbe7a6;
 	--search-match-outline: #c9a227;

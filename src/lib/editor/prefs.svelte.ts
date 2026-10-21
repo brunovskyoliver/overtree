@@ -1,5 +1,6 @@
-// Editor preferences per device, like the layout mode (layout.svelte.ts): font size, browser spellcheck and the
-// appearance (018: dark, light or the system's choice), which colors the whole app through <html data-theme>.
+// Editor preferences per device, like the layout mode (layout.svelte.ts): font size, browser spellcheck, the
+// instant code check (016) and the appearance (018: dark, light or the system's choice), which colors the whole app
+// through <html data-theme>.
 
 const KEY = 'overtree:editor-prefs';
 export const FONT_SIZES = { min: 10, max: 24, default: 13 };
@@ -23,6 +24,7 @@ class EditorPrefs {
 	appearance = $state<Appearance>('dark');
 	#systemLight = $state(false);
 	theme = $derived(resolveTheme(this.appearance, this.#systemLight));
+	codeCheck = $state(true);
 
 	constructor() {
 		try {
@@ -30,6 +32,7 @@ class EditorPrefs {
 			if (Number.isInteger(stored.fontSize)) this.fontSize = clamp(stored.fontSize);
 			if (typeof stored.spellcheck === 'boolean') this.spellcheck = stored.spellcheck;
 			if (isAppearance(stored.appearance)) this.appearance = stored.appearance;
+			if (typeof stored.codeCheck === 'boolean') this.codeCheck = stored.codeCheck;
 		} catch {
 			// unreadable storage: defaults
 		}
@@ -53,6 +56,11 @@ class EditorPrefs {
 		this.#store();
 	}
 
+	setCodeCheck(on: boolean) {
+		this.codeCheck = on;
+		this.#store();
+	}
+
 	setAppearance(appearance: Appearance) {
 		this.appearance = appearance;
 		this.#apply();
@@ -65,7 +73,7 @@ class EditorPrefs {
 
 	#store() {
 		try {
-			localStorage.setItem(KEY, JSON.stringify({ fontSize: this.fontSize, spellcheck: this.spellcheck, appearance: this.appearance }));
+			localStorage.setItem(KEY, JSON.stringify({ fontSize: this.fontSize, spellcheck: this.spellcheck, codeCheck: this.codeCheck, appearance: this.appearance }));
 		} catch {
 			// private mode or full: the choice lasts for this page
 		}

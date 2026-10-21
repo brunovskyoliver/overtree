@@ -1,0 +1,1 @@
+ALTER TABLE `compile_settings` ADD `chktex` integer DEFAULT false NOT NULL;

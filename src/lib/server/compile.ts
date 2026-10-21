@@ -5,7 +5,8 @@ import { join, posix } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { Compiler, CompileResult, CompileStatus, LogEntry } from '../compile-types.ts';
 import { pathOf } from '../files.ts';
-import { parseLog } from '../log-parser.ts';
+import { hintFor } from '../compile-hints.ts';
+import { parseChktex, parseLog } from '../log-parser.ts';
 import { getServer } from './collab.ts';
 import { fail, fileOr404, getMainFileId, getText, listFiles, readBlob } from './files.ts';
 import { compileSettings } from './schema.ts';
@@ -32,6 +33,8 @@ export type RunOptions = {
 	mainPath: string; // e.g. 'src/thesis.tex'
 	compiler: Compiler;
 	stopOnFirstError: boolean;
+	/** also run ChkTeX on the main document (016) */
+	chktex?: boolean;
 	image?: string;
 	timeoutMs?: number;
 	memory?: string;
@@ -46,6 +49,7 @@ export type RunResult = {
 	pdf?: Buffer;
 	log?: string;
 	synctex?: Buffer;
+	chktex?: string; // ChkTeX's output; undefined when it didn't run
 };
 
 // One throwaway container per compile (research R1, R8): a tar of the project in on stdin, a tar of
@@ -55,6 +59,7 @@ export function runCompile({
 	mainPath,
 	compiler,
 	stopOnFirstError,
+	chktex = false,
 	image = process.env.TEXLIVE_IMAGE ?? 'texlive/texlive:latest-medium',
 	timeoutMs = Number(process.env.COMPILE_TIMEOUT_MS ?? 20000),
 	memory = process.env.COMPILE_MEMORY ?? '512m',
@@ -76,9 +81,13 @@ export function runCompile({
 	// ponytail: project + outputs share the 256 MB /tmp tmpfs (bigger ones end as "no PDF"); raise it with COMPILE_TMPFS in 011
 	const script =
 		'mkdir p && tar -x --no-same-owner -C p && cd "p/$MAIN_DIR" || exit 1; ' +
+		// ChkTeX first (it takes milliseconds), so latexmk keeps its time budget; it follows \input like TeX does
+		(chktex
+			? `command -v chktex >/dev/null && timeout -s KILL 5 chktex -q -f '%f:%l:%c:%d:%k:%n:%m\n' "./$MAIN_FILE" >/tmp/output.chktex 2>/dev/null; `
+			: '') +
 		`timeout -s KILL ${limit} latexmk ${ENGINE_FLAG[compiler]} -f -interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape${halt} "./$MAIN_FILE" >&2; ` +
 		'base="${MAIN_FILE%.*}"; for x in pdf log synctex.gz; do mv -f "$base.$x" "/tmp/output.$x" 2>/dev/null; done; ' +
-		'cd /tmp && tar -c output.pdf output.log output.synctex.gz 2>/dev/null; ' +
+		'cd /tmp && tar -c output.pdf output.log output.synctex.gz output.chktex 2>/dev/null; ' +
 		// The OOM killer only takes the engine, so the job would exit 0; turn a recorded oom_kill into 137.
 		// ponytail: cgroup v2 path only; on a cgroup v1 host OOM shows up as `failure`
 		"grep -qs '^oom_kill [1-9]' /sys/fs/cgroup/memory.events && exit 137; true";
@@ -144,7 +153,8 @@ export function runCompile({
 				message: pdf ? undefined : 'Compile failed, no PDF was produced.',
 				pdf,
 				log: out.get('output.log')?.toString('utf8'),
-				synctex: out.get('output.synctex.gz')
+				synctex: out.get('output.synctex.gz'),
+				chktex: out.get('output.chktex')?.toString('utf8')
 			});
 		});
 	});
@@ -232,9 +242,10 @@ export function pdfName(pid: string, root: string | null = null) {
 /** Output of the main document; a standalone root's goes under `roots/<file id>`. */
 export const compileDir = (pid: string, root: string | null = null) => join(getServer().dataDir, 'compile', pid, ...(root ? ['roots', root] : []));
 
+const settingsRow = (pid: string) => getServer().db.select().from(compileSettings).where(eq(compileSettings.project, pid)).get();
+
 export function getCompiler(pid: string): Compiler {
-	const row = getServer().db.select().from(compileSettings).where(eq(compileSettings.project, pid)).get();
-	return row?.compiler ?? 'pdflatex';
+	return settingsRow(pid)?.compiler ?? 'pdflatex';
 }
 
 export function setCompiler(pid: string, compiler: Compiler) {
@@ -244,6 +255,43 @@ export function setCompiler(pid: string, compiler: Compiler) {
 		.onConflictDoUpdate({ target: compileSettings.project, set: { compiler } })
 		.run();
 }
+
+/** ChkTeX on compile (016), a project option like the compiler; off by default. */
+export function getChktex(pid: string): boolean {
+	return settingsRow(pid)?.chktex ?? false;
+}
+
+export function setChktex(pid: string, chktex: boolean) {
+	getServer()
+		.db.insert(compileSettings)
+		.values({ project: pid, compiler: getCompiler(pid), chktex })
+		.onConflictDoUpdate({ target: compileSettings.project, set: { chktex } })
+		.run();
+}
+
+// Whether the TeX image has ChkTeX, asked once per image in a throwaway container (never in this process).
+// A failed check (no Docker yet) isn't remembered, so the next request asks again.
+const chktexProbe = new Map<string, Promise<boolean | null>>();
+
+/** true/false: the image has/lacks ChkTeX; null: Docker couldn't tell. */
+export function chktexAvailable(image = process.env.TEXLIVE_IMAGE ?? 'texlive/texlive:latest-medium'): Promise<boolean | null> {
+	let probe = chktexProbe.get(image);
+	if (!probe) {
+		probe = new Promise((resolve) => {
+			const args = ['run', '--rm', '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL', '--read-only', '--user', '1000:1000', image, 'sh', '-c', 'command -v chktex'];
+			execFile('docker', args, { timeout: 15000 }, (err, stdout, stderr) => {
+				if (!err) return resolve(stdout.trim() !== '');
+				// the shell ran and didn't find it: exit 1 with nothing from Docker itself
+				resolve(err.code === 1 && !DOCKER_ERROR.test(stderr) ? false : null);
+			});
+		});
+		chktexProbe.set(image, probe);
+		probe.then((r) => r === null && chktexProbe.delete(image));
+	}
+	return probe;
+}
+// asked at startup, so the first editor page load doesn't wait for it
+void chktexAvailable();
 
 export function getLastResult(pid: string, root: string | null = null): CompileResult | null {
 	try {
@@ -282,8 +330,9 @@ async function compileOnce(pid: string, { stopOnFirstError }: Opts, root: string
 	const id = randomUUID();
 	const startedAt = Date.now();
 	const compiler = getCompiler(pid);
+	const chktex = getChktex(pid);
 	const { files, mainPath, paths } = await collectProject(pid, root);
-	const r: RunResult = mainPath ? await runCompile({ files, mainPath, compiler, stopOnFirstError }) : { status: 'failure', message: NO_MAIN };
+	const r: RunResult = mainPath ? await runCompile({ files, mainPath, compiler, stopOnFirstError, chktex }) : { status: 'failure', message: NO_MAIN };
 
 	const dir = compileDir(pid, root);
 	mkdirSync(dir, { recursive: true });
@@ -313,12 +362,24 @@ async function compileOnce(pid: string, { stopOnFirstError }: Opts, root: string
 		startedAt,
 		durationMs: Date.now() - startedAt,
 		pdfId: r.pdf ? id : previous?.pdfId,
-		entries: r.log && mainPath ? parseLog(r.log, posix.basename(mainPath)).map((e) => resolveEntry(e, mainPath, paths)) : [],
+		entries: mainPath ? entriesOf(r, mainPath, files, paths) : [],
 		message: r.message,
 		rootId: root
 	};
 	write('result.json', JSON.stringify(result));
 	return result;
+}
+
+/** The log's and ChkTeX's entries as project paths, each with its hint (016). */
+function entriesOf(r: RunResult, mainPath: string, files: ProjectFile[], paths: Map<string, string>): LogEntry[] {
+	const entries = [...(r.log ? parseLog(r.log, posix.basename(mainPath)) : []), ...(r.chktex ? parseChktex(r.chktex) : [])];
+	// TeX resolves names from the main document's folder
+	const dir = posix.dirname(mainPath);
+	const ctx = { paths: files.map((f) => posix.relative(dir, f.path)) };
+	return entries.map((e) => {
+		const hint = hintFor(e, ctx);
+		return resolveEntry(hint ? { ...e, hint } : e, mainPath, paths);
+	});
 }
 
 /** Log paths are relative to the main's folder: make them project paths and link project text files. */

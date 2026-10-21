@@ -99,7 +99,7 @@ describe('prefs store', () => {
 		const prefs = await load({ fontSize: 16 });
 		prefs.setAppearance('light');
 		expect(b.html.dataset.theme).toBe('light');
-		expect(JSON.parse(b.store.get(KEY)!)).toEqual({ fontSize: 16, spellcheck: true, appearance: 'light' });
+		expect(JSON.parse(b.store.get(KEY)!)).toEqual({ fontSize: 16, spellcheck: true, codeCheck: true, appearance: 'light' });
 		const again = await load(JSON.parse(b.store.get(KEY)!));
 		expect([again.appearance, again.theme]).toEqual(['light', 'light']);
 	});

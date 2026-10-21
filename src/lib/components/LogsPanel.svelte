@@ -14,10 +14,15 @@
 			[
 				['error', 'Errors'],
 				['warning', 'Warnings'],
-				['typesetting', 'Typesetting']
+				['typesetting', 'Typesetting'],
+				['chktex', 'ChkTeX']
 			] as const
 		).map(([level, title]) => ({ level, title, items: entries.filter((e) => e.level === level) }))
 	);
+	// one level or all of them (016); ChkTeX's filter only when it reported something
+	let filter = $state<LogEntry['level'] | 'all'>('all');
+	const filters = $derived(sections.filter((s) => s.level !== 'chktex' || s.items.length));
+	const shown = $derived(sections.filter((s) => filter === 'all' || s.level === filter));
 
 	let raw = $state<string>();
 
@@ -33,11 +38,21 @@
 	}
 </script>
 
+<!-- `code` in hint texts as <code> -->
+{#snippet rich(text: string)}
+	{#each text.split('`') as part, i (i)}{#if i % 2}<code>{part}</code>{:else}{part}{/if}{/each}
+{/snippet}
+
 <section class="logs" aria-label="Logs">
-	<p class="counts">
-		{#each sections as s (s.level)}<span class={s.level}>{s.items.length} {s.title.toLowerCase()}</span>{/each}
-	</p>
-	{#each sections as s (s.level)}
+	<div class="filters" role="group" aria-label="Show">
+		<button type="button" aria-pressed={filter === 'all'} onclick={() => (filter = 'all')}>All</button>
+		{#each filters as s (s.level)}
+			<button type="button" class={s.level} aria-pressed={filter === s.level} onclick={() => (filter = s.level)}
+				>{s.title} <span class="count">{s.items.length}</span></button
+			>
+		{/each}
+	</div>
+	{#each shown as s (s.level)}
 		{#if s.items.length}
 			<section aria-labelledby="logs-{s.level}">
 				<h3 id="logs-{s.level}">{s.title}</h3>
@@ -54,6 +69,14 @@
 									{#if entry.file || entry.line}<span class="where">{entry.file ?? ''}{entry.line ? `:${entry.line}` : ''}</span>{/if}
 									<span class="msg">{entry.message}</span>
 								</div>
+							{/if}
+							{#if entry.hint}
+								<!-- errors show their hint right away, the rest on demand -->
+								<details class="hint" open={entry.level === 'error'}>
+									<summary>Hint</summary>
+									<p>{@render rich(entry.hint.explanation)}</p>
+									{#if entry.hint.fix}<p class="fix">{@render rich(entry.hint.fix)}</p>{/if}
+								</details>
 							{/if}
 						</li>
 					{/each}
@@ -76,11 +99,27 @@
 		padding: 8px 12px;
 		background: var(--bg-editor);
 	}
-	.counts {
+	.filters {
 		display: flex;
-		gap: 12px;
+		flex-wrap: wrap;
+		gap: 6px;
 		margin: 0 0 8px;
+	}
+	.filters button {
+		width: auto;
+		padding: 2px 10px;
+		border: 1px solid var(--border);
+		border-radius: 12px;
 		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.filters button[aria-pressed='true'] {
+		border-color: var(--stripe, var(--text-muted));
+		background: var(--panel-raised);
+		color: var(--text);
+	}
+	.count {
+		font-variant-numeric: tabular-nums;
 	}
 	h3 {
 		margin: 12px 0 6px;
@@ -106,6 +145,32 @@
 	}
 	.typesetting {
 		--stripe: var(--text-muted);
+	}
+	.chktex {
+		--stripe: var(--info);
+	}
+	.hint {
+		margin: 0;
+		padding: 0 10px 6px;
+		font-size: 13px;
+	}
+	.hint summary {
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 400;
+	}
+	.hint p {
+		margin: 4px 0 0;
+		overflow-wrap: anywhere;
+	}
+	.hint .fix {
+		color: var(--text-muted);
+	}
+	code {
+		padding: 0 3px;
+		border-radius: 3px;
+		background: var(--bg);
+		font: 12px var(--font-mono);
 	}
 	button,
 	.item {

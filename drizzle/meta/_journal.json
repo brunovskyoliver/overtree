@@ -57,6 +57,13 @@
       "when": 1792615109639,
       "tag": "0007_thankful_morlocks",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792615374849,
+      "tag": "0008_swift_morbius",
+      "breakpoints": true
     }
   ]
 }

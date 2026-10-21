@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Compiler } from '../../src/lib/compile-types.ts';
 import { getMainFileId } from '../../src/lib/server/files.ts';
-import { compileDir, compileProject, runCompile } from '../../src/lib/server/compile.ts';
+import { chktexAvailable, compileDir, compileProject, getChktex, runCompile, setChktex, setCompiler } from '../../src/lib/server/compile.ts';
 import { connect, project, start } from './helpers.ts';
 
 // Real Docker with texlive/texlive:latest-medium pulled (see quickstart.md).
@@ -123,5 +123,45 @@ describe('compileProject', { timeout: 60_000 }, () => {
 		expect([a.stopOnFirstError, b.stopOnFirstError]).toEqual([false, true]);
 		expect(JSON.parse(readFileSync(join(compileDir(p1), 'result.json'), 'utf8')).id).toBe(a.id);
 		expect(JSON.parse(readFileSync(join(compileDir(p2), 'result.json'), 'utf8')).id).toBe(b.id);
+	});
+});
+
+describe('ChkTeX and hints (016)', { timeout: 60_000 }, () => {
+	it('the TeX image has ChkTeX', async () => {
+		expect(await chktexAvailable()).toBe(true);
+		expect(await chktexAvailable('overtree-no-such-image:never')).toBeNull();
+	});
+
+	it('runs ChkTeX in the job container only when asked, following \\input', async () => {
+		const files = [
+			{ path: 'main.tex', data: Buffer.from('\\documentclass{article}\n\\begin{document}\nSay "hi".\n\\input{ch}\n\\end{document}\n') },
+			{ path: 'ch.tex', data: Buffer.from('Dots ... here.\n') }
+		];
+		const off = await runCompile({ files, mainPath: 'main.tex', compiler: 'pdflatex', stopOnFirstError: false });
+		expect(off.chktex).toBeUndefined();
+		const on = await runCompile({ files, mainPath: 'main.tex', compiler: 'pdflatex', stopOnFirstError: false, chktex: true });
+		expect(on.status).toBe('success');
+		expect(on.chktex).toMatch(/^\.?\/?main\.tex:3:5:1:Warning:18:/m);
+		expect(on.chktex).toMatch(/^\.?\/?ch\.tex:1:\d+:\d+:Warning:11:/m);
+	});
+
+	it('a project option, off by default; its warnings and the hints land in the result', async () => {
+		const server = await start();
+		const pid = project();
+		const { provider, text } = await connect(server.url, getMainFileId(pid)!);
+		expect(getChktex(pid)).toBe(false);
+		setChktex(pid, true);
+		setCompiler(pid, 'pdflatex'); // keeps the option
+		expect(getChktex(pid)).toBe(true);
+
+		text.delete(0, text.length);
+		text.insert(0, '\\documentclass{article}\n\\begin{document}\nSay "hi".\n\\includegraphics{x.png}\n\\end{document}\n');
+		while (provider.hasUnsyncedChanges) await new Promise((r) => setTimeout(r, 10));
+		const r = await compileProject(pid, { stopOnFirstError: false });
+		const chk = r.entries.find((e) => e.level === 'chktex');
+		expect(chk).toMatchObject({ file: 'main.tex', fileId: getMainFileId(pid), line: 3, column: 5 });
+		const undefinedCmd = r.entries.find((e) => e.message === 'Undefined control sequence.');
+		expect(undefinedCmd).toMatchObject({ line: 4, hint: { token: '\\includegraphics' } });
+		expect(undefinedCmd?.hint?.fix).toContain('\\usepackage{graphicx}');
 	});
 });

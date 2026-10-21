@@ -21,10 +21,11 @@ export const updates = sqliteTable(
 	(t) => [index('updates_doc_name_idx').on(t.docName)]
 );
 
-// Compiler per project; no row means pdflatex.
+// Compiler per project; no row means pdflatex. chktex: run ChkTeX on each compile (016).
 export const compileSettings = sqliteTable('compile_settings', {
 	project: text('project').primaryKey(),
-	compiler: text('compiler').$type<Compiler>().notNull()
+	compiler: text('compiler').$type<Compiler>().notNull(),
+	chktex: integer('chktex', { mode: 'boolean' }).notNull().default(false)
 });
 
 export type SiteRole = 'admin' | 'user';

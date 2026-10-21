@@ -9,12 +9,25 @@ export type CompileStatus =
 	| 'oom' // killed at COMPILE_MEMORY
 	| 'unavailable'; // docker CLI/daemon/image missing
 
+/** A plain-language reading of a log entry (compile-hints.ts). */
+export type Hint = {
+	explanation: string;
+	fix?: string;
+	/** the source text the entry is about (`\includegraphics`, a label key): the editor underlines it on the line */
+	token?: string;
+};
+
 export type LogEntry = {
-	level: 'error' | 'warning' | 'typesetting';
+	level: 'error' | 'warning' | 'typesetting' | 'chktex'; // chktex: a ChkTeX warning (016), not from the TeX log
 	message: string;
 	file?: string; // project path for project files (e.g. 'chapters/intro.tex'), else as in the log, './' stripped
 	fileId?: string; // set when `file` is a text file of the project
 	line?: number;
+	column?: number; // 1-based, with length: the exact range (ChkTeX only)
+	length?: number;
+	/** the `l.<n>` text TeX shows for an error (the line up to where it stopped), or the `*** (…)` reason of an emergency stop */
+	context?: string;
+	hint?: Hint; // set by the server (016)
 	raw: string; // the source log line(s)
 };
 

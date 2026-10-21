@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { parseLog } from '../../src/lib/log-parser.ts';
+import { parseChktex, parseLog } from '../../src/lib/log-parser.ts';
 import { runCompile } from '../../src/lib/server/compile.ts';
 
 // SC-003: real logs from the container (Docker + texlive/texlive:latest-medium, see quickstart.md).
@@ -32,7 +32,7 @@ describe('parseLog on real logs', { timeout: 120_000 }, () => {
 describe('parseLog', () => {
 	it('takes the line of a `!` error from the following l.<n>', () => {
 		const entries = parseLog('! LaTeX Error: Something.\n\nSee the manual.\n...\nl.12 \\oops\n');
-		expect(entries).toEqual([{ level: 'error', message: 'LaTeX Error: Something.', line: 12, raw: '! LaTeX Error: Something.' }]);
+		expect(entries).toEqual([{ level: 'error', message: 'LaTeX Error: Something.', line: 12, context: '\\oops', raw: '! LaTeX Error: Something.' }]);
 	});
 
 	it('skips the -halt-on-error closing line', () => {
@@ -72,6 +72,32 @@ describe('parseLog', () => {
 		expect(parseLog(log).map((e) => [e.level, e.line])).toEqual([
 			['typesetting', 8],
 			['typesetting', undefined]
+		]);
+	});
+
+	it('keeps the l.<n> text of a file:line error as its context (016)', () => {
+		const [e] = parseLog('./main.tex:4: Undefined control sequence.\nl.4 \\includegraphics\n                    {plot.png}\n');
+		expect(e).toMatchObject({ line: 4, context: '\\includegraphics' });
+	});
+
+	it('places a `! File … not found.` prompt at the emergency stop after it, and keeps the stop reason (016)', () => {
+		const log = "! LaTeX Error: File `chapter1.tex' not found.\n\n./main.tex:4: Emergency stop.\n<read *>\nl.4 \\input{chapter1}\n*** (cannot \\read from terminal in nonstop modes)\n";
+		const [missing, stop] = parseLog(log);
+		expect(missing).toMatchObject({ file: 'main.tex', line: 4, message: "LaTeX Error: File `chapter1.tex' not found." });
+		expect(stop).toMatchObject({ message: 'Emergency stop.', context: 'cannot \\read from terminal in nonstop modes' });
+	});
+
+	it('skips the `!  ==> Fatal error` closing line too', () => {
+		expect(parseLog('! Emergency stop.\n!  ==> Fatal error occurred, no output PDF file produced!\n')).toHaveLength(1);
+	});
+});
+
+describe('parseChktex (016)', () => {
+	it("reads the job's file:line:column:length:kind:number:message lines", () => {
+		const out = "./main.tex:3:7:1:Warning:18:Use either `` or '' as an alternative to `\"'.\nch/a.tex:1:4:3:Warning:11:You should use \\ldots to achieve an ellipsis.\n\n";
+		expect(parseChktex(out)).toEqual([
+			{ level: 'chktex', file: 'main.tex', line: 3, column: 7, length: 1, message: "Use either `` or '' as an alternative to `\"'. (ChkTeX 18)", raw: out.split('\n')[0] },
+			{ level: 'chktex', file: 'ch/a.tex', line: 1, column: 4, length: 3, message: 'You should use \\ldots to achieve an ellipsis. (ChkTeX 11)', raw: out.split('\n')[1] }
 		]);
 	});
 });

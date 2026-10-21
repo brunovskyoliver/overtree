@@ -164,6 +164,10 @@
 				{#each APPEARANCES as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
 			</select>
 		</label>
+		<label class="row" title="Mark unmatched \begin/\end, braces and $ while you type">
+			Code check
+			<input type="checkbox" checked={prefs.codeCheck} onchange={(e) => prefs.setCodeCheck(e.currentTarget.checked)} />
+		</label>
 	</div>
 </div>
 {#if palette && !readOnly}<SymbolPalette oninsert={insertSymbol} onclose={closePalette} />{/if}
