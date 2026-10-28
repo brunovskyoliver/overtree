@@ -160,6 +160,7 @@ describe('failures (US4 #5, SC-007, FR-024)', () => {
 		s.server.db.update(githubLinks).set({ nextAttemptAt: Date.now() - 1 }).where(eq(githubLinks.projectId, s.pid)).run();
 		tick();
 		await waitFor(() => getLink(s.pid)!.status === 'active' && s.g.head(s.thesis, 'main') !== before);
+		await waitFor(() => runs(s).some((r) => r.trigger === 'retry' && r.result === 'pushed'));
 		expect(s.g.files(s.thesis, 'main').get('main.tex')!.toString()).toBe('kept while failing\n');
 		expect(getLink(s.pid)).toMatchObject({ failCount: 0, nextAttemptAt: null, error: null });
 		expect(runs(s).some((r) => r.trigger === 'retry' && r.result === 'pushed')).toBe(true);
@@ -182,6 +183,7 @@ describe('failures (US4 #5, SC-007, FR-024)', () => {
 		tick(Date.now() + 3600_000 + 1000);
 		await waitFor(() => s.g.files(s.thesis, 'main').get('main.tex')?.toString() === 'x\n');
 		await waitFor(() => getLink(s.pid)!.status === 'active');
+		await waitFor(() => runs(s).at(-1)?.result === 'pushed');
 		expect(runs(s).at(-1)).toMatchObject({ kind: 'push', trigger: 'retry', result: 'pushed' });
 	});
 

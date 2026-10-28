@@ -121,7 +121,7 @@ test('disabling cuts an open editor within 2 s and blocks sign-in; enabling rest
 	const other = await as(browser, email);
 	const pid = await newProject(other, 'Kept project');
 	await other.goto(projectPath(pid));
-	await expect(other.getByRole('status')).toHaveText('Saved');
+	await expect(other.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 
 	await usersTab(page);
 	const r = row(page, email);
@@ -141,7 +141,7 @@ test('disabling cuts an open editor within 2 s and blocks sign-in; enabling rest
 	await expect(r).toContainText('Active');
 	await signInAs(other.context(), email);
 	await other.goto(projectPath(pid));
-	await expect(other.getByRole('status')).toHaveText('Saved');
+	await expect(other.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await expect(other.locator('.cm-content')).toContainText('documentclass');
 	await other.context().close();
 });
@@ -152,7 +152,7 @@ test('Projects lists every project and deletes after confirming; admins cannot o
 	const title = `Their thesis ${browserName} ${Date.now()}`;
 	const pid = await newProject(owner, title);
 	await owner.goto(projectPath(pid));
-	await expect(owner.getByRole('status')).toHaveText('Saved');
+	await expect(owner.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 
 	// no access without an invite, admin or not
 	expect((await page.request.get(api(pid))).status()).toBe(404);

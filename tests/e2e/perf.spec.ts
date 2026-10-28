@@ -11,7 +11,7 @@ test.afterEach(async ({ page }) => {
 	if (await page.evaluate(() => !!window.__overtree)) await resetDoc(page);
 });
 
-test('5,000-line document: load < 2 s, keystroke < 50 ms, outline < 1 s (SC-004)', async ({ page }) => {
+test('5,000-line document: load < 2 s, keystroke p95 < 50 ms, outline < 1 s (SC-004)', async ({ page }) => {
 	await openEditor(page);
 	await page.evaluate((doc) => {
 		const { view } = window.__overtree!;
@@ -49,6 +49,7 @@ test('5,000-line document: load < 2 s, keystroke < 50 ms, outline < 1 s (SC-004)
 	const lat = await page.evaluate(() => (window as unknown as { __lat: number[] }).__lat);
 	const avg = lat.reduce((a, b) => a + b, 0) / lat.length;
 	const max = Math.max(...lat);
+	const p95 = [...lat].sort((a, b) => a - b)[Math.ceil(lat.length * 0.95) - 1];
 
 	// outline picks up a new heading
 	const t1 = Date.now();
@@ -58,11 +59,11 @@ test('5,000-line document: load < 2 s, keystroke < 50 ms, outline < 1 s (SC-004)
 	});
 	const outlineMs = Date.now() - t1;
 
-	const summary = `load ${loadMs} ms, keystroke avg ${avg.toFixed(1)} ms / max ${max.toFixed(1)} ms, outline ${outlineMs} ms`;
+	const summary = `load ${loadMs} ms, keystroke avg ${avg.toFixed(1)} ms / p95 ${p95.toFixed(1)} ms / max ${max.toFixed(1)} ms, outline ${outlineMs} ms`;
 	console.log(`[perf ${test.info().project.name}] ${summary}`);
 	test.info().annotations.push({ type: 'perf', description: summary });
 
 	expect(loadMs).toBeLessThan(2000);
-	expect(avg).toBeLessThan(50);
+	expect(p95).toBeLessThan(50);
 	expect(outlineMs).toBeLessThan(1000);
 });

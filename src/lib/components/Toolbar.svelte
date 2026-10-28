@@ -177,12 +177,16 @@
 <style>
 	.toolbar {
 		display: flex;
+		flex: none;
+		flex-wrap: wrap;
+		align-items: center;
 		gap: 2px;
-		padding: 4px 8px;
+		padding: 4px 28px 4px 8px;
 		background: var(--panel);
 		border-bottom: 1px solid var(--border);
 	}
 	button {
+		flex: none;
 		display: grid;
 		place-items: center;
 		width: 28px;

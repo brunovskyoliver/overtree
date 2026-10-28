@@ -1,10 +1,11 @@
 import { readdirSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it, vi } from 'vitest';
 import { pathOf } from '../../src/lib/files.ts';
 import { collectProject } from '../../src/lib/server/compile.ts';
-import { createEntry, deleteEntry, getMainFileId, listFiles, setText, uploadFile } from '../../src/lib/server/files.ts';
+import { createEntry, deleteEntry, getMainFileId, listFiles, putBlob, setText, uploadFile } from '../../src/lib/server/files.ts';
 import { closeVersion, lastVersion, readManifest } from '../../src/lib/server/history.ts';
 import { memberships, projects } from '../../src/lib/server/schema.ts';
 import { exportZip, importZipAsProject, manifestZip } from '../../src/lib/server/zip.ts';
@@ -104,6 +105,21 @@ describe('project zip', () => {
 });
 
 describe('version zip (US6, research R7)', () => {
+	it('compresses a large file without blocking other server work and preserves its bytes', async () => {
+		await start();
+		const bytes = randomBytes(2 * 1024 * 1024);
+		const manifest = { mainFileId: null, entries: [{ id: 'image', parentId: null, name: 'image.bin', kind: 'binary' as const, hash: putBlob(bytes) }] };
+		let otherWorkRan = false;
+		const timer = setTimeout(() => (otherWorkRan = true), 0);
+		try {
+			const result = await manifestZip(manifest);
+			expect(otherWorkRan).toBe(true);
+			expect(Buffer.from(unzipSync(result)['image.bin']).equals(bytes)).toBe(true);
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
 	it('holds every file of that version byte for byte, empty folders too, whatever changed since', async () => {
 		const server = await start();
 		const o = user().id;
@@ -121,7 +137,7 @@ describe('version zip (US6, research R7)', () => {
 		closeVersion(pid, 'edit');
 		expect(lastVersion(pid)!.id).not.toBe(v.id);
 
-		const unzipped = unzipSync(manifestZip(readManifest(v.manifestHash)));
+		const unzipped = unzipSync(await manifestZip(readManifest(v.manifestHash)));
 		expect(Object.keys(unzipped).sort()).toEqual(before);
 		expect(unzipped['empty/']).toEqual(new Uint8Array());
 		const files = Object.fromEntries(Object.entries(unzipped).filter(([p]) => !p.endsWith('/')));

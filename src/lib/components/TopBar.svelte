@@ -108,7 +108,7 @@
 
 <svelte:window onpointerdown={(e) => (m.onwindowpointerdown(e), more.onwindowpointerdown(e))} />
 
-<header class="topbar">
+<header class="topbar" class:project-bar={!!project}>
 	<a class="brand" href="/">Overtree</a>
 	<div class="title">
 		{#if project && editing}
@@ -258,9 +258,11 @@
 <style>
 	.topbar {
 		display: grid;
-		grid-template-columns: 1fr auto 1fr;
+		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
-		height: 44px;
+		gap: 16px;
+		flex: none;
+		min-height: 44px;
 		padding: 0 14px;
 		background: var(--bg);
 		border-bottom: 1px solid var(--border);
@@ -273,7 +275,7 @@
 	}
 	.title {
 		min-width: 0;
-		max-width: 40vw;
+		text-align: center;
 		font-weight: 500;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -311,7 +313,7 @@
 	}
 	.rename {
 		width: 320px;
-		max-width: 40vw;
+		max-width: 100%;
 		padding: 3px 8px;
 		border: 1px solid var(--focus);
 		border-radius: 4px;
@@ -328,6 +330,7 @@
 		align-items: center;
 		justify-content: flex-end;
 		gap: 8px;
+		min-width: 0;
 	}
 	.peers {
 		position: relative;
@@ -468,6 +471,7 @@
 		border-radius: 6px;
 		background: var(--panel);
 		box-shadow: var(--shadow-menu);
+		overflow-wrap: anywhere;
 	}
 	.who {
 		display: flex;
@@ -518,5 +522,17 @@
 	.check {
 		width: 14px;
 		color: var(--accent-bright);
+	}
+	@media (max-width: 1100px) {
+		.topbar.project-bar {
+			grid-template-columns: auto minmax(0, 1fr);
+			gap: 6px 16px;
+			padding: 6px 12px;
+		}
+		.project-bar .title { text-align: right; }
+		.project-bar .right {
+			grid-column: 1 / -1;
+			flex-wrap: wrap;
+		}
 	}
 </style>

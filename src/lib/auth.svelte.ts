@@ -39,7 +39,9 @@ export function loadClerk(): Promise<Clerk> {
 
 /** `redirect` from the query when it is a same-origin path, else `/` (no open redirects to other sites). */
 export function safeRedirect(redirect: string | null | undefined): string {
-	return redirect && redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.startsWith('/\\') ? redirect : '/';
+	// URL parsers remove tabs/newlines before interpreting the host. `/\t/host`
+	// would otherwise pass the prefix check and become an external `//host` URL.
+	return redirect && redirect.startsWith('/') && !redirect.startsWith('//') && !/[\x00-\x1f\x7f\\]/.test(redirect) ? redirect : '/';
 }
 
 /** Sign in through the test bypass (PUBLIC_TEST_HOOKS only; the server checks OVERTREE_TEST_AUTH itself). */

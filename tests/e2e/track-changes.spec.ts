@@ -33,7 +33,7 @@ async function member(browser: Browser, owner: Page, pid: string, email: string,
 	await page.goto('/'); // creates the user
 	expect((await owner.request.post(`${api(pid)}/members`, { data: { email, role } })).status()).toBe(201);
 	await page.goto(projectPath(pid));
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 	return page;
 }
@@ -197,6 +197,6 @@ test('suggestions survive a reload and show for someone who opens the file later
 	await b.keyboard.type('kept ');
 	await b.waitForFunction(() => !window.__overtree!.provider.hasUnsyncedChanges);
 	await page.reload();
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await expect(page.locator('.cm-tcInsert')).toHaveText('kept ');
 });

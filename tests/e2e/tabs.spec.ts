@@ -84,7 +84,7 @@ test('closing a tab activates the neighbour; the last one leaves a hint (US2-3)'
 	await open(page, b);
 
 	await tab(page, 'a.tex').click();
-	await tabs(page).getByRole('button', { name: 'Close a.tex' }).click();
+	await tabs(page).getByRole('button', { name: 'Close a.tex', includeHidden: true }).click();
 	await expect(tab(page, 'a.tex')).toHaveCount(0);
 	await expect(tab(page, 'b.md')).toHaveAttribute('aria-selected', 'true'); // right neighbour
 
@@ -92,7 +92,8 @@ test('closing a tab activates the neighbour; the last one leaves a hint (US2-3)'
 	await expect(tab(page, 'b.md')).toHaveCount(0);
 	await expect(tab(page, 'main.tex')).toHaveAttribute('aria-selected', 'true'); // left neighbour
 
-	await tabs(page).getByRole('button', { name: 'Close main.tex' }).click();
+	await tab(page, 'main.tex').focus();
+	await page.keyboard.press('Delete');
 	await expect(tabs(page).getByRole('tab')).toHaveCount(0);
 	await expect(page.getByText('Open a file from the file tree.')).toBeVisible();
 	await expect(page.locator('.cm-editor')).toBeHidden();

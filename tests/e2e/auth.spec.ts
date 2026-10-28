@@ -25,15 +25,17 @@ plain('signed out: any page goes to sign-in, and signing in returns to the reque
 	await page.getByLabel('Test email').fill(USER);
 	await page.getByRole('button', { name: 'Test sign-in' }).click();
 	await expect(page).toHaveURL(projectPath(pid));
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 });
 
-plain('a redirect to another site is ignored', async ({ page, baseURL }) => {
-	await page.goto('/sign-in?redirect=//example.com/x');
-	await page.getByLabel('Test email').fill(USER);
-	await page.getByRole('button', { name: 'Test sign-in' }).click();
-	await expect(page).toHaveURL((u) => u.host === new URL(baseURL!).host && !u.pathname.startsWith('/sign-in'));
-});
+for (const target of ['//example.com/x', '/\t/example.com/x', '/\n/example.com/x']) {
+	plain(`a redirect to another site is ignored: ${JSON.stringify(target)}`, async ({ page, baseURL }) => {
+		await page.goto(`/sign-in?redirect=${encodeURIComponent(target)}`);
+		await page.getByLabel('Test email').fill(USER);
+		await page.getByRole('button', { name: 'Test sign-in' }).click();
+		await expect(page).toHaveURL((u) => u.host === new URL(baseURL!).host && !u.pathname.startsWith('/sign-in'));
+	});
+}
 
 test('account menu shows the user, reload keeps the session (scenarios 2, 3)', async ({ page }) => {
 	await openEditor(page);

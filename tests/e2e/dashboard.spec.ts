@@ -39,7 +39,7 @@ async function create(page: Page, template: string, title: string) {
 	await dialog.getByRole('textbox', { name: 'Project title' }).fill(title);
 	await dialog.getByRole('button', { name: 'Create' }).click();
 	await expect(page).toHaveURL(/\/project\/[0-9a-f-]{36}$/);
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 	return page.url().split('/').at(-1)!;
 }
@@ -199,7 +199,7 @@ test('duplicate, then delete the copy after a cancelled first try (scenarios 5, 
 	const copy = `Copy of Original ${t}`;
 	await expect(row(page, copy)).toContainText('Owner');
 	await row(page, copy).getByRole('link').click();
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await expect(page.locator('.cm-content')).toContainText('% copied');
 
 	await page.goto('/');

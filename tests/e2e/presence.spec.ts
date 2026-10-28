@@ -35,7 +35,7 @@ async function editor(browser: Browser, owner: Page, pid: string, email: string)
 	await page.goto('/'); // creates the user
 	expect((await owner.request.post(`${api(pid)}/members`, { data: { email, role: 'editor' } })).status()).toBe(201);
 	await page.goto(projectPath(pid)); // not openEditor: that signs the context in as USER
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 	return page;
 }
@@ -185,7 +185,7 @@ test('30 s offline with edits on both sides: both edits survive, offline indicat
 	expect(await text(page)).not.toContain('offline-b');
 
 	await b.context().setOffline(false);
-	await expect(b.getByRole('status')).toHaveText('Saved');
+	await expect(b.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	for (const p of [page, b]) await expect.poll(() => text(p)).toMatch(/^offline-b [^]* online-a$/);
 	expect(await text(page)).toBe(await text(b));
 });

@@ -1,3 +1,4 @@
+import { Script } from 'node:vm';
 import { pathOf } from '../files.ts';
 import { buildRegExp, describe, expand, lineStarts, matches, MATCH_CAP, type SearchFile, type SearchOptions, type SearchResult } from '../search.ts';
 import { canEdit, fileRoles } from './access.ts';
@@ -24,6 +25,20 @@ function regExp(o: SearchOptions): RegExp {
 	return re instanceof RegExp ? re : fail(400, re.error);
 }
 
+// A match cap cannot stop catastrophic backtracking inside a single RegExp.exec.
+// Only this fixed script runs here; the user's query is a RegExp value, never JavaScript.
+const REGEX_SCAN = new Script('Array.from(matches(text, re, limit))');
+function findMatches(text: string, re: RegExp, regex: boolean, limit = Infinity): RegExpExecArray[] {
+	if (!regex) return [...matches(text, re, limit)];
+	try {
+		return REGEX_SCAN.runInNewContext({ matches, text, re, limit }, { timeout: 100 });
+	} catch (e) {
+		if ((e as { code?: string }).code === 'ERR_SCRIPT_EXECUTION_TIMEOUT')
+			fail(400, 'The regular expression took too long. Simplify it or use a plain-text search.');
+		throw e;
+	}
+}
+
 /** Text files of the project with their paths, in path order. */
 function textFiles(pid: string) {
 	const all = listFiles(pid);
@@ -47,7 +62,7 @@ export function searchProject(pid: string, userId: string, o: SearchOptions): Se
 		if (!role) continue; // ponytail: per-file roles never hide a file today (overrides are editor/reader); this keeps it so if they do
 		const text = currentText(f.id);
 		// one more than room is left: tells whether the cap cut something off
-		const found = [...matches(text, re, MATCH_CAP - total + 1)];
+		const found = findMatches(text, re, o.regex, MATCH_CAP - total + 1);
 		if (total + found.length > MATCH_CAP) {
 			truncated = true;
 			found.length = MATCH_CAP - total;
@@ -84,7 +99,7 @@ export async function replaceMatches(pid: string, userId: string, o: SearchOptio
 		for (const f of textFiles(pid)) {
 			const role = roleOf(f.id);
 			if (!role) continue;
-			const n = [...matches(currentText(f.id), re)].length;
+			const n = findMatches(currentText(f.id), re, o.regex).length;
 			if (!n) continue;
 			if (canEdit(role)) targets.push(f.id);
 			else skipped += n;
@@ -100,7 +115,7 @@ export async function replaceMatches(pid: string, userId: string, o: SearchOptio
 		try {
 			await conn.transact((doc) => {
 				const t = doc.getText('content');
-				let found = [...matches(t.toString(), re)];
+				let found = findMatches(t.toString(), re, o.regex);
 				if (scope.at !== undefined) found = found.filter((m) => m.index === scope.at);
 				if (!found.length) return void (stale = scope.at !== undefined);
 				// from the end: earlier offsets stay valid

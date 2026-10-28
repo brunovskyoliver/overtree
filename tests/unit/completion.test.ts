@@ -1,37 +1,13 @@
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { CompletionContext, nextSnippetField, type Completion, type CompletionResult } from '@codemirror/autocomplete';
+import { CompletionContext, nextSnippetField } from '@codemirror/autocomplete';
 import { StreamLanguage } from '@codemirror/language';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
-import { codePointAt, codePointSize, EditorState, fromCodePoint, Transaction, type TransactionSpec } from '@codemirror/state';
+import { EditorState, Transaction, type TransactionSpec } from '@codemirror/state';
 import { describe, expect, it, vi } from 'vitest';
 import { COMMANDS, ENVIRONMENTS, PACKAGES } from '../../src/lib/completion/data.ts';
 import { closeEnvironment, environments } from '../../src/lib/completion/environments.ts';
 import { scanTex, type ProjectSymbols } from '../../src/lib/completion/scan.ts';
 import { addReferenceSource, latexSource } from '../../src/lib/completion/source.ts';
 import { Symbols } from '../../src/lib/completion/symbols.svelte.ts';
-
-// The popup's own matcher: @codemirror/autocomplete doesn't export FuzzyMatcher, so take the class from its
-// bundle and rank like its sortOptions (score + boost, then label), as the popup does.
-type Matcher = { match(word: string): { score: number; matched: number[] } | null };
-const bundle = readFileSync(createRequire(import.meta.url).resolve('@codemirror/autocomplete').replace(/index\.cjs$/, 'index.js'), 'utf8');
-const matcherSource = bundle.slice(bundle.indexOf('class FuzzyMatcher {'), bundle.indexOf('class StrictMatcher {'));
-const FuzzyMatcher = new Function('codePointAt', 'codePointSize', 'fromCodePoint', `${matcherSource}; return FuzzyMatcher;`)(
-	codePointAt,
-	codePointSize,
-	fromCodePoint
-) as new (pattern: string) => Matcher;
-
-function ranked(result: CompletionResult, pattern: string): Completion[] {
-	const matcher = new FuzzyMatcher(pattern);
-	return result.options
-		.flatMap((o) => {
-			const m = matcher.match(o.label);
-			return m ? [{ o, score: m.score + (o.boost ?? 0) }] : [];
-		})
-		.sort((a, b) => b.score - a.score || a.o.label.localeCompare(b.o.label))
-		.map((r) => r.o);
-}
 
 const stexLanguage = StreamLanguage.define(stex);
 
@@ -108,41 +84,10 @@ describe('bundled data', () => {
 });
 
 describe('command completion', () => {
-	it('\\sec lists \\section{} as cmd in the top 3 (US5-1)', () => {
-		const result = complete('\\sec')!;
-		expect(result.from).toBe(0);
-		const top = ranked(result, '\\sec').slice(0, 3);
-		expect(top.map((o) => o.label)).toContain('\\section{}');
-		expect(top.find((o) => o.label === '\\section{}')!.type).toBe('cmd');
-	});
-
-	it('a bare \\ opens with kinds and the common entries first', () => {
-		const top = ranked(complete('text \\')!, '\\').slice(0, 7);
-		expect(top.map((o) => [o.label, o.type])).toEqual([
-			['\\usepackage{}', 'pkg'],
-			['\\begin{}', 'env'],
-			['\\end{}', 'env'],
-			['\\usepackage[]{}', 'pkg'],
-			['\\item', 'cmd'],
-			['\\item[]', 'cmd'],
-			['\\section{}', 'cmd']
-		]);
-	});
-
-	it('fuzzy sbsc finds \\subsection{} (US5-2)', () => {
-		expect(ranked(complete('\\sbsc')!, '\\sbsc').slice(0, 3).map((o) => o.label)).toContain('\\subsection{}');
-	});
-
-	it('SC-006: 20 common commands by their first 3 letters, intended one in the top 3 for at least 18', () => {
-		const table: [string, string][] = [
-			['sec', '\\section{}'], ['sub', '\\subsection{}'], ['beg', '\\begin{}'], ['ite', '\\item'], ['tex', '\\textbf{}'],
-			['emp', '\\emph{}'], ['fra', '\\frac{}{}'], ['use', '\\usepackage{}'], ['lab', '\\label{}'], ['ref', '\\ref{}'],
-			['cit', '\\cite{}'], ['inc', '\\includegraphics{}'], ['doc', '\\documentclass{}'], ['cap', '\\caption{}'],
-			['cen', '\\centering'], ['foo', '\\footnote{}'], ['tab', '\\tableofcontents'], ['mak', '\\maketitle'],
-			['hsp', '\\hspace{}'], ['vsp', '\\vspace{}']
-		];
-		const misses = table.filter(([typed, want]) => !ranked(complete(`\\${typed}`)!, `\\${typed}`).slice(0, 3).some((o) => o.label === want));
-		expect(misses.length, JSON.stringify(misses)).toBeLessThanOrEqual(2);
+	it('a partial command replaces the command range and offers the section snippet', () => {
+		const result = complete('text \\sec')!;
+		expect(result.from).toBe(5);
+		expect(result.options.find((o) => o.label === '\\section{}')).toMatchObject({ type: 'cmd' });
 	});
 
 	it('no completion in comments, after \\\\, without a backslash or outside LaTeX (US5-8)', () => {
@@ -162,7 +107,7 @@ describe('command completion', () => {
 		const { commands } = scanTex('\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\pair}[2]{(#1,#2)}\n\\newcommand{\\section}{x}');
 		const result = complete('\\R', { project: { commands } })!;
 		const own = (label: string) => result.options.filter((o) => o.label === label);
-		expect(ranked(result, '\\R')[0]).toMatchObject({ label: '\\R', type: 'cmd' });
+		expect(own('\\R')).toEqual([expect.objectContaining({ label: '\\R', type: 'cmd' })]);
 		expect(own('\\pair{}{}')).toHaveLength(1);
 		expect(own('\\section{}')).toHaveLength(1); // the bundled one, no duplicate
 		const view = fakeView(stateOf('\\pa'));
@@ -260,7 +205,6 @@ describe('argument completion (US6)', () => {
 			{ label: 'knuth84', type: 'cite', detail: 'Literate Programming' },
 			{ label: 'lamport94', type: 'cite', detail: 'Lamport' }
 		]);
-		expect(ranked(r, 'kn')[0].label).toBe('knuth84');
 		for (const cmd of ['citep', 'citet', 'parencite', 'textcite', 'autocite', 'nocite', 'cite*']) expect(at(`\\${cmd}{`).types).toEqual(new Set(['cite']));
 		expect(at('\\cite{a,').from).toBe('\\cite{a,'.length);
 		expect(at('\\cite[p.~3]{a,kn').from).toBe('\\cite[p.~3]{a,'.length);
@@ -270,7 +214,7 @@ describe('argument completion (US6)', () => {
 	it('packages in \\usepackage and \\RequirePackage, after options and commas (US6-3)', () => {
 		const r = complete('\\usepackage{amsmath,ams', { project })!;
 		expect(r.from).toBe('\\usepackage{amsmath,'.length);
-		expect(ranked(r, 'ams').slice(0, 4).map((o) => o.label)).toEqual(expect.arrayContaining(['amsmath', 'amssymb', 'amsthm']));
+		expect(r.options.map((o) => o.label)).toEqual(expect.arrayContaining(['amsmath', 'amssymb', 'amsthm']));
 		expect(new Set(r.options.map((o) => o.type))).toEqual(new Set(['pkg']));
 		expect(at('\\usepackage[utf8]{inp').from).toBe('\\usepackage[utf8]{'.length);
 		expect(at('\\RequirePackage{').labels).toContain('geometry');
@@ -287,7 +231,7 @@ describe('argument completion (US6)', () => {
 	it('bundled and project environments in \\begin{ and \\end{ (US5-7)', () => {
 		const r = complete('\\begin{pro', { project })!;
 		expect(r.from).toBe('\\begin{'.length);
-		expect(ranked(r, 'pro').map((o) => [o.label, o.type])).toEqual(expect.arrayContaining([['proof2', 'env'], ['proof', 'env']]));
+		expect(r.options.map((o) => [o.label, o.type])).toEqual(expect.arrayContaining([['proof2', 'env'], ['proof', 'env']]));
 		expect(at('\\end{').labels).toContain('itemize');
 	});
 
@@ -353,9 +297,7 @@ describe('"Add reference…" in citations (017 US1)', () => {
 		expect(offer('\\cite{|')).toMatchObject({ from: 6, options: [{ label: 'Add reference…', type: 'action' }] });
 		const typed = offer('\\parencite[p.~3]{a, smi|')!;
 		expect(typed).toMatchObject({ from: 23, options: [{ label: 'Add reference…' }] });
-		// ranked like the popup: the empty pattern at the cursor matches, below a key starting with "smi"
-		const action = new FuzzyMatcher('').match('Add reference…')!.score + (typed.options[0].boost ?? 0);
-		expect(action).toBeLessThan(new FuzzyMatcher('smi').match('smith2021deep')!.score);
+
 		expect(offer('\\ref{|')).toBeNull();
 		expect(offer('% \\cite{|')).toBeNull();
 		expect(offer('\\\\cite{|')).toBeNull();

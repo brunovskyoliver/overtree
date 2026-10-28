@@ -17,7 +17,7 @@
 	--on-accent: #e6e8ec; /* text on accent and danger buttons */
 	--selected: #2f6a31; /* current file, outline entry, role badges */
 	--text: #e6e8ec;
-	--text-muted: #9aa1ad;
+	--text-muted: #a0a7b3;
 	--focus: #7cb8ff;
 	--button-hover: #3a4252; /* secondary buttons */
 	--hover-tint: rgb(255 255 255 / 0.1); /* small icon buttons on any surface */
@@ -57,7 +57,7 @@
 	/* editor (lib/editor/theme.ts) */
 	--editor-text: #d7dae0;
 	--editor-text-strong: #fff; /* matched letters in completions */
-	--gutter-text: #6b7385;
+	--gutter-text: #8a93a5;
 	--active-line: rgb(255 255 255 / 0.045);
 	--active-gutter: #2a3040;
 	--active-gutter-text: #c3c8d2;
@@ -75,7 +75,7 @@
 	--syntax-command: #d27fb3;
 	--syntax-argument: #e5a85c;
 	--syntax-math: #7fc8a9;
-	--syntax-comment: #5f6b85;
+	--syntax-comment: #8a95ae;
 	--syntax-bracket: #c3c8d2;
 	--syntax-number: #d19a66;
 	--syntax-invalid: #e06c75;

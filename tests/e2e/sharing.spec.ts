@@ -36,7 +36,7 @@ async function invite(page: Page, email: string, role: 'Editor' | 'Reader') {
 /** Open the project as a collaborator and wait for the synced editor. */
 async function openAs(page: Page, pid: string) {
 	await page.goto(projectPath(pid));
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 }
 
@@ -83,7 +83,7 @@ test('reader: listed, read-only editor and tree, compiles and downloads; editor 
 	await page.getByRole('combobox', { name: `Role for ${b}` }).selectOption('editor');
 	await expect(bob.getByText(READ_ONLY)).toBeHidden({ timeout: 2_000 });
 	await expect(bob.locator('.cm-content')).not.toHaveAttribute('aria-readonly', 'true');
-	await expect(bob.getByRole('status')).toHaveText('Saved');
+	await expect(bob.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	const marker = `% by-bob-${tag()}`;
 	await bob.locator('.cm-content').press('ControlOrMeta+End');
 	await bob.keyboard.type(marker);

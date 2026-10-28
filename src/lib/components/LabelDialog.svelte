@@ -69,7 +69,7 @@
 
 <style>
 	dialog {
-		width: 360px;
+		width: min(360px, calc(100vw - 32px));
 		padding: 18px 20px 16px;
 		border: 1px solid var(--border);
 		border-radius: 8px;

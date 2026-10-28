@@ -15,7 +15,7 @@ export const GET: RequestHandler = ({ locals, params }) => {
 		getVersion(params.pid, v, user.id).labels[0]?.name ??
 		new Date(v.createdAt).toISOString().slice(0, 16).replace('T', ' ').replace(':', '-');
 	const name = `${getProject(params.pid)!.title}-${when}.zip`.replace(/[/\\]/g, '-');
-	return new Response(Buffer.from(manifestZip(readManifest(v.manifestHash))), {
+	return manifestZip(readManifest(v.manifestHash)).then((bytes) => new Response(Buffer.from(bytes), {
 		headers: { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename*=UTF-8''${attrChars(name)}` }
-	});
+	}));
 };

@@ -4,7 +4,7 @@
 	import type { SyncBox } from '#lib/synctex.ts';
 	import LogsPanel from './LogsPanel.svelte';
 	import PdfToolbar from './PdfToolbar.svelte';
-	import PdfViewer from './PdfViewer.svelte';
+	import type PdfViewer from './PdfViewer.svelte';
 	import RecompileButton from './RecompileButton.svelte';
 
 	let {
@@ -65,6 +65,7 @@
 		</button>
 		<a
 			class="download"
+			role={compile.pdfUrl ? undefined : 'link'}
 			href={compile.pdfUrl && `${compile.pdfUrl}&download=1`}
 			download
 			aria-label="Download PDF"
@@ -90,7 +91,13 @@
 		<!-- stays mounted (and laid out, so pdf.js can measure) under the logs: closing them shows the PDF at once -->
 		<div class="view" class:covered={logsOpen} inert={logsOpen}>
 			{#if compile.pdfUrl}
-				<PdfViewer url={compile.pdfUrl} {dark} {onsync} {projectId} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
+				{#await import('./PdfViewer.svelte')}
+					<p class="empty" role="status">Loading PDF viewer…</p>
+				{:then { default: PdfViewer }}
+					<PdfViewer url={compile.pdfUrl} {dark} {onsync} {projectId} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
+				{:catch}
+					<p class="empty" role="alert">Could not load the PDF viewer. Reload the page to try again.</p>
+				{/await}
 			{:else}
 				<p class="empty">Click Recompile or press Ctrl/⌘+Enter to see your PDF.</p>
 			{/if}
@@ -108,10 +115,11 @@
 	.bar {
 		display: flex;
 		flex: none;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px;
-		height: 34px;
-		padding: 0 8px;
+		min-height: 34px;
+		padding: 4px 8px;
 		border-bottom: 1px solid var(--border);
 	}
 	.banner {

@@ -51,6 +51,7 @@
 			<button
 				type="button"
 				role="menuitemcheckbox"
+				aria-label="Auto compile"
 				tabindex="-1"
 				aria-checked={compile.autoCompile}
 				onclick={() => compile.setOption('autoCompile', !compile.autoCompile)}>Auto compile</button
@@ -61,6 +62,7 @@
 					<button
 						type="button"
 						role="menuitemradio"
+						aria-label={label}
 						tabindex="-1"
 						aria-checked={compile.compiler === value}
 						aria-disabled={!compile.canConfigure || undefined}
@@ -74,6 +76,7 @@
 				role="menuitemcheckbox"
 				tabindex="-1"
 				aria-checked={compile.stopOnFirstError}
+				aria-label="Stop on first error"
 				onclick={() => compile.setOption('stopOnFirstError', !compile.stopOnFirstError)}>Stop on first error</button
 			>
 			<!-- 016: a project setting; off and disabled when the TeX image has no ChkTeX -->
@@ -82,6 +85,7 @@
 				role="menuitemcheckbox"
 				tabindex="-1"
 				aria-checked={compile.chktex && chktexUsable}
+				aria-label="Check with ChkTeX"
 				aria-disabled={!compile.canConfigure || !chktexUsable || undefined}
 				aria-describedby={chktexNote ? 'chktex-note' : undefined}
 				title={chktexNote || undefined}

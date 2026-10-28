@@ -1,6 +1,6 @@
 // Shared setup for server unit tests: a collab server on a fresh data dir, test users, projects and providers
 // signed in through the test bypass (OVERTREE_TEST_AUTH=1 from vite.config.ts).
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -18,7 +18,12 @@ afterEach(async () => {
 	while (cleanup.length) await cleanup.pop()!();
 });
 
-export const tempDir = () => mkdtempSync(join(tmpdir(), 'overtree-test-'));
+export const tempDir = () => {
+	const dir = mkdtempSync(join(tmpdir(), 'overtree-test-'));
+	// Registered before server cleanup, so the database and sockets close before deletion.
+	cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+	return dir;
+};
 
 export type Started = Awaited<ReturnType<typeof start>>;
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { getMainFileId, getText, setText } from '../../src/lib/server/files.ts';
 import { closeVersion } from '../../src/lib/server/history.ts';
-import { memberships } from '../../src/lib/server/schema.ts';
+import { documents, memberships } from '../../src/lib/server/schema.ts';
 import { changesOf, recordEdit, resolveChanges, type Author } from '../../src/lib/track-changes.ts';
 import * as projectRoute from '../../src/routes/api/projects/[pid]/+server.ts';
 import * as restoreRoute from '../../src/routes/api/projects/[pid]/history/[vid]/restore/+server.ts';
@@ -50,7 +50,19 @@ describe('track changes on the server', () => {
 
 		// stored with the document: a fresh server on the same data has them
 		await waitFor(() => !b.provider.hasUnsyncedChanges);
-		await new Promise((res) => setTimeout(res, 2500)); // the debounced snapshot (maxDebounce 2 s)
+		await waitFor(() => {
+			const stored = server.db.select().from(documents).all().find((row) => row.name === main);
+			if (!stored) return false;
+			const snapshot = new Y.Doc();
+			try {
+				Y.applyUpdate(snapshot, stored.state);
+				return resolveChanges(snapshot.getText('content')).length === 1;
+			} finally {
+				snapshot.destroy();
+			}
+		});
+		a.provider.destroy();
+		b.provider.destroy();
 		const dir = server.dataDir;
 		await server.stop();
 		const again = await start(dir);

@@ -85,6 +85,11 @@ function commitsSince(s: S, from: string) {
 const fileOnGitHub = (s: S, path: string) => s.g.files(s.thesis, 'main').get(path)?.toString();
 const ctx = (s: S, email = OWNER) => ({ userId: user(email).id, projectId: s.pid });
 const runs = (s: S) => s.server.db.select().from(githubRuns).all();
+/** A remote ref can move before the local run has finished recording its result. */
+const waitForPush = (s: S, previous: string) => waitFor(() => {
+	const head = s.g.head(s.thesis, 'main');
+	return head !== previous && runs(s).some((r) => r.kind === 'push' && r.result === 'pushed' && r.commit === head);
+}, 3000);
 const neverForced = (s: S) => {
 	const patches = s.g.requests.filter((r) => r.method === 'PATCH');
 	expect(patches.length).toBeGreaterThan(0);
@@ -112,7 +117,7 @@ describe('session-end push (US2 #1, #2, #6)', () => {
 		expect(commitsSince(s, start)).toHaveLength(0);
 		for (const c of [...editors, ...presence]) c.provider.destroy();
 
-		await waitFor(() => s.g.head(s.thesis, 'main') !== start, 3000);
+		await waitForPush(s, start);
 		await sleep(300);
 		const commits = commitsSince(s, start);
 		expect(commits).toHaveLength(1);
@@ -142,7 +147,7 @@ describe('session-end push (US2 #1, #2, #6)', () => {
 		await sleep(600);
 		expect(s.g.head(s.thesis, 'main')).toBe(start);
 		p2.provider.destroy();
-		await waitFor(() => s.g.head(s.thesis, 'main') !== start, 3000);
+		await waitForPush(s, start);
 		expect(commitsSince(s, start)).toHaveLength(1);
 	});
 
@@ -158,7 +163,7 @@ describe('session-end push (US2 #1, #2, #6)', () => {
 		await sleep(500);
 		expect(s.g.head(s.thesis, 'main')).toBe(start);
 		reader.provider.destroy();
-		await waitFor(() => s.g.head(s.thesis, 'main') !== start, 3000);
+		await waitForPush(s, start);
 	});
 });
 
@@ -173,7 +178,7 @@ describe('long sessions and triggers (US2 #3, #4)', () => {
 		// unpushed but no version closed since the last push: no push yet
 		expect(s.g.head(s.thesis, 'main')).toBe(start);
 		closeVersion(s.pid, 'edit');
-		await waitFor(() => s.g.head(s.thesis, 'main') !== start, 3000);
+		await waitForPush(s, start);
 		expect(runs(s).at(-1)).toMatchObject({ kind: 'push', trigger: 'long-session', result: 'pushed' });
 		// still connected and typing: the next one waits for another interval and another version
 		e.text.insert(0, 'b ');
@@ -361,6 +366,7 @@ describe('restart (FR-023)', () => {
 		await start(s.server.dataDir);
 		await waitFor(() => s.g.head(s.thesis, 'main') !== start0, 3000);
 		expect(fileOnGitHub(s, 'main.tex')).toBe('written before the restart\n');
+		await waitFor(() => getServer().db.select().from(githubRuns).all().at(-1)?.trigger === 'startup');
 		const last = getServer().db.select().from(githubRuns).all().at(-1);
 		expect(last).toMatchObject({ kind: 'push', trigger: 'startup', result: 'pushed' });
 	});

@@ -175,7 +175,7 @@ test('the code check can be switched off per device, and stays off after a reloa
 	await expect.poll(() => marks(page)).toEqual([]);
 
 	await page.reload();
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 	await page.waitForTimeout(800); // past the linter's delay
 	expect(await marks(page)).toEqual([]);

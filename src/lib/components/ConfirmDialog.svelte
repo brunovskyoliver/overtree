@@ -35,8 +35,7 @@
 
 <style>
 	dialog {
-		min-width: 320px;
-		max-width: 440px;
+		width: min(440px, calc(100vw - 32px));
 		padding: 18px 20px 16px;
 		border: 1px solid var(--border);
 		border-radius: 8px;
@@ -54,6 +53,7 @@
 		overflow-wrap: anywhere;
 	}
 	p {
+		overflow-wrap: anywhere;
 		margin: 0 0 8px;
 		color: var(--text-muted);
 	}

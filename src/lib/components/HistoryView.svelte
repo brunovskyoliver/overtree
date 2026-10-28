@@ -44,4 +44,10 @@
 		height: 100%;
 		min-height: 0;
 	}
+	@media (max-width: 700px) {
+		.history {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-rows: minmax(80px, 0.5fr) minmax(160px, 2fr) minmax(100px, 1fr);
+		}
+	}
 </style>

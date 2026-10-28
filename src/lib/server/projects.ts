@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { getServer } from './collab.ts';
 import { pathOf } from '../files.ts';
 import { colorFor } from '../presence.ts';
@@ -119,22 +119,21 @@ export function touchProject(pid: string) {
 
 export type ProjectListItem = { id: string; title: string; owner: { id: string; name: string } | null; role: Role; updatedAt: number };
 
-/** Projects the user owns or is a member of, most recently modified first.
- *  ponytail: one role query per project; fine for the hundreds of projects of a small instance */
+/** Projects the user owns or is a member of, most recently modified first. */
 export function listProjects(userId: string): ProjectListItem[] {
-	const ids = new Set([
-		...db().select({ id: projects.id }).from(projects).where(eq(projects.ownerId, userId)).all().map((r) => r.id),
-		...db().select({ id: memberships.projectId }).from(memberships).where(eq(memberships.userId, userId)).all().map((r) => r.id)
-	]);
+	const user = db().select({ disabled: users.disabled }).from(users).where(eq(users.id, userId)).get();
+	if (!user || user.disabled) return [];
 	const out: ProjectListItem[] = [];
-	for (const { project: p, ownerName } of db()
-		.select({ project: projects, ownerName: users.name })
+	for (const { project: p, ownerName, memberRole, viaLink } of db()
+		.select({ project: projects, ownerName: users.name, memberRole: memberships.role, viaLink: memberships.viaLink })
 		.from(projects)
 		.leftJoin(users, eq(users.id, projects.ownerId))
-		.where(inArray(projects.id, [...ids]))
+		.leftJoin(memberships, and(eq(memberships.projectId, projects.id), eq(memberships.userId, userId)))
+		.where(or(eq(projects.ownerId, userId), eq(memberships.userId, userId)))
 		.orderBy(desc(projects.updatedAt))
 		.all()) {
-		const role = projectRole(p.id, userId);
+		const linkRole = viaLink && p.linkToken ? p.linkRole : null;
+		const role = p.ownerId === userId ? 'owner' : memberRole === 'editor' || linkRole === 'editor' ? 'editor' : (memberRole ?? linkRole);
 		if (role) out.push({ id: p.id, title: p.title, owner: p.ownerId ? { id: p.ownerId, name: ownerName ?? '' } : null, role, updatedAt: p.updatedAt });
 	}
 	return out;

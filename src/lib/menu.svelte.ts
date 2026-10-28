@@ -3,16 +3,29 @@ import { tick } from 'svelte';
 /** Menu button state and keyboard (research R12), shared by the compile options and zoom menus. */
 export class Menu {
 	open = $state(false);
-	root?: HTMLElement;
-	toggle?: HTMLElement; // gets focus back on close
-	menu?: HTMLElement;
+	root = $state<HTMLElement>();
+	toggle = $state<HTMLElement>(); // gets focus back on close
+	menu = $state<HTMLElement>();
 
 	#items = () => [...this.menu!.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
 
 	show = async (focus: 'first' | 'last' = 'first') => {
 		this.open = true;
 		await tick();
-		this.#items().at(focus === 'first' ? 0 : -1)!.focus();
+		if (!this.open || !this.menu) return;
+		// Pane overflow and scrollable tables must not clip their menus. Keep the existing
+		// alignment, then move into the browser's top layer and constrain it to the viewport.
+		const rect = this.menu.getBoundingClientRect();
+		const width = Math.min(rect.width, innerWidth - 16);
+		Object.assign(this.menu.style, {
+			position: 'fixed', margin: '0', inset: 'auto', minWidth: '0',
+			width: `${width}px`, maxHeight: `${innerHeight - 16}px`, overflowY: 'auto',
+			left: `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`,
+			top: `${Math.max(8, Math.min(rect.top, innerHeight - rect.height - 8))}px`
+		});
+		this.menu.setAttribute('popover', 'manual');
+		this.menu.showPopover();
+		this.#items().at(focus === 'first' ? 0 : -1)?.focus({ preventScroll: true });
 	};
 
 	close = () => {

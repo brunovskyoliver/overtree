@@ -20,7 +20,7 @@ async function as(browser: Browser, email: string) {
 /** The editor as the context's own user (openEditor signs in as the admin). */
 async function openAs(page: Page, pid: string) {
 	await page.goto(projectPath(pid));
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 }
 

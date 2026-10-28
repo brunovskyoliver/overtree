@@ -169,71 +169,77 @@
 			{#if tab === 'users'}
 				<div id="panel-users" role="tabpanel" aria-labelledby="tab-users">
 					<input class="search" type="text" placeholder="Search by name or email" aria-label="Search users" bind:value={query} />
-					<table>
-						<thead>
-							<tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last seen</th><th class="num">Projects</th><th><span class="sr">Actions</span></th></tr>
-						</thead>
-						<tbody>
-							{#each shown as u (u.id)}
-								{@const last = isLastAdmin(u)}
-								<tr class:off={u.disabled}>
-									<td>
-										<span class="who">
-											<Avatar name={u.name} avatarUrl={u.avatarUrl} color={colorFor(u.id)} size={24} />
-											{u.name}
-											{#if u.id === me?.id}<span class="you">you</span>{/if}
-										</span>
-									</td>
-									<td class="muted">{u.email}</td>
-									<td><span class="badge" class:admin={u.role === 'admin'}>{u.role === 'admin' ? 'Admin' : 'User'}</span></td>
-									<td><span class="status" class:disabled={u.disabled}>{u.disabled ? 'Disabled' : 'Active'}</span></td>
-									<td class="muted" title={absoluteTime(u.lastSeenAt)}>{relativeTime(u.lastSeenAt)}</td>
-									<td class="num">{u.projectCount}</td>
-									<td class="actions">
-										<!-- disabled buttons get no hover events: the tooltip sits on a wrapper -->
-										<span title={last && u.role === 'admin' ? LAST_ADMIN : undefined}>
-											<button type="button" disabled={busy === u.id || (u.role === 'admin' && last)} onclick={() => patch(u, { role: u.role === 'admin' ? 'user' : 'admin' })}>
-												{u.role === 'admin' ? 'Remove admin' : 'Make admin'}
-											</button>
-										</span>
-										<span title={last ? LAST_ADMIN : undefined}>
-											<button type="button" class:danger={!u.disabled} disabled={busy === u.id || last} onclick={() => patch(u, { disabled: !u.disabled })}>
-												{u.disabled ? 'Enable' : 'Disable'}
-											</button>
-										</span>
-									</td>
-								</tr>
-							{:else}
-								<tr><td colspan="7" class="empty">{query ? 'No users match.' : 'No users yet.'}</td></tr>
-							{/each}
-						</tbody>
-					</table>
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard users must be able to scroll the table) -->
+					<div class="table-scroll" role="region" aria-label="Users table" tabindex="0">
+						<table>
+							<thead>
+								<tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last seen</th><th class="num">Projects</th><th><span class="sr">Actions</span></th></tr>
+							</thead>
+							<tbody>
+								{#each shown as u (u.id)}
+									{@const last = isLastAdmin(u)}
+									<tr class:off={u.disabled}>
+										<td>
+											<span class="who">
+												<Avatar name={u.name} avatarUrl={u.avatarUrl} color={colorFor(u.id)} size={24} />
+												{u.name}
+												{#if u.id === me?.id}<span class="you">you</span>{/if}
+											</span>
+										</td>
+										<td class="muted">{u.email}</td>
+										<td><span class="badge" class:admin={u.role === 'admin'}>{u.role === 'admin' ? 'Admin' : 'User'}</span></td>
+										<td><span class="status" class:disabled={u.disabled}>{u.disabled ? 'Disabled' : 'Active'}</span></td>
+										<td class="muted" title={absoluteTime(u.lastSeenAt)}>{relativeTime(u.lastSeenAt)}</td>
+										<td class="num">{u.projectCount}</td>
+										<td class="actions">
+											<!-- disabled buttons get no hover events: the tooltip sits on a wrapper -->
+											<span title={last && u.role === 'admin' ? LAST_ADMIN : undefined}>
+												<button type="button" disabled={busy === u.id || (u.role === 'admin' && last)} onclick={() => patch(u, { role: u.role === 'admin' ? 'user' : 'admin' })}>
+													{u.role === 'admin' ? 'Remove admin' : 'Make admin'}
+												</button>
+											</span>
+											<span title={last ? LAST_ADMIN : undefined}>
+												<button type="button" class:danger={!u.disabled} disabled={busy === u.id || last} onclick={() => patch(u, { disabled: !u.disabled })}>
+													{u.disabled ? 'Enable' : 'Disable'}
+												</button>
+											</span>
+										</td>
+									</tr>
+								{:else}
+									<tr><td colspan="7" class="empty">{query ? 'No users match.' : 'No users yet.'}</td></tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				</div>
 			{:else if tab === 'projects'}
 				<div id="panel-projects" role="tabpanel" aria-labelledby="tab-projects">
 					<p class="hint">Admins can delete any project but only open the ones they are invited to.</p>
-					<table>
-						<thead>
-							<tr><th>Title</th><th>Owner</th><th class="num">Collaborators</th><th>Last modified</th><th><span class="sr">Actions</span></th></tr>
-						</thead>
-						<tbody>
-							{#each projects as p (p.id)}
-								<tr>
-									<td class="title">{p.title}</td>
-									<td>
-										{#if p.owner}{p.owner.name} <span class="muted">{p.owner.email}</span>{:else}<span class="muted">No owner</span>{/if}
-									</td>
-									<td class="num">{p.collaborators}</td>
-									<td class="muted" title={absoluteTime(p.updatedAt)}>{relativeTime(p.updatedAt)}</td>
-									<td class="actions">
-										<button type="button" class="danger" aria-label="Delete {p.title}" disabled={busy === p.id} onclick={() => remove(p)}>Delete</button>
-									</td>
-								</tr>
-							{:else}
-								<tr><td colspan="5" class="empty">No projects yet.</td></tr>
-							{/each}
-						</tbody>
-					</table>
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard users must be able to scroll the table) -->
+					<div class="table-scroll" role="region" aria-label="Projects table" tabindex="0">
+						<table>
+							<thead>
+								<tr><th>Title</th><th>Owner</th><th class="num">Collaborators</th><th>Last modified</th><th><span class="sr">Actions</span></th></tr>
+							</thead>
+							<tbody>
+								{#each projects as p (p.id)}
+									<tr>
+										<td class="title">{p.title}</td>
+										<td>
+											{#if p.owner}{p.owner.name} <span class="muted">{p.owner.email}</span>{:else}<span class="muted">No owner</span>{/if}
+										</td>
+										<td class="num">{p.collaborators}</td>
+										<td class="muted" title={absoluteTime(p.updatedAt)}>{relativeTime(p.updatedAt)}</td>
+										<td class="actions">
+											<button type="button" class="danger" aria-label="Delete {p.title}" disabled={busy === p.id} onclick={() => remove(p)}>Delete</button>
+										</td>
+									</tr>
+								{:else}
+									<tr><td colspan="5" class="empty">No projects yet.</td></tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				</div>
 			{:else}
 				<div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings">
@@ -339,6 +345,7 @@
 	}
 	.search {
 		width: 280px;
+		max-width: 100%;
 		margin-bottom: 12px;
 		padding: 6px 10px;
 		border: 1px solid var(--border);
@@ -347,6 +354,7 @@
 		color: var(--text);
 		font: inherit;
 	}
+	.table-scroll { position: relative; overflow: auto; max-width: 100%; }
 	table {
 		width: 100%;
 		border-collapse: collapse;
@@ -530,5 +538,8 @@
 		height: 1px;
 		overflow: hidden;
 		clip-path: inset(50%);
+	}
+	@media (max-width: 600px) {
+		main { padding: 16px 12px 32px; }
 	}
 </style>

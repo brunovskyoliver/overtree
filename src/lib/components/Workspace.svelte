@@ -44,6 +44,14 @@
 	let pdf = $state<Pane>();
 	let sidebarOpen = $state(true);
 	let pdfOpen = $state(true);
+	let compact = $state(false);
+	onMount(() => {
+		const query = matchMedia('(max-width: 700px)');
+		const update = () => (compact = query.matches);
+		update();
+		query.addEventListener('change', update);
+		return () => query.removeEventListener('change', update);
+	});
 
 	// the sidebar shows the Search view (014) instead of the tree and outline; both stay mounted, so the tree keeps
 	// its state and the search its query and results
@@ -138,7 +146,7 @@
 <svelte:window onkeydown={onwindowkey} />
 
 <!-- paneforge stores under `paneforge:<autoSaveId>`, collapsed panes included (FR-018) -->
-<PaneGroup direction="horizontal" autoSaveId="overtree:layout:main" class="workspace layout-{layout.mode}">
+<PaneGroup direction={compact ? 'vertical' : 'horizontal'} autoSaveId="overtree:layout:main" class="workspace layout-{layout.mode}">
 	<Pane
 		id="sidebar"
 		bind:this={sidebar}
@@ -273,6 +281,14 @@
 		height: 6px;
 		background-image: var(--grip-h);
 		background-position: center;
+	}
+	@media (max-width: 700px) {
+		:global(.workspace > .handle-v) {
+			width: auto;
+			height: 7px;
+			background-image: var(--grip-h);
+			background-position: center;
+		}
 	}
 	:global(.handle[data-active]),
 	:global(.handle:hover) {

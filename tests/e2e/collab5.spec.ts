@@ -2,13 +2,13 @@ import { expect, type Page } from '@playwright/test';
 import { allow, api, openEditor, projectPath, signInAs, test, text } from './helpers.ts';
 
 // US4 scenario 8 (SC-004) and SC-003 with five sessions: five users type into one file for a minute, then every
-// session holds the same text with every marker, and an edit still shows up elsewhere in under 300 ms.
+// session holds the same text with every typed character, and edits arrive in under 300 ms.
 
 const TYPING_MS = 60_000;
 
 test.skip(({ browserName }) => browserName !== 'chromium', 'five sessions for a minute: Chromium only');
 
-test('five users typing for a minute converge with every edit; latency stays under 300 ms (8, SC-003, SC-004)', async ({ browser, page, pid }) => {
+test('five users typing for a minute converge without losing or duplicating characters; latency stays under 300 ms (8, SC-003, SC-004)', async ({ browser, page, pid }) => {
 	test.slow();
 	test.setTimeout(240_000);
 	await allow(page.request, '@test.local');
@@ -23,13 +23,14 @@ test('five users typing for a minute converge with every edit; latency stays und
 		await p.goto('/'); // creates the user
 		expect((await page.request.post(`${api(pid)}/members`, { data: { email, role: 'editor' } })).status()).toBe(201);
 		await p.goto(projectPath(pid));
-		await expect(p.getByRole('status')).toHaveText('Saved');
+		await expect(p.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 		await p.waitForFunction(() => window.__overtree?.provider.isSynced);
 		pages.push(p);
 	}
 	await expect(page.getByRole('button', { name: /\(go to cursor\)$/ })).toHaveCount(4);
 
-	// each user: a caret at the start of a random line, then a marker typed key by key; Yjs keeps each run whole
+	// Each key is an independent edit. Concurrent typing can legitimately split a marker.
+	const initial = await text(page);
 	const markers: string[][] = pages.map(() => []);
 	const until = Date.now() + TYPING_MS;
 	await Promise.all(
@@ -48,12 +49,18 @@ test('five users typing for a minute converge with every edit; latency stays und
 		})
 	);
 
-	// every session ends with the same text holding every marker
+	// Convergence plus the exact character inventory proves no text was lost or duplicated,
+	// without assuming that a string typed across several transactions stays contiguous.
 	const all = markers.flat();
 	console.log(`markers typed: ${all.length}`);
 	await expect.poll(async () => new Set(await Promise.all(pages.map(text))).size, { timeout: 15_000 }).toBe(1);
 	const final = await text(page);
-	for (const m of all) expect(final).toContain(m);
+	const counts = (s: string) => {
+		const out = new Map<string, number>();
+		for (const char of s) out.set(char, (out.get(char) ?? 0) + 1);
+		return [...out].sort(([a], [b]) => a.localeCompare(b));
+	};
+	expect(counts(final)).toEqual(counts(initial + all.join('')));
 
 	// SC-003 with five sessions: a key pressed in one page shows up in another, both timed inside the pages
 	for (let s = 0; s < 5; s++) {

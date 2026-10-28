@@ -85,6 +85,25 @@ const search = async (pid: string, email: string, qs: string) => {
 const replace = (pid: string, email: string, body: object) => hit(replaceRoute.POST, ev(email, { pid }, json('POST', body)));
 
 describe('search route', () => {
+	it('refuses a backtracking regex and still serves the next search', async () => {
+		const { pid, main } = await setup();
+		await setText(main, `${'a'.repeat(26)}!`, { userId: user().id, projectId: pid });
+		const result = await search(pid, OWNER, new URLSearchParams({ q: '(a+)+$', regex: '1' }).toString());
+		expect(result.status).toBe(400);
+		const next = await search(pid, OWNER, 'q=!');
+		expect(next.status).toBe(200);
+		expect(next.body.total).toBe(1);
+	});
+
+	it('a regex timeout during replacement leaves the file untouched', async () => {
+		const { pid, main } = await setup();
+		const before = `${'a'.repeat(26)}!`;
+		await setText(main, before, { userId: user().id, projectId: pid });
+		const result = await replace(pid, OWNER, { q: '(a+)+$', regex: true, replacement: 'changed', fileId: main });
+		expect(result.status).toBe(400);
+		expect(await getText(main)).toBe(before);
+	});
+
 	it('finds matches in every text file, grouped by path, with per-file edit rights', async () => {
 		const { server, pid, intro, main } = await setup();
 		server.db.insert(overrides).values({ projectId: pid, userId: user(B).id, fileId: intro, role: 'reader' }).run();

@@ -65,7 +65,7 @@ test('clerk.signIn → the editor syncs over the token path; sign out → /sign-
 	expect(res.status()).toBe(201);
 	const { id } = await res.json();
 	await page.goto(`/project/${id}`);
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 	await expect(page.locator('.cm-content')).toContainText('documentclass');
 

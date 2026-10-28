@@ -67,12 +67,13 @@ test('Light from the account menu colors the dashboard and editor and survives a
 });
 
 test('the stored choice applies before the app loads (US3-1)', async ({ page }) => {
-	await page.goto('/');
-	await pick(page, 'Light');
-	// no app code at all: only app.html's inline script can have set the theme
-	await page.route('**/_app/**/*.js', (route) => route.abort());
+	// A cold page avoids WebKit restoring already-loaded app modules on a same-URL visit.
+	await page.addInitScript(() => localStorage.setItem('overtree:editor-prefs', JSON.stringify({ appearance: 'light' })));
+	let blocked = 0;
+	await page.route('**/_app/**/*.js', (route) => { blocked++; return route.abort(); });
 	await page.goto('/');
 	await expect(html(page)).toHaveAttribute('data-theme', 'light');
+	expect(blocked).toBeGreaterThan(0);
 	await expect(page.getByRole('button', { name: 'Account' })).toHaveCount(0);
 });
 

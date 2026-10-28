@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { fileType } from '#lib/files.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import FileIcon from './FileIcon.svelte';
@@ -7,10 +8,22 @@
 	let { project, status }: { project: Project; status?: string } = $props();
 
 	const tabs = $derived(project.open.flatMap((id) => project.files.filter((f) => f.id === id)));
+	let tablist: HTMLDivElement;
+
+	async function onkey(e: KeyboardEvent, id: string) {
+		const index = tabs.findIndex((f) => f.id === id);
+		const next = { ArrowRight: (index + 1) % tabs.length, ArrowLeft: (index + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 }[e.key];
+		if (e.key === 'Delete') project.closeFile(id);
+		else if (next !== undefined) project.openFile(tabs[next].id);
+		else return;
+		e.preventDefault();
+		await tick();
+		tablist.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+	}
 </script>
 
 <div class="strip">
-	<div class="tabs" role="tablist" aria-label="Open files">
+	<div class="tabs" role="tablist" aria-label="Open files" bind:this={tablist}>
 		{#each tabs as f (f.id)}
 			{@const active = f.id === project.active}
 			<div class="tab" class:active role="presentation">
@@ -19,6 +32,10 @@
 					role="tab"
 					class="name"
 					aria-selected={active}
+					tabindex={active ? 0 : -1}
+					aria-keyshortcuts="Delete"
+					aria-describedby="tab-close-hint"
+					onkeydown={(e) => onkey(e, f.id)}
 					onclick={() => project.openFile(f.id)}
 					onauxclick={(e) => e.button === 1 && project.closeFile(f.id)}
 					onmousedown={(e) => e.button === 1 && e.preventDefault()}
@@ -26,12 +43,15 @@
 					<FileIcon type={fileType(f)} />
 					{f.name}
 				</button>
-				<button type="button" class="close" aria-label="Close {f.name}" title="Close" onclick={() => project.closeFile(f.id)}>
+				<!-- The tab's Delete shortcut provides the accessible close action. This pointer target
+				     stays out of the tablist's accessibility tree, which may only contain tabs. -->
+				<button type="button" class="close" aria-hidden="true" tabindex="-1" aria-label="Close {f.name}" title="Close" onclick={() => project.closeFile(f.id)}>
 					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
 				</button>
 			</div>
 		{/each}
 	</div>
+	<span id="tab-close-hint" hidden>Press Delete to close this file.</span>
 	{#if status}
 		<span class="badge" class:offline={status === 'Offline'} role="status">{status}</span>
 	{/if}
@@ -40,6 +60,7 @@
 <style>
 	.strip {
 		display: flex;
+		flex: none;
 		align-items: stretch;
 		height: 34px;
 		background: var(--bg);
@@ -83,8 +104,8 @@
 	.close {
 		display: grid;
 		place-items: center;
-		width: 20px;
-		height: 20px;
+		width: 24px;
+		height: 24px;
 		margin-right: 6px;
 		padding: 0;
 		border-radius: 4px;

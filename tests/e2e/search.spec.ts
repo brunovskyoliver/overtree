@@ -19,7 +19,7 @@ async function as(browser: Browser, email: string) {
 
 async function openAs(page: Page, pid: string) {
 	await page.goto(projectPath(pid));
-	await expect(page.getByRole('status')).toHaveText('Saved');
+	await expect(page.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await page.waitForFunction(() => window.__overtree?.provider.isSynced);
 }
 

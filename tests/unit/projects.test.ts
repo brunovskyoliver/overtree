@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { strToU8, zipSync } from 'fflate';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { projectRole } from '../../src/lib/server/access.ts';
 import { getCompiler, setCompiler } from '../../src/lib/server/compile.ts';
 import { createEntry, getMainFileId, getText, listFiles, setMainFile, setText, uploadFile } from '../../src/lib/server/files.ts';
 import {
@@ -15,7 +16,7 @@ import {
 	normalizeTitle,
 	renameProject
 } from '../../src/lib/server/projects.ts';
-import { documents, files, memberships, overrides, projects, updates } from '../../src/lib/server/schema.ts';
+import { documents, files, memberships, overrides, projects, updates, users } from '../../src/lib/server/schema.ts';
 import { latexEscape, TEMPLATES, templateText } from '../../src/lib/server/templates.ts';
 import * as importRoute from '../../src/routes/api/projects/import/+server.ts';
 import * as listRoute from '../../src/routes/api/projects/+server.ts';
@@ -152,6 +153,31 @@ describe('titles', () => {
 });
 
 describe('list', () => {
+	it('matches effective roles with a fixed number of queries, including mixed invite and link roles', async () => {
+		const server = await start();
+		const me = user(OWNER).id;
+		const ids = [project(OWNER)];
+		for (const role of [null, 'reader', 'editor'] as const)
+			for (const linkRole of [null, 'reader', 'editor'] as const) {
+				const pid = project(B);
+				ids.push(pid);
+				member(server, pid, OWNER, role, true);
+				if (linkRole) server.db.update(projects).set({ linkToken: pid, linkRole }).where(eq(projects.id, pid)).run();
+			}
+		const expected = new Map(ids.map((id) => [id, projectRole(id, me)] as const).filter(([, role]) => role));
+		const prepare = vi.spyOn(server.db.$client, 'prepare');
+		try {
+			const actual = listProjects(me);
+			expect(prepare.mock.calls.length).toBeLessThanOrEqual(3);
+			expect(new Map(actual.map((p) => [p.id, p.role]))).toEqual(expected);
+		} finally {
+			prepare.mockRestore();
+		}
+		server.db.update(users).set({ disabled: true }).where(eq(users.id, me)).run();
+		expect(listProjects(me)).toEqual([]);
+		expect(listProjects('unknown-user')).toEqual([]);
+	});
+
 	it('lists own and shared projects with the caller’s role, most recently modified first', async () => {
 		const server = await start();
 		const set = (pid: string, updatedAt: number) => server.db.update(projects).set({ updatedAt }).where(eq(projects.id, pid)).run();

@@ -293,6 +293,7 @@
 
 	// the same for every tab
 	const shared: Extension = [
+		EditorView.contentAttributes.of({ 'aria-label': 'Source editor', tabindex: '0' }),
 		// codemirror's basicSetup minus history(): Y.UndoManager owns undo/redo
 		lineNumbers(),
 		highlightActiveLineGutter(),
@@ -544,6 +545,7 @@
 	}
 
 	onMount(() => () => {
+		symbols.destroy();
 		editor = undefined;
 		if (testHooks) delete window.__overtree;
 		for (const id of [...tabs.keys()]) destroyTab(id);
@@ -597,6 +599,7 @@
 
 <style>
 	.editor {
+		container-type: inline-size;
 		display: flex;
 		flex-direction: column;
 		height: 100%;
@@ -614,6 +617,7 @@
 	.host {
 		flex: 1;
 		min-width: 0;
+		min-height: 0;
 	}
 	.host :global(.cm-editor) {
 		height: 100%;
@@ -646,5 +650,8 @@
 	.hint {
 		margin: auto;
 		color: var(--text-muted);
+	}
+	@container (max-width: 520px) {
+		.body { flex-direction: column; }
 	}
 </style>

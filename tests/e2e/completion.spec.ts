@@ -80,6 +80,26 @@ test('fuzzy sbsc narrows to \\subsection{} with the matched characters marked (U
 	expect(marked).toBe('\\sbsc');
 });
 
+test('common command prefixes put the intended result in the real popup top three (SC-006)', async ({ page }) => {
+	const cases = [
+		['sec', '\\section{}'], ['sub', '\\subsection{}'], ['beg', '\\begin{}'], ['ite', '\\item'], ['tex', '\\textbf{}'],
+		['emp', '\\emph{}'], ['fra', '\\frac{}{}'], ['use', '\\usepackage{}'], ['lab', '\\label{}'], ['ref', '\\ref{}'],
+		['cit', '\\cite{}'], ['inc', '\\includegraphics{}'], ['doc', '\\documentclass{}'], ['cap', '\\caption{}'],
+		['cen', '\\centering'], ['foo', '\\footnote{}'], ['tab', '\\tableofcontents'], ['mak', '\\maketitle'],
+		['hsp', '\\hspace{}'], ['vsp', '\\vspace{}']
+	];
+	const misses: string[] = [];
+	for (const [prefix, expected] of cases) {
+		await empty(page);
+		await page.keyboard.type(`\\${prefix}`);
+		await expect(popup(page)).toBeVisible();
+		const labels = await options(page).locator('.cm-completionLabel').allTextContents();
+		if (!labels.slice(0, 3).includes(expected)) misses.push(`${prefix}: ${labels.slice(0, 3).join(', ')}`);
+		await page.keyboard.press('Escape');
+	}
+	expect(misses, misses.join('\n')).toHaveLength(0);
+});
+
 test('Down/Up move the selection, Tab and Enter accept, Escape closes without inserting (US5-3)', async ({ page }) => {
 	await empty(page);
 	await page.keyboard.type('\\ite');

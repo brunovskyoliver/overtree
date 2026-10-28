@@ -251,9 +251,9 @@
 									<a href="/project/{p.id}">{p.title}</a>
 								{/if}
 							</td>
-							<td class="muted">{p.owner?.name ?? 'No owner'}</td>
-							<td><span class="badge" class:owner={p.role === 'owner'}>{ROLE[p.role]}</span></td>
-							<td class="muted" title={absoluteTime(p.updatedAt)}>{relativeTime(p.updatedAt, now)}</td>
+							<td class="muted" data-label="Owner">{p.owner?.name ?? 'No owner'}</td>
+							<td data-label="Your role"><span class="badge" class:owner={p.role === 'owner'}>{ROLE[p.role]}</span></td>
+							<td class="muted" data-label="Last modified" title={absoluteTime(p.updatedAt)}>{relativeTime(p.updatedAt, now)}</td>
 							<td class="actions">
 								<ProjectActions title={p.title} owner={p.role === 'owner'} disabled={busy === p.id} onaction={(a) => action(p, a)} />
 							</td>
@@ -308,6 +308,7 @@
 	}
 	.head {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 12px;
 		margin-bottom: 16px;
@@ -320,6 +321,8 @@
 	}
 	.search {
 		width: 280px;
+		min-width: 0;
+		max-width: 100%;
 		padding: 6px 10px;
 		border: 1px solid var(--border);
 		border-radius: 6px;
@@ -543,5 +546,26 @@
 		height: 1px;
 		overflow: hidden;
 		clip-path: inset(50%);
+	}
+
+	@media (max-width: 600px) {
+		main { padding: 16px 12px 32px; }
+		.search { order: 1; width: 100%; }
+		table, tbody { display: block; border: 0; background: none; }
+		thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+		tbody tr {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			padding: 10px;
+			margin-bottom: 10px;
+			border: 1px solid var(--border);
+			border-radius: 6px;
+			background: var(--panel);
+		}
+		td { grid-column: 1; padding: 4px; border: 0; overflow-wrap: anywhere; }
+		.title { width: auto; }
+		.title a { display: block; }
+		td[data-label]::before { content: attr(data-label) ': '; color: var(--text-muted); }
+		.actions { grid-column: 2; grid-row: 1; width: auto; }
 	}
 </style>

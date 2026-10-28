@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fileType, type FileEntry } from '#lib/files.ts';
 	import PdfToolbar from './PdfToolbar.svelte';
-	import PdfViewer from './PdfViewer.svelte';
+	import type PdfViewer from './PdfViewer.svelte';
 
 	// Preview of a binary file per contracts/ui.md and research R14.
 	// url: the file's raw route; it carries updatedAt so a replaced upload (same id, T034) isn't served from cache
@@ -25,7 +25,15 @@
 	{#if type === 'image'}
 		<div class="image"><img src={url} alt={file.name} /></div>
 	{:else if type === 'pdf'}
-		<div class="pdf"><PdfViewer {url} {dark} bind:this={viewer} bind:page bind:pages bind:scale bind:percent /></div>
+		<div class="pdf">
+			{#await import('./PdfViewer.svelte')}
+				<p role="status">Loading PDF viewer…</p>
+			{:then { default: PdfViewer }}
+				<PdfViewer {url} {dark} bind:this={viewer} bind:page bind:pages bind:scale bind:percent />
+			{:catch}
+				<p role="alert">Could not load the PDF viewer. Reload the page to try again.</p>
+			{/await}
+		</div>
 	{:else}
 		<p class="none">No preview for this file type.</p>
 	{/if}

@@ -561,6 +561,8 @@
 	}
 	.header {
 		display: flex;
+		flex: none;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 2px;
 		padding-right: 8px;
@@ -647,7 +649,7 @@
 		padding: 0 5px;
 		border-radius: 8px;
 		background: var(--sunken);
-		color: var(--text-muted);
+		color: var(--text);
 		font-size: 11px;
 		line-height: 16px;
 	}
@@ -732,6 +734,7 @@
 		transform: rotate(90deg);
 	}
 	.kebab {
+		flex: none;
 		display: grid;
 		place-items: center;
 		width: 22px;

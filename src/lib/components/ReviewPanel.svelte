@@ -100,6 +100,16 @@
 		background: var(--panel);
 		font-size: 13px;
 	}
+	@container (max-width: 520px) {
+		.review {
+			width: auto;
+			flex: 0 1 45%;
+			max-height: 45%;
+			margin-left: 10px;
+			border-left: 0;
+			border-top: 1px solid var(--border);
+		}
+	}
 	header {
 		display: flex;
 		align-items: center;

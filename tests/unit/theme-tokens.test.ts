@@ -49,26 +49,20 @@ describe('theme tokens', () => {
 		expect(missing).toEqual([]);
 	});
 
-	it('light text and syntax colors reach 4.5:1 on the light editor, carets and outlines 3:1', () => {
-		const bg = light['--bg-editor'];
+	it.each([['dark', dark], ['light', light]] as const)('%s editor text reaches 4.5:1, carets and outlines 3:1', (_name, theme) => {
+		const bg = theme['--bg-editor'];
 		const text = ['--editor-text', '--gutter-text', '--syntax-command', '--syntax-argument', '--syntax-math', '--syntax-comment', '--syntax-bracket', '--syntax-number', '--syntax-invalid', '--text', '--text-muted', '--error', '--accent-bright'];
-		const low = text.map((t) => [t, contrast(light[t], bg)] as const).filter(([, r]) => r < 4.5);
+		const low = text.map((t) => [t, contrast(theme[t], bg)] as const).filter(([, r]) => r < 4.5);
 		expect(low).toEqual([]);
-		expect(contrast(light['--bracket-match'], bg)).toBeGreaterThanOrEqual(3);
-		expect(contrast(light['--focus'], bg)).toBeGreaterThanOrEqual(3);
-		expect(contrast(light['--on-accent'], light['--accent'])).toBeGreaterThanOrEqual(4.5);
+		expect(contrast(theme['--bracket-match'], bg)).toBeGreaterThanOrEqual(3);
+		expect(contrast(theme['--focus'], bg)).toBeGreaterThanOrEqual(3);
+		expect(contrast(theme['--on-accent'], theme['--accent'])).toBeGreaterThanOrEqual(4.5);
 	});
 
-	it('the dark set keeps the colors dark mode had before 018', () => {
-		expect(dark).toMatchObject({
-			'--bg': '#1b1e26',
-			'--bg-editor': '#1e2230',
-			'--panel': '#262b36',
-			'--accent': '#2f6a31',
-			'--text': '#e6e8ec',
-			'--editor-text': '#d7dae0',
-			'--syntax-command': '#d27fb3',
-			'--selection': '#3a4a6b'
-		});
+	it.each([['dark', dark], ['light', light]] as const)('%s UI text stays readable on the surfaces where it is used', (_name, theme) => {
+		for (const bg of ['--bg', '--panel', '--bg-editor', '--pdf'])
+			for (const fg of ['--text', '--text-muted'])
+				expect(contrast(theme[fg], theme[bg]), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+		expect(contrast(theme['--on-accent'], theme['--accent'])).toBeGreaterThanOrEqual(4.5);
 	});
 });

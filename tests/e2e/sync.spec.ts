@@ -49,6 +49,6 @@ test('offline edits show "Offline" and sync after reconnect (FR-015)', async () 
 	expect(await b.evaluate(() => window.__overtree!.view.state.doc.toString())).not.toContain(marker);
 
 	await a.evaluate(() => window.__overtree!.provider.configuration.websocketProvider.connect());
-	await expect(a.getByRole('status')).toHaveText('Saved');
+	await expect(a.getByRole('region', { name: 'Editor', exact: true }).getByRole('status')).toHaveText('Saved');
 	await has(b, marker);
 });

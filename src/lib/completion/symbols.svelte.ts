@@ -15,6 +15,9 @@ export class Symbols {
 	#fetchTimer: ReturnType<typeof setTimeout> | undefined;
 	#scanTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	#fetchedAt = 0;
+	#request = 0;
+	#controller?: AbortController;
+	#destroyed = false;
 
 	constructor(projectId: string) {
 		this.#url = `/api/projects/${projectId}/symbols`;
@@ -22,13 +25,30 @@ export class Symbols {
 
 	/** Refetch from the server, debounced 500 ms (on load, after tree operations and on tab switch). */
 	refresh() {
+		if (this.#destroyed) return;
 		clearTimeout(this.#fetchTimer);
+		this.#controller?.abort();
+		const request = ++this.#request;
 		this.#fetchTimer = setTimeout(async () => {
-			this.#fetchedAt = Date.now();
+			const controller = (this.#controller = new AbortController());
 			const exclude = [...this.#live.keys()].join(',');
-			const res = await fetch(`${this.#url}?exclude=${encodeURIComponent(exclude)}`).catch(() => undefined);
-			if (res?.ok) this.#server = await res.json();
+			const res = await fetch(`${this.#url}?exclude=${encodeURIComponent(exclude)}`, { signal: controller.signal }).catch(() => undefined);
+			const body = res?.ok ? await res.json().catch(() => undefined) : undefined;
+			if (body && request === this.#request && !this.#destroyed) {
+				this.#server = body;
+				this.#fetchedAt = Date.now();
+			}
 		}, 500);
+	}
+
+	destroy() {
+		this.#destroyed = true;
+		this.#request++;
+		this.#controller?.abort();
+		clearTimeout(this.#fetchTimer);
+		for (const timer of this.#scanTimers.values()) clearTimeout(timer);
+		this.#scanTimers.clear();
+		this.#live.clear();
 	}
 
 	/** Refetch if the last fetch is over 2 s old (the completion popup opening): picks up edits made elsewhere.
@@ -39,6 +59,7 @@ export class Symbols {
 
 	/** Rescan an open tab's text, debounced 300 ms. */
 	scan(fileId: string, bib: boolean, state: EditorState) {
+		if (this.#destroyed) return;
 		clearTimeout(this.#scanTimers.get(fileId));
 		this.#scanTimers.set(
 			fileId,

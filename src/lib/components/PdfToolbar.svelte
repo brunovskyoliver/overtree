@@ -79,7 +79,7 @@
 		{#if m.open}
 			<div class="menu" role="menu" aria-label="Zoom" tabindex="-1" bind:this={m.menu} onkeydown={m.onmenukey}>
 				{#each ZOOMS as [value, label] (value)}
-					<button type="button" role="menuitemradio" tabindex="-1" aria-checked={scale === value} onclick={() => pick(value)}>{label}</button>
+					<button type="button" role="menuitemradio" tabindex="-1" aria-label={label} aria-checked={scale === value} onclick={() => pick(value)}>{label}</button>
 				{/each}
 			</div>
 		{/if}
@@ -89,11 +89,14 @@
 <style>
 	.tools {
 		display: flex;
+		flex-wrap: wrap;
+		min-width: 0;
 		align-items: center;
 		gap: 2px;
 		margin-left: auto;
 	}
 	button {
+		flex: none;
 		display: flex;
 		align-items: center;
 		gap: 4px;
