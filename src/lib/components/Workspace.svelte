@@ -28,7 +28,7 @@
 		children: Snippet;
 		outline: Snippet;
 		compile: CompileState;
-		onopenat?: (fileId: string, line: number) => void;
+		onopenat?: (fileId: string, line: number, word?: string) => void;
 		project: Project;
 		activeId?: string | null;
 		onopen?: (id: string) => void;
@@ -108,9 +108,9 @@
 	}
 
 	/** The PDF asks for a source line: PDF only gives way to side-by-side so the editor shows it. */
-	function openAt(fileId: string, line: number) {
+	function openAt(fileId: string, line: number, word?: string) {
 		if (layout.mode === 'pdf') layout.set('split');
-		onopenat?.(fileId, line);
+		onopenat?.(fileId, line, word);
 	}
 
 	// SyncTeX (research R10): against the last compile's PDF; a line or spot that maps nowhere does nothing (US3 #6),
@@ -130,11 +130,11 @@
 		else if (r) await pdfPane?.showBox(r.page, r.boxes);
 	}
 
-	/** Double-click on the PDF or "←": open the source of that spot. */
-	async function reverse(page: number, x: number, y: number) {
+	/** Double-click on the PDF or "←": open the source of that spot, with the double-clicked word selected. */
+	async function reverse(page: number, x: number, y: number, word?: string) {
 		const r = await syncWith(compile, (id) => syncToCode(project.id, id, page, x, y, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
-		else if (r) openAt(r.fileId, r.line);
+		else if (r) openAt(r.fileId, r.line, word);
 	}
 
 	function reverseVisible() {

@@ -29,8 +29,9 @@
 		pages?: number;
 		scale?: string;
 		percent?: number;
-		/** double-click on a page: the point in PDF points from the page's top-left (reverse SyncTeX) */
-		onsync?: (page: number, x: number, y: number) => void;
+		/** double-click on a page: the point in PDF points from the page's top-left (reverse SyncTeX) and the word
+		 *  the browser selected there in the text layer, if any */
+		onsync?: (page: number, x: number, y: number, word?: string) => void;
 		/** remembers the position per project on this device (FR-025) */
 		projectId?: string;
 	} = $props();
@@ -161,7 +162,8 @@
 		const onDblClick = (e: MouseEvent) => {
 			const n = Number((e.target as Element).closest<HTMLElement>('.page')?.dataset.pageNumber);
 			const view = n ? v.getPageView(n - 1) : undefined;
-			if (onsync && view) onsync(n, ...pdfPoint(view, e.clientX, e.clientY));
+			const word = getSelection()?.toString().trim();
+			if (onsync && view) onsync(n, ...pdfPoint(view, e.clientX, e.clientY), word && /^\S+$/.test(word) ? word : undefined);
 		};
 		container.addEventListener('dblclick', onDblClick);
 		container.addEventListener('wheel', onWheel, { passive: false });

@@ -20,7 +20,7 @@
 		projectId?: string;
 		onopenat?: (fileId: string, line: number) => void;
 		/** double-click on the PDF (reverse SyncTeX), see PdfViewer */
-		onsync?: (page: number, x: number, y: number) => void;
+		onsync?: (page: number, x: number, y: number, word?: string) => void;
 		inert?: boolean;
 		/** extra toolbar buttons after Recompile (the PDF window's "←") */
 		tools?: Snippet;

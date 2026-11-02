@@ -19,6 +19,7 @@
 	import { Project } from '#lib/project.svelte.ts';
 	import { buildRegExp, matches, type SearchOptions } from '#lib/search.ts';
 	import { Session, type Peer } from '#lib/session.svelte.ts';
+	import { wordNear } from '#lib/synctex.ts';
 	import * as Y from 'yjs';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
 
@@ -104,12 +105,14 @@
 		return editor === h ? h : undefined;
 	}
 
-	/** A log entry: open its file in a tab and put the cursor on the line (past the end: the last line). */
-	async function openAt(fileId: string, line: number) {
+	/** A log entry or a PDF double-click: open its file in a tab and put the cursor on the line (past the end: the
+	 *  last line); with the double-clicked `word`, select it there, so typing replaces it. */
+	async function openAt(fileId: string, line: number, word?: string) {
 		const view = (await opened(fileId))?.view;
 		if (!view) return;
 		const at = view.state.doc.line(Math.min(line, view.state.doc.lines));
-		view.dispatch({ selection: { anchor: at.from }, effects: EditorView.scrollIntoView(at.from, { y: 'center' }) });
+		const sel = (word && wordNear(view.state.doc.toString(), at.number, word)) || { from: at.from, to: at.from };
+		view.dispatch({ selection: { anchor: sel.from, head: sel.to }, effects: EditorView.scrollIntoView(sel.from, { y: 'center' }) });
 		view.focus();
 	}
 
@@ -133,7 +136,7 @@
 	}
 
 	// Layout menu and the separate PDF window (008 research R12): its double-clicks open the source here
-	const layout = new Layout(project.id, (fileId, line) => void openAt(fileId, line));
+	const layout = new Layout(project.id, (fileId, line, word) => void openAt(fileId, line, word));
 	layout.mirror(compile);
 	onMount(() => () => layout.destroy());
 

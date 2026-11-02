@@ -37,12 +37,12 @@
 		else if (r) await pane?.showBox(r.page, r.boxes);
 	}
 
-	const openAt = (fileId: string, line: number) => channel.post({ type: 'open-at', fileId, line });
+	const openAt = (fileId: string, line: number, word?: string) => channel.post({ type: 'open-at', fileId, line, word });
 
-	async function reverse(n: number, x: number, y: number) {
+	async function reverse(n: number, x: number, y: number, word?: string) {
 		const r = await syncWith(compile, (id) => syncToCode(project.id, id, n, x, y, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
-		else if (r) openAt(r.fileId, r.line);
+		else if (r) openAt(r.fileId, r.line, word);
 	}
 
 	function reverseVisible() {

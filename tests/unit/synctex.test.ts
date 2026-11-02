@@ -14,6 +14,7 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compileDir } from '../../src/lib/server/compile.ts';
+import { wordNear } from '../../src/lib/synctex.ts';
 import { buildIndex, forward, forwardSearch, reverse, reverseSearch, type SyncJson } from '../../src/lib/server/synctex.ts';
 import { project, start } from './helpers.ts';
 
@@ -92,5 +93,26 @@ describe('loadIndex', () => {
 		expect((await forward(pid, 'fixture', 'f-intro', 3))?.page).toBe(1);
 		expect(await forward(pid, 'older', 'f-intro', 3)).toBeNull();
 		expect((await reverse(pid, 'fixture', 1, ...centre((await forward(pid, 'fixture', 'f-intro', 3))!.boxes[0])))?.fileId).toBe('f-intro');
+	});
+});
+
+describe('wordNear', () => {
+	const text = 'Intro line\nThe quick brown\nfox jumps over the lazy dog.\n\\cite{fox}\nfoxes run';
+	const at = (r?: { from: number; to: number }) => r && text.slice(r.from, r.to) + '@' + text.slice(0, r.from).split('\n').length;
+	it('finds the word on the reported line first, then nearby lines', () => {
+		expect(at(wordNear(text, 3, 'fox'))).toBe('fox@3');
+		expect(at(wordNear(text, 2, 'fox'))).toBe('fox@3'); // a line below before one above
+		expect(at(wordNear(text, 1, 'lazy'))).toBe('lazy@3');
+	});
+	it('matches whole words only, undoes ligatures and a line-end hyphen', () => {
+		expect(at(wordNear(text, 5, 'fox'))).toBe('fox@4'); // not "foxes"
+		expect(wordNear('a fine day', 1, 'ﬁne')).toEqual({ from: 2, to: 6 });
+		expect(at(wordNear(text, 2, 'qu-'))).toBeUndefined();
+		expect(at(wordNear(text, 2, 'quick-'))).toBe('quick@2');
+	});
+	it('gives up far from the line, on regex characters and on empty words', () => {
+		expect(wordNear(text, 1, 'foxes')).toBeUndefined(); // 4 lines away
+		expect(wordNear(text, 4, 'c.te')).toBeUndefined();
+		expect(wordNear(text, 1, '-')).toBeUndefined();
 	});
 });

@@ -44,6 +44,23 @@ export function syncToPdf(projectId: string, pdfId: string, fileId: string, line
 	return get<SyncPdf>(`/api/projects/${projectId}/compile/sync/code?${q}`);
 }
 
+/** Where `word` (double-clicked in the PDF) is in `text` near its 1-based `line`: SyncTeX only knows the line, and a
+ *  paragraph's words can sit a few lines from the one it reports. Nearest line first, then below before above.
+ *  ponytail: the first match in a line; a word twice in one line gets the first. Offsets into `text`. */
+export function wordNear(text: string, line: number, word: string): { from: number; to: number } | undefined {
+	word = word.normalize('NFKC').replace(/-$/, ''); // a ligature or a word hyphenated at the line end
+	if (!word) return;
+	const re = new RegExp(`(?<![\\p{L}\\p{N}])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u');
+	const lines = text.split('\n');
+	const starts = [0];
+	for (const l of lines) starts.push(starts.at(-1)! + l.length + 1);
+	for (const d of [0, 1, -1, 2, -2, 3, -3]) {
+		const i = line - 1 + d;
+		const m = i >= 0 && i < lines.length ? re.exec(lines[i]) : null;
+		if (m) return { from: starts[i] + m.index, to: starts[i] + m.index + word.length };
+	}
+}
+
 /** Which project file and line produced the point (x, y) of `page` in the PDF `pdfId`. */
 export function syncToCode(projectId: string, pdfId: string, page: number, x: number, y: number, root?: string | null) {
 	const q = new URLSearchParams({ pdfId, page: String(page), x: String(x), y: String(y), ...(root && { root }) });
