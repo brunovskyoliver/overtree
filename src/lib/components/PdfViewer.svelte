@@ -1,9 +1,11 @@
 <script lang="ts">
-	// pdf.mjs must run first: pdf_viewer.mjs reads globalThis.pdfjsLib
-	import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from 'pdfjs-dist';
-	import { EventBus, PDFViewer, type PDFPageView } from 'pdfjs-dist/web/pdf_viewer.mjs';
-	import 'pdfjs-dist/web/pdf_viewer.css';
-	import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+	// pdf.mjs must run first: pdf_viewer.mjs reads globalThis.pdfjsLib.
+	// The legacy build: the modern one's worker needs Math.sumPrecise (Chrome/Edge 147+, Safari 26.2+) to convert
+	// embedded fonts; without it every LaTeX font falls back to a system sans and math glyphs disappear.
+	import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
+	import { EventBus, PDFViewer, type PDFPageView } from 'pdfjs-dist/legacy/web/pdf_viewer.mjs';
+	import 'pdfjs-dist/legacy/web/pdf_viewer.css';
+	import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 	import { onMount } from 'svelte';
 	import type { SyncBox } from '#lib/synctex.ts';
 
