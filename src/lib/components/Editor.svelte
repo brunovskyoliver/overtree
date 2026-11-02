@@ -39,6 +39,7 @@
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
 	import type { CompileResult, LogEntry } from '#lib/compile-types.ts';
 	import { bold, figuresCommand, italic } from '#lib/editor/commands.ts';
+	import { flashing } from '#lib/editor/flash.ts';
 	import { insertStep, latexPath, pickImages, refusedMessage, uploadFigures } from '#lib/editor/figures.ts';
 	import { codeCheckDiagnostics, entryDiagnostic, entryRange, latexLint, relint } from '#lib/editor/lint.ts';
 	import { prefs } from '#lib/editor/prefs.svelte.ts';
@@ -305,6 +306,7 @@
 		indentOnInput(),
 		bracketMatching(),
 		closeBrackets(),
+		flashing,
 		// above autocompletion's own Enter (same precedence, earlier wins)
 		Prec.highest(keymap.of([{ key: 'Enter', run: enterPastTyped }])),
 		autocompletion({

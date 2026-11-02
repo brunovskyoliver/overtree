@@ -18,6 +18,7 @@
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { Project } from '#lib/project.svelte.ts';
 	import { buildRegExp, matches, type SearchOptions } from '#lib/search.ts';
+	import { flash } from '#lib/editor/flash.ts';
 	import { Session, type Peer } from '#lib/session.svelte.ts';
 	import { wordNear } from '#lib/synctex.ts';
 	import * as Y from 'yjs';
@@ -106,13 +107,14 @@
 	}
 
 	/** A log entry or a PDF double-click: open its file in a tab and put the cursor on the line (past the end: the
-	 *  last line); with the double-clicked `word`, select it there, so typing replaces it. */
+	 *  last line) and blink it; with the double-clicked `word`, select and blink that word, so typing replaces it. */
 	async function openAt(fileId: string, line: number, word?: string) {
 		const view = (await opened(fileId))?.view;
 		if (!view) return;
 		const at = view.state.doc.line(Math.min(line, view.state.doc.lines));
 		const sel = (word && wordNear(view.state.doc.toString(), at.number, word)) || { from: at.from, to: at.from };
 		view.dispatch({ selection: { anchor: sel.from, head: sel.to }, effects: EditorView.scrollIntoView(sel.from, { y: 'center' }) });
+		flash(view, sel.from, sel.to);
 		view.focus();
 	}
 
