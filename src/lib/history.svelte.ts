@@ -11,6 +11,9 @@ async function get<T>(url: string): Promise<T | string> {
 	return res.json();
 }
 
+/** Where a collaborator's newest edits are (`GET /history/latest`): a version and the comparison that shows them. */
+export type Latest = { versionId: number; compare: Compare };
+
 export class History {
 	readonly #pid: string;
 	open = $state(false);
@@ -95,6 +98,23 @@ export class History {
 		this.versions = page.hasMore ? [...page.versions, ...this.versions.filter((v) => v.id < oldest)] : page.versions;
 		if (!page.hasMore) this.hasMore = false;
 		if (this.selected !== null && this.compare === 'current') this.#loadDiff();
+	}
+
+	/** Where `userId`'s newest edits are; null when they have none or it failed. */
+	async latestBy(userId: string): Promise<Latest | null> {
+		const r = await get<Latest | null>(this.#url(`/latest?user=${encodeURIComponent(userId)}`));
+		return typeof r === 'string' ? null : r;
+	}
+
+	/** Open the History view on `versionId` compared `compare`'s way (a collaborator's latest changes).
+	 *  ponytail: load() switches to the newest version when this one isn't in the first page of 50 */
+	show({ versionId, compare }: Latest) {
+		this.open = true;
+		this.labelsOnly = false;
+		this.compare = compare;
+		this.selected = null; // select() skips the version already shown, which may be in the other comparison
+		this.select(versionId);
+		this.load();
 	}
 
 	setLabelsOnly(on: boolean) {
