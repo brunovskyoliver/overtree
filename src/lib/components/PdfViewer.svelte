@@ -62,7 +62,11 @@
 
 	onMount(() => {
 		const eventBus = new EventBus();
-		const v = new PDFViewer({ container, eventBus });
+		// capCanvasAreaFactor -1: pdf.js otherwise caps a page canvas at 3× the screen area, so from ~250 % zoom the
+		// page drops to under 1 device pixel per CSS pixel and only a strip around the view is redrawn sharp.
+		// ponytail: maxCanvasPixels (32 MP/page, less on phones) is the only cap now, ~128 MB per rendered page at
+		// 300 %; set a factor (e.g. 800) if memory complaints come in.
+		const v = new PDFViewer({ container, eventBus, capCanvasAreaFactor: -1 });
 		// a new PDF keeps the zoom, the page and the offset in it; past its end, the last page (FR-019, FR-025)
 		eventBus.on('pagesinit', () => {
 			v.currentScaleValue = keep.scale;
