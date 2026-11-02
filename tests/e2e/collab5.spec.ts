@@ -27,7 +27,7 @@ test('five users typing for a minute converge without losing or duplicating char
 		await p.waitForFunction(() => window.__overtree?.provider.isSynced);
 		pages.push(p);
 	}
-	await expect(page.getByRole('button', { name: /\(go to cursor\)$/ })).toHaveCount(4);
+	await expect(page.locator('button.peer')).toHaveCount(4);
 
 	// Each key is an independent edit. Concurrent typing can legitimately split a marker.
 	const initial = await text(page);

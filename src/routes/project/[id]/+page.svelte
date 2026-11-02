@@ -173,6 +173,7 @@
 		const pos = head() && Y.createAbsolutePositionFromRelativePosition(head(), h.provider.document);
 		if (!pos || editor !== h) return;
 		h.view.dispatch({ effects: EditorView.scrollIntoView(pos.index, { y: 'center' }) });
+		flash(h.view, pos.index, pos.index); // their line blinks
 		h.view.focus();
 	}
 
@@ -198,8 +199,11 @@
 		onshare={project.details && !ended ? () => share?.open() : undefined}
 		peers={ended ? [] : session.peers}
 		onjump={jumpTo}
+		pathOf={(id) => project.path(id)}
 		offline={!ended && session.offline}
-		history={project.details && !ended ? { on: history.open, toggle: () => history.toggle() } : undefined}
+		history={project.details && !ended
+			? { on: history.open, toggle: () => history.toggle(), latestBy: (id) => history.latestBy(id), show: (l) => history.show(l) }
+			: undefined}
 		track={project.details && !ended
 			? { on: project.details.trackChanges, canToggle: project.details.permissions.canEdit, toggle: toggleTrack }
 			: undefined}
