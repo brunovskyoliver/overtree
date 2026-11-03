@@ -1,10 +1,11 @@
-// A PDF double-click (reverse SyncTeX) lands in the source: the word, or its line when the word wasn't found
-// nearby, blinks in the PDF's own sync-highlight amber so the eye finds where it went.
+// What just happened in the source blinks in the PDF's sync-highlight amber, so the eye finds it: where a PDF
+// double-click (reverse SyncTeX) or a log entry landed, a collaborator's line, what a quick fix changed.
 import { StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
 
 const FLASH_MS = 1600;
-const flashEffect = StateEffect.define<{ from: number; to: number } | null>();
+type Range = { from: number; to: number };
+const flashEffect = StateEffect.define<Range[] | null>();
 const mark = Decoration.mark({ class: 'cm-flash' });
 const line = Decoration.line({ class: 'cm-flash' });
 
@@ -14,8 +15,8 @@ const flashField = StateField.define({
 		deco = deco.map(tr.changes);
 		for (const e of tr.effects) {
 			if (!e.is(flashEffect)) continue;
-			const r = e.value;
-			deco = !r ? Decoration.none : Decoration.set(r.from < r.to ? mark.range(r.from, r.to) : line.range(tr.state.doc.lineAt(r.from).from));
+			const marks = (e.value ?? []).map((r) => (r.from < r.to ? mark.range(r.from, r.to) : line.range(tr.state.doc.lineAt(r.from).from)));
+			deco = Decoration.set(marks, true);
 		}
 		return deco;
 	},
@@ -33,9 +34,9 @@ export const flashing = [
 
 const timers = new WeakMap<EditorView, ReturnType<typeof setTimeout>>();
 
-/** Blink `from`–`to` of `view` (an empty range: its whole line), replacing a blink still running. */
-export function flash(view: EditorView, from: number, to: number) {
+/** Blink `ranges` of `view` (an empty one: its whole line), replacing a blink still running. */
+export function flash(view: EditorView, ...ranges: Range[]) {
 	clearTimeout(timers.get(view));
-	view.dispatch({ effects: flashEffect.of({ from, to }) });
+	view.dispatch({ effects: flashEffect.of(ranges) });
 	timers.set(view, setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), FLASH_MS));
 }

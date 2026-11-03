@@ -114,7 +114,7 @@
 		const at = view.state.doc.line(Math.min(line, view.state.doc.lines));
 		const sel = (word && wordNear(view.state.doc.toString(), at.number, word)) || { from: at.from, to: at.from };
 		view.dispatch({ selection: { anchor: sel.from, head: sel.to }, effects: EditorView.scrollIntoView(sel.from, { y: 'center' }) });
-		flash(view, sel.from, sel.to);
+		flash(view, sel);
 		view.focus();
 	}
 
@@ -173,7 +173,7 @@
 		const pos = head() && Y.createAbsolutePositionFromRelativePosition(head(), h.provider.document);
 		if (!pos || editor !== h) return;
 		h.view.dispatch({ effects: EditorView.scrollIntoView(pos.index, { y: 'center' }) });
-		flash(h.view, pos.index, pos.index); // their line blinks
+		flash(h.view, { from: pos.index, to: pos.index }); // their line blinks
 		h.view.focus();
 	}
 
