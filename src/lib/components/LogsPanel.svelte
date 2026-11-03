@@ -1,13 +1,20 @@
 <script lang="ts">
 	import type { LogEntry } from '#lib/compile-types.ts';
 
-	// onopenat: open a project file in a tab with the cursor on that line
+	// onopenat: open a project file in a tab with the cursor on that line; onfix: apply an entry's quick fix (its hint's action)
 	let {
 		entries,
 		logUrl,
 		onopenat,
+		onfix,
 		onclose
-	}: { entries: LogEntry[]; logUrl: string; onopenat?: (fileId: string, line: number) => void; onclose: () => void } = $props();
+	}: {
+		entries: LogEntry[];
+		logUrl: string;
+		onopenat?: (fileId: string, line: number) => void;
+		onfix?: (entry: LogEntry) => void;
+		onclose: () => void;
+	} = $props();
 
 	const sections = $derived(
 		(
@@ -28,6 +35,11 @@
 
 	function jump(entry: LogEntry) {
 		onopenat?.(entry.fileId!, entry.line!);
+		onclose();
+	}
+
+	function fix(entry: LogEntry) {
+		onfix?.(entry);
 		onclose();
 	}
 
@@ -76,6 +88,9 @@
 									<summary>Hint</summary>
 									<p>{@render rich(entry.hint.explanation)}</p>
 									{#if entry.hint.fix}<p class="fix">{@render rich(entry.hint.fix)}</p>{/if}
+									{#if onfix && entry.hint.action && entry.fileId}
+										<button type="button" class="apply" onclick={() => fix(entry)}>Fix: {entry.hint.action.label}</button>
+									{/if}
 								</details>
 							{/if}
 						</li>
@@ -165,6 +180,19 @@
 	}
 	.hint .fix {
 		color: var(--text-muted);
+	}
+	.hint .apply {
+		display: inline-block;
+		width: auto;
+		margin-top: 6px;
+		padding: 3px 10px;
+		border-radius: 4px;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-size: 12px;
+	}
+	.hint .apply:hover {
+		background: var(--accent-hover);
 	}
 	code {
 		padding: 0 3px;

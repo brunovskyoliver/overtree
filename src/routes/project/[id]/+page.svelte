@@ -19,6 +19,9 @@
 	import { Project } from '#lib/project.svelte.ts';
 	import { buildRegExp, matches, type SearchOptions } from '#lib/search.ts';
 	import { flash } from '#lib/editor/flash.ts';
+	import { entryRange } from '#lib/editor/lint.ts';
+	import { applyFix } from '#lib/editor/quickfix.ts';
+	import type { LogEntry } from '#lib/compile-types.ts';
 	import { Session, type Peer } from '#lib/session.svelte.ts';
 	import { wordNear } from '#lib/synctex.ts';
 	import * as Y from 'yjs';
@@ -116,6 +119,18 @@
 		view.dispatch({ selection: { anchor: sel.from, head: sel.to }, effects: EditorView.scrollIntoView(sel.from, { y: 'center' }) });
 		flash(view, sel);
 		view.focus();
+	}
+
+	/** A log entry's Fix button: apply its hint's fix where it is (a package goes into the compiled document's
+	 *  preamble, also for an error in a chapter); when it no longer applies, just open the entry's line. */
+	async function fixEntry(entry: LogEntry) {
+		const action = entry.hint?.action;
+		if (!action || !entry.fileId) return;
+		const target = 'usepackage' in action ? (compile.last?.rootId ?? project.mainFileId) : entry.fileId;
+		const view = target && (await opened(target))?.view;
+		const range = view && target === entry.fileId ? entryRange(view.state.doc, entry) : { from: 0, to: 0 };
+		if (view && applyFix(view, action, range, entry.hint!.token)) return;
+		if (entry.line) await openAt(entry.fileId, entry.line);
 	}
 
 	/** A project search result (014): open its file and select the match nearest `from`, searched again in the
@@ -238,6 +253,7 @@
 					{compile}
 					{project}
 					onopenat={openAt}
+					onfix={fixEntry}
 					{cursor}
 					{layout}
 					activeId={project.active}

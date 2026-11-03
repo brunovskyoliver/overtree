@@ -4,6 +4,7 @@ import { StateEffect, type Extension, type Text } from '@codemirror/state';
 import { EditorView, keymap, type ViewUpdate } from '@codemirror/view';
 import type { LogEntry } from '../compile-types.ts';
 import { codeCheck } from './codecheck.ts';
+import { applyFix, fixChanges } from './quickfix.ts';
 
 const SEVERITY: Record<LogEntry['level'], Diagnostic['severity']> = {
 	error: 'error',
@@ -51,10 +52,13 @@ export function entryRange(doc: Text, entry: LogEntry): { from: number; to: numb
 	return { from: line.from + indent, to: line.to };
 }
 
-/** A compile entry at a range: the tooltip shows the message, then the hint. */
-export function entryDiagnostic(entry: LogEntry, from: number, to: number): Diagnostic {
+/** A compile entry at a range: the tooltip shows the message, then the hint, and the hint's quick fix as a button
+ *  when it applies to `doc` (the document's text now). */
+export function entryDiagnostic(entry: LogEntry, from: number, to: number, doc?: string): Diagnostic {
 	const { hint } = entry;
+	const action = hint?.action && doc !== undefined && fixChanges(doc, hint.action, { from, to }, hint.token) ? hint.action : undefined;
 	return {
+		actions: action && [{ name: action.label, apply: (view, from, to) => void applyFix(view, action, { from, to }, hint!.token) }],
 		from,
 		to,
 		severity: SEVERITY[entry.level],
@@ -104,6 +108,7 @@ const lintTheme = EditorView.theme({
 	'.cm-diagnosticSource': { color: 'var(--text-muted)', opacity: '1' },
 	'.cm-hint-message p': { margin: '4px 0 0' },
 	'.cm-hint-fix': { color: 'var(--text-muted)' },
+	'.cm-diagnosticAction': { padding: '2px 10px', borderRadius: '4px', backgroundColor: 'var(--accent)', color: 'var(--on-accent)', border: '0', cursor: 'pointer', font: 'inherit', fontSize: '12px' },
 	'.cm-hint-message code': { padding: '0 3px', borderRadius: '3px', backgroundColor: 'var(--bg)', fontFamily: 'var(--font-mono)', fontSize: '12px' },
 	'.cm-panel.cm-panel-lint ul [aria-selected]': { backgroundColor: 'var(--panel-raised)' },
 	'.cm-panel.cm-panel-lint ul:focus [aria-selected]': { backgroundColor: 'var(--panel-raised)', color: 'var(--text)' }

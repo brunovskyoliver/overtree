@@ -151,9 +151,10 @@
 		const ydoc = tab.ytext.doc!;
 		const length = tab.ytext.length;
 		const at = (rel: Y.RelativePosition) => Math.min(Y.createAbsolutePositionFromRelativePosition(rel, ydoc)?.index ?? 0, length);
+		const text = a.marks.some((m) => m.entry.hint?.action) ? tab.ytext.toString() : undefined; // for the quick fixes
 		return a.marks.map(({ entry, start, end }) => {
 			const from = at(start);
-			return entryDiagnostic(entry, from, Math.max(from, at(end)));
+			return entryDiagnostic(entry, from, Math.max(from, at(end)), text);
 		});
 	}
 

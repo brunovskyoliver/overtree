@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
+	import type { LogEntry } from '#lib/compile-types.ts';
 	import type { SyncBox } from '#lib/synctex.ts';
 	import LogsPanel from './LogsPanel.svelte';
 	import PdfToolbar from './PdfToolbar.svelte';
@@ -10,6 +11,7 @@
 	let {
 		compile,
 		onopenat,
+		onfix,
 		onsync,
 		projectId,
 		inert = false,
@@ -19,6 +21,8 @@
 		/** the PDF position is remembered per project (PdfViewer) */
 		projectId?: string;
 		onopenat?: (fileId: string, line: number) => void;
+		/** a log entry's Fix button (LogsPanel) */
+		onfix?: (entry: LogEntry) => void;
 		/** double-click on the PDF (reverse SyncTeX), see PdfViewer */
 		onsync?: (page: number, x: number, y: number, word?: string) => void;
 		inert?: boolean;
@@ -85,7 +89,7 @@
 	<div class="body">
 		{#if logsOpen}
 			{#key compile.last?.id}
-				<LogsPanel entries={compile.last?.entries ?? []} logUrl={compile.logUrl} {onopenat} onclose={() => (logsOpen = false)} />
+				<LogsPanel entries={compile.last?.entries ?? []} logUrl={compile.logUrl} {onopenat} {onfix} onclose={() => (logsOpen = false)} />
 			{/key}
 		{/if}
 		<!-- stays mounted (and laid out, so pdf.js can measure) under the logs: closing them shows the PDF at once -->

@@ -2,6 +2,7 @@
 	import { Pane, PaneGroup, PaneResizer } from 'paneforge';
 	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
+	import type { LogEntry } from '#lib/compile-types.ts';
 	import type { Layout, LayoutMode } from '#lib/layout.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import { RECOMPILE_TO_SYNC, syncToCode, syncToPdf, syncWith } from '#lib/synctex.ts';
@@ -18,6 +19,7 @@
 		outline,
 		compile,
 		onopenat,
+		onfix,
 		project,
 		activeId,
 		onopen,
@@ -29,6 +31,7 @@
 		outline: Snippet;
 		compile: CompileState;
 		onopenat?: (fileId: string, line: number, word?: string) => void;
+		onfix?: (entry: LogEntry) => void;
 		project: Project;
 		activeId?: string | null;
 		onopen?: (id: string) => void;
@@ -226,7 +229,7 @@
 	>
 		<!-- inert while collapsed, like the sidebar; not rendered while the PDF has its own window -->
 		{#if layout.mode !== 'window'}
-			<PdfPane bind:this={pdfPane} {compile} projectId={project.id} onopenat={openAt} onsync={reverse} inert={!pdfOpen} />
+			<PdfPane bind:this={pdfPane} {compile} projectId={project.id} onopenat={openAt} {onfix} onsync={reverse} inert={!pdfOpen} />
 		{/if}
 	</Pane>
 </PaneGroup>
