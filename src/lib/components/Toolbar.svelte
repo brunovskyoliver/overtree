@@ -168,6 +168,10 @@
 			Code check
 			<input type="checkbox" checked={prefs.codeCheck} onchange={(e) => prefs.setCodeCheck(e.currentTarget.checked)} />
 		</label>
+		<label class="row" title="Gray suggestions from patterns in your document (the next table cell, a line like an earlier one); Tab accepts">
+			Suggestions while typing
+			<input type="checkbox" checked={prefs.predictions} onchange={(e) => prefs.setPredictions(e.currentTarget.checked)} />
+		</label>
 	</div>
 </div>
 {#if palette && !readOnly}<SymbolPalette oninsert={insertSymbol} onclose={closePalette} />{/if}

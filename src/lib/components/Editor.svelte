@@ -40,6 +40,7 @@
 	import type { CompileResult, LogEntry } from '#lib/compile-types.ts';
 	import { bold, figuresCommand, italic } from '#lib/editor/commands.ts';
 	import { flashing } from '#lib/editor/flash.ts';
+	import { ghostText } from '#lib/editor/ghost.ts';
 	import { insertStep, latexPath, pickImages, refusedMessage, uploadFigures } from '#lib/editor/figures.ts';
 	import { codeCheckDiagnostics, entryDiagnostic, entryRange, latexLint, relint } from '#lib/editor/lint.ts';
 	import { prefs } from '#lib/editor/prefs.svelte.ts';
@@ -310,6 +311,8 @@
 		flashing,
 		// above autocompletion's own Enter (same precedence, earlier wins)
 		Prec.highest(keymap.of([{ key: 'Enter', run: enterPastTyped }])),
+		// its Escape too; its Tab comes after the completion popup's
+		ghostText,
 		autocompletion({
 			override: [latexSource(symbols), addReferenceSource(() => references?.open())],
 			icons: false,
