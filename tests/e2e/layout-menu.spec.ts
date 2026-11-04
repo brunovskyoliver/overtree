@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { FileEntry } from '../../src/lib/files.ts';
 import { allow, api, loadMulti, openEditor, projectPath, resetProject, signInAs, test } from './helpers.ts';
@@ -78,6 +79,25 @@ test('editor only, PDF only and side-by-side; the mode survives a reload (US7-1,
 	await expect(pane(page, 'sidebar')).toBeVisible();
 	await expect.poll(() => width(pane(page, 'pdf'))).toBeGreaterThan(vw * 0.3);
 	expect(await mode(page)).toBe('split');
+});
+
+test('a double-click on a word in PDF only stays PDF only; the editor behind it moves to the word', async ({ page }) => {
+	// a compiled PDF and its SyncTeX answer, without a TeX image (tests/fixtures/pdf/lorem.tex, compiled with pdflatex)
+	const fileId = await page.evaluate(() => window.__overtree!.fileId);
+	await page.route('**/compile/output.pdf**', (r) => r.fulfill({ body: readFileSync(new URL('../fixtures/pdf/lorem.pdf', import.meta.url)), contentType: 'application/pdf' }));
+	await page.route('**/compile/sync/pdf**', (r) => r.fulfill({ json: { fileId, line: 1 } }));
+	await page.evaluate(() => (window.__overtree!.compile!.last = { id: 'c1', status: 'success', compiler: 'pdflatex', stopOnFirstError: false, startedAt: Date.now(), durationMs: 1, pdfId: 'c1', entries: [] }));
+	await choose(page, 'PDF only');
+	const word = pdfPage(page, 1).locator('.textLayer span', { hasText: 'Lorem' }).first();
+	await expect(word).toBeVisible();
+	const sync = page.waitForResponse((r) => r.url().includes('/compile/sync/pdf'));
+	await word.dblclick();
+	await sync;
+	await page.waitForTimeout(500); // nothing switches
+	expect(await mode(page)).toBe('pdf');
+	await expect(pane(page, 'editor')).toBeHidden();
+	await choose(page, 'Side-by-side');
+	await expect(page.locator('.cm-activeLine')).toHaveText(/^\\documentclass/); // line 1, where SyncTeX pointed
 });
 
 test('expanding the PDF with its tab in editor only goes back to side-by-side', async ({ page }) => {

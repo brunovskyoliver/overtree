@@ -110,10 +110,10 @@
 		if (pdf.isCollapsed()) pdf.expand(); // to its size before the collapse (paneforge stores it)
 	}
 
-	/** The PDF asks for a source line: PDF only gives way to side-by-side so the editor shows it. */
-	function openAt(fileId: string, line: number, word?: string) {
+	/** A log entry asks for a source line: PDF only gives way to side-by-side so the editor shows it. */
+	function openAt(fileId: string, line: number) {
 		if (layout.mode === 'pdf') layout.set('split');
-		onopenat?.(fileId, line, word);
+		onopenat?.(fileId, line);
 	}
 
 	// SyncTeX (research R10): against the last compile's PDF; a line or spot that maps nowhere does nothing (US3 #6),
@@ -133,11 +133,13 @@
 		else if (r) await pdfPane?.showBox(r.page, r.boxes);
 	}
 
-	/** Double-click on the PDF or "←": open the source of that spot, with the double-clicked word selected. */
+	/** Double-click on the PDF or "←": open the source of that spot, with the double-clicked word selected. PDF only
+	 *  stays PDF only (double-clicking to select text there shouldn't change the layout); the editor behind it moves to
+	 *  the spot, so switching back lands there. "←" is only offered side-by-side. */
 	async function reverse(page: number, x: number, y: number, word?: string) {
 		const r = await syncWith(compile, (id) => syncToCode(project.id, id, page, x, y, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
-		else if (r) openAt(r.fileId, r.line, word);
+		else if (r) onopenat?.(r.fileId, r.line, word);
 	}
 
 	function reverseVisible() {
