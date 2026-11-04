@@ -18,7 +18,9 @@ const refresh = StateEffect.define<null>();
 /** The editor's linter: `source` gives the diagnostics of the shown document (re-run on every change, debounced). */
 export function latexLint(source: (view: EditorView) => Diagnostic[]): Extension {
 	const needsRefresh = (u: ViewUpdate) => u.transactions.some((tr) => tr.effects.some((e) => e.is(refresh)));
-	return [linter(source, { delay: 400, needsRefresh }), lintGutter(), keymap.of(lintKeymap), lintTheme];
+	// the gutter is for compile and code-check problems; spelling (spelling.ts) is underlined only
+	const gutter = lintGutter({ markerFilter: (ds) => ds.filter((d) => d.source !== 'Spelling') });
+	return [linter(source, { delay: 400, needsRefresh }), gutter, keymap.of(lintKeymap), lintTheme];
 }
 
 /** Run the linter now, without a change (a new compile result, the code check switched). */

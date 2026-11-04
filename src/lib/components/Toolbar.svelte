@@ -154,7 +154,7 @@
 				<button type="button" aria-label="Larger text" disabled={prefs.fontSize >= FONT_SIZES.max} onclick={() => prefs.setFontSize(prefs.fontSize + 1)}>+</button>
 			</div>
 		</div>
-		<label class="row">
+		<label class="row" title="Underline misspelt English words with suggestions (US or British, from babel or polyglossia; the browser's own check for other languages)">
 			Check spelling
 			<input type="checkbox" checked={prefs.spellcheck} onchange={(e) => prefs.setSpellcheck(e.currentTarget.checked)} />
 		</label>

@@ -41,6 +41,7 @@
 	import { bold, figuresCommand, italic } from '#lib/editor/commands.ts';
 	import { flashing } from '#lib/editor/flash.ts';
 	import { ghostText } from '#lib/editor/ghost.ts';
+	import { spelling as spellCheck } from '#lib/editor/spelling.ts';
 	import { insertStep, latexPath, pickImages, refusedMessage, uploadFigures } from '#lib/editor/figures.ts';
 	import { codeCheckDiagnostics, entryDiagnostic, entryRange, latexLint, relint } from '#lib/editor/lint.ts';
 	import { prefs } from '#lib/editor/prefs.svelte.ts';
@@ -278,7 +279,14 @@
 	// LaTeX tabs get the stex mode plus \begin/\end support; completion checks the language itself
 	// straight quotes are almost never right in LaTeX (``…''), so only brackets pair up
 	const stexLanguage = StreamLanguage.define(stex);
-	const latexExtensions: Extension = [stexLanguage, stexLanguage.data.of({ closeBrackets: { brackets: ['(', '[', '{'] } }), environments];
+	// spelling: a chapter has no preamble, so its language comes from the main document's
+	const mainText = () => (project.mainFileId ? tabs.get(project.mainFileId)?.ytext.toString() : undefined);
+	const latexExtensions: Extension = [
+		stexLanguage,
+		stexLanguage.data.of({ closeBrackets: { brackets: ['(', '[', '{'] } }),
+		environments,
+		spellCheck(mainText)
+	];
 	const plainText: Extension = [];
 	const language = new Compartment();
 	// readOnly only, not editable(false): readers keep a caret, keyboard selection and Mod-a inside the document
@@ -520,10 +528,10 @@
 		symbols.refresh();
 	});
 
-	// a new compile result or the code check switched: the markers again (a tab synced later gets its own run
-	// with its first changes)
+	// a new compile result, the code check or spelling switched: the markers again (a tab synced later gets its own
+	// run with its first changes)
 	$effect(() => {
-		void [compiled?.id, prefs.codeCheck];
+		void [compiled?.id, prefs.codeCheck, prefs.spellcheck];
 		if (view) relint(view);
 	});
 
