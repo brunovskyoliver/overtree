@@ -8,6 +8,7 @@ import {
 	flushHistory,
 	IDLE_MS,
 	lastVersion,
+	latestBy,
 	listVersions,
 	manifestPaths,
 	MAX_OPEN_MS,
@@ -18,6 +19,7 @@ import {
 import { deleteProject } from '../../src/lib/server/projects.ts';
 import { restoreVersion } from '../../src/lib/server/restore.ts';
 import { historyLog, memberships, versionLabels, versions } from '../../src/lib/server/schema.ts';
+import * as latestRoute from '../../src/routes/api/projects/[pid]/history/latest/+server.ts';
 import * as labelsRoute from '../../src/routes/api/projects/[pid]/history/labels/+server.ts';
 import * as labelRoute from '../../src/routes/api/projects/[pid]/history/labels/[lid]/+server.ts';
 import { connect, ev, hit, json, OWNER, project, start, tempDir, user, waitFor, type Started } from './helpers.ts';
@@ -211,6 +213,29 @@ describe('versions', () => {
 		for (const t of [historyLog, versions, versionLabels])
 			expect(server.db.select().from(t).where(eq(t.projectId, pid)).all()).toEqual([]);
 		expect(server.db.select().from(versions).where(and(eq(versions.projectId, keep), eq(versions.kind, 'baseline'))).all()).toHaveLength(1);
+	});
+});
+
+describe('a user\'s latest changes (avatar menu)', () => {
+	const latest = (email: string, pid: string, of: string) =>
+		hit(latestRoute.GET, { ...ev(email, { pid }), url: new URL(`http://x/?user=${of}`) });
+
+	it('edits since the last version, else the newest version they authored, else none', async () => {
+		const { pid, main } = await setup();
+		expect(latestBy(pid, user(B).id)).toBeNull(); // only the baseline, no authors
+		expect(await latest(OWNER, pid, user(B).id)).toEqual({ status: 200, body: null });
+
+		await setText(main, 'b edit\n', { userId: user(B).id, projectId: pid });
+		const base = lastVersion(pid)!;
+		expect(latestBy(pid, user(B).id)).toEqual({ versionId: base.id, compare: 'current' }); // not versioned yet
+		expect(latestBy(pid, user().id)).toBeNull();
+
+		const v = closeVersion(pid, 'compile')!;
+		await setText(main, 'owner edit\n', { userId: user().id, projectId: pid });
+		closeVersion(pid, 'compile');
+		expect(latestBy(pid, user(B).id)).toEqual({ versionId: v.id, compare: 'previous' });
+		expect(await latest(B, pid, user(B).id)).toMatchObject({ status: 200, body: { versionId: v.id, compare: 'previous' } });
+		expect((await latest('stranger@test.local', pid, user(B).id)).status).toBe(404); // non-members: 404
 	});
 });
 

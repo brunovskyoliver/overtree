@@ -1,9 +1,11 @@
 <script lang="ts">
-	// pdf.mjs must run first: pdf_viewer.mjs reads globalThis.pdfjsLib
-	import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from 'pdfjs-dist';
-	import { EventBus, PDFViewer, type PDFPageView } from 'pdfjs-dist/web/pdf_viewer.mjs';
-	import 'pdfjs-dist/web/pdf_viewer.css';
-	import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+	// pdf.mjs must run first: pdf_viewer.mjs reads globalThis.pdfjsLib.
+	// The legacy build: the modern one's worker needs Math.sumPrecise (Chrome/Edge 147+, Safari 26.2+) to convert
+	// embedded fonts; without it every LaTeX font falls back to a system sans and math glyphs disappear.
+	import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
+	import { EventBus, LinkTarget, PDFLinkService, PDFViewer, type PDFPageView } from 'pdfjs-dist/legacy/web/pdf_viewer.mjs';
+	import 'pdfjs-dist/legacy/web/pdf_viewer.css';
+	import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 	import { onMount } from 'svelte';
 	import type { SyncBox } from '#lib/synctex.ts';
 
@@ -27,14 +29,18 @@
 		pages?: number;
 		scale?: string;
 		percent?: number;
-		/** double-click on a page: the point in PDF points from the page's top-left (reverse SyncTeX) */
-		onsync?: (page: number, x: number, y: number) => void;
+		/** double-click on a page: the point in PDF points from the page's top-left (reverse SyncTeX) and the word
+		 *  the browser selected there in the text layer, if any */
+		onsync?: (page: number, x: number, y: number, word?: string) => void;
 		/** remembers the position per project on this device (FR-025) */
 		projectId?: string;
 	} = $props();
 
 	let container: HTMLDivElement;
 	let viewer = $state<PDFViewer>();
+	// hyperref links: \ref and \cite jump in the pane, \url and \href open a new tab
+	const eventBus = new EventBus();
+	const linkService = new PDFLinkService({ eventBus, externalLinkTarget: LinkTarget.BLANK });
 	let shown: PDFDocumentLoadingTask | undefined; // destroy() lives on the loading task in pdf.js 6
 	// Where the reader is (research R11): the page at the top edge of the pane, how far down it the edge is (0–1) and
 	// the zoom. `keep` is restored when the next PDF is laid out; `pos` follows scrolling, also in localStorage.
@@ -59,8 +65,12 @@
 	}
 
 	onMount(() => {
-		const eventBus = new EventBus();
-		const v = new PDFViewer({ container, eventBus });
+		// capCanvasAreaFactor -1: pdf.js otherwise caps a page canvas at 3× the screen area, so from ~250 % zoom the
+		// page drops to under 1 device pixel per CSS pixel and only a strip around the view is redrawn sharp.
+		// ponytail: maxCanvasPixels (32 MP/page, less on phones) is the only cap now, ~128 MB per rendered page at
+		// 300 %; set a factor (e.g. 800) if memory complaints come in.
+		const v = new PDFViewer({ container, eventBus, linkService, capCanvasAreaFactor: -1 });
+		linkService.setViewer(v);
 		// a new PDF keeps the zoom, the page and the offset in it; past its end, the last page (FR-019, FR-025)
 		eventBus.on('pagesinit', () => {
 			v.currentScaleValue = keep.scale;
@@ -152,7 +162,8 @@
 		const onDblClick = (e: MouseEvent) => {
 			const n = Number((e.target as Element).closest<HTMLElement>('.page')?.dataset.pageNumber);
 			const view = n ? v.getPageView(n - 1) : undefined;
-			if (onsync && view) onsync(n, ...pdfPoint(view, e.clientX, e.clientY));
+			const word = getSelection()?.toString().trim();
+			if (onsync && view) onsync(n, ...pdfPoint(view, e.clientX, e.clientY), word && /^\S+$/.test(word) ? word : undefined);
 		};
 		container.addEventListener('dblclick', onDblClick);
 		container.addEventListener('wheel', onWheel, { passive: false });
@@ -240,6 +251,7 @@
 				keep = pos;
 				restoring = true;
 				laidOut = finish;
+				linkService.setDocument(doc);
 				v.setDocument(doc);
 				void old?.destroy();
 			},

@@ -21,7 +21,7 @@ const GONE_MS = 1000;
 export type PdfMessage =
 	| { type: 'compiled'; last: CompileResult }
 	| { type: 'forward'; fileId: string; line: number }
-	| { type: 'open-at'; fileId: string; line: number }
+	| { type: 'open-at'; fileId: string; line: number; word?: string }
 	| { type: 'hello' }
 	| { type: 'bye' };
 
@@ -72,12 +72,12 @@ export class Layout {
 	#channel: ReturnType<typeof pdfChannel>;
 	#onCompiled?: (last: CompileResult) => void;
 
-	constructor(projectId: string, onopenat: (fileId: string, line: number) => void) {
+	constructor(projectId: string, onopenat: (fileId: string, line: number, word?: string) => void) {
 		this.#url = `/project/${projectId}/pdf`;
 		this.#name = `overtree-pdf-${projectId}`;
 		this.#channel = pdfChannel(projectId, 'main', (m) => {
 			if (m.type === 'compiled') this.#onCompiled?.(m.last);
-			else if (m.type === 'open-at' && this.mode === 'window') onopenat(m.fileId, m.line);
+			else if (m.type === 'open-at' && this.mode === 'window') onopenat(m.fileId, m.line, m.word);
 			else if (m.type === 'hello') clearTimeout(this.#gone);
 			else if (m.type === 'bye') this.#maybeGone();
 		});

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
@@ -6,6 +7,10 @@ import { attachCollab } from './src/lib/server/collab.ts';
 import { githubConfigProblem } from './src/lib/server/github/config.ts';
 
 export default defineConfig({
+	resolve: {
+		// spell-check dictionaries (editor/spelling.ts): their packages export only a Node loader; the browser fetches the files
+		alias: [{ find: /^(dictionary-[a-z-]+)\/(index\.(?:aff|dic))/, replacement: `${fileURLToPath(new URL('node_modules', import.meta.url))}/$1/$2` }]
+	},
 	plugins: [
 		sveltekit({
 			compilerOptions: {

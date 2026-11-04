@@ -39,6 +39,9 @@
 	import { Symbols } from '#lib/completion/symbols.svelte.ts';
 	import type { CompileResult, LogEntry } from '#lib/compile-types.ts';
 	import { bold, figuresCommand, italic } from '#lib/editor/commands.ts';
+	import { flashing } from '#lib/editor/flash.ts';
+	import { ghostText } from '#lib/editor/ghost.ts';
+	import { spelling as spellCheck } from '#lib/editor/spelling.ts';
 	import { insertStep, latexPath, pickImages, refusedMessage, uploadFigures } from '#lib/editor/figures.ts';
 	import { codeCheckDiagnostics, entryDiagnostic, entryRange, latexLint, relint } from '#lib/editor/lint.ts';
 	import { prefs } from '#lib/editor/prefs.svelte.ts';
@@ -150,9 +153,10 @@
 		const ydoc = tab.ytext.doc!;
 		const length = tab.ytext.length;
 		const at = (rel: Y.RelativePosition) => Math.min(Y.createAbsolutePositionFromRelativePosition(rel, ydoc)?.index ?? 0, length);
+		const text = a.marks.some((m) => m.entry.hint?.action) ? tab.ytext.toString() : undefined; // for the quick fixes
 		return a.marks.map(({ entry, start, end }) => {
 			const from = at(start);
-			return entryDiagnostic(entry, from, Math.max(from, at(end)));
+			return entryDiagnostic(entry, from, Math.max(from, at(end)), text);
 		});
 	}
 
@@ -275,7 +279,14 @@
 	// LaTeX tabs get the stex mode plus \begin/\end support; completion checks the language itself
 	// straight quotes are almost never right in LaTeX (``…''), so only brackets pair up
 	const stexLanguage = StreamLanguage.define(stex);
-	const latexExtensions: Extension = [stexLanguage, stexLanguage.data.of({ closeBrackets: { brackets: ['(', '[', '{'] } }), environments];
+	// spelling: a chapter has no preamble, so its language comes from the main document's
+	const mainText = () => (project.mainFileId ? tabs.get(project.mainFileId)?.ytext.toString() : undefined);
+	const latexExtensions: Extension = [
+		stexLanguage,
+		stexLanguage.data.of({ closeBrackets: { brackets: ['(', '[', '{'] } }),
+		environments,
+		spellCheck(mainText)
+	];
 	const plainText: Extension = [];
 	const language = new Compartment();
 	// readOnly only, not editable(false): readers keep a caret, keyboard selection and Mod-a inside the document
@@ -305,8 +316,11 @@
 		indentOnInput(),
 		bracketMatching(),
 		closeBrackets(),
+		flashing,
 		// above autocompletion's own Enter (same precedence, earlier wins)
 		Prec.highest(keymap.of([{ key: 'Enter', run: enterPastTyped }])),
+		// its Escape too; its Tab comes after the completion popup's
+		ghostText,
 		autocompletion({
 			override: [latexSource(symbols), addReferenceSource(() => references?.open())],
 			icons: false,
@@ -514,10 +528,10 @@
 		symbols.refresh();
 	});
 
-	// a new compile result or the code check switched: the markers again (a tab synced later gets its own run
-	// with its first changes)
+	// a new compile result, the code check or spelling switched: the markers again (a tab synced later gets its own
+	// run with its first changes)
 	$effect(() => {
-		void [compiled?.id, prefs.codeCheck];
+		void [compiled?.id, prefs.codeCheck, prefs.spellcheck];
 		if (view) relint(view);
 	});
 

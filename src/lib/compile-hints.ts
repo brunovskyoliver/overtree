@@ -187,7 +187,8 @@ const RULES: Rule[] = [
 				return {
 					explanation: `${code(cmd)} comes from the ${first} package${others.length ? ` (${others.join(', ')} also provides it)` : ''}, which this document doesn’t load.`,
 					fix: `Add ${code(`\\usepackage{${first.split(' ')[0]}}`)} to the preamble, before \\begin{document}.`,
-					token: cmd
+					token: cmd,
+					...(!first.includes(' ') && { action: { label: `Add \\usepackage{${first}}`, usepackage: first } })
 				};
 			}
 			const near = closest(name, [...Object.keys(COMMAND_PACKAGES), ...BUILTIN_COMMANDS]);
@@ -196,7 +197,8 @@ const RULES: Rule[] = [
 				fix: near
 					? `Did you mean ${code(`\\${near}`)}?`
 					: `Check the spelling. If ${code(cmd)} comes from a package, load it with \\usepackage; if it is your own, define it with \\newcommand before using it.`,
-				token: cmd
+				token: cmd,
+				...(near && { action: { label: `Change to \\${near}`, replace: `\\${near}` } })
 			};
 		}
 	},
@@ -209,13 +211,15 @@ const RULES: Rule[] = [
 				return {
 					explanation: `The ${code(env)} environment comes from ${pkg.includes(' ') ? pkg : `the ${pkg} package`}, which this document doesn’t load.`,
 					fix: pkg.includes(' ') ? `Use ${pkg}.` : `Add ${code(`\\usepackage{${pkg}}`)} to the preamble.`,
-					token
+					token,
+					...(!pkg.includes(' ') && { action: { label: `Add \\usepackage{${pkg}}`, usepackage: pkg } })
 				};
 			const near = closest(env, [...Object.keys(ENVIRONMENT_PACKAGES), 'itemize', 'enumerate', 'description', 'figure', 'table', 'tabular', 'equation', 'center', 'quote', 'verbatim', 'abstract', 'document', 'minipage', 'thebibliography']);
 			return {
 				explanation: `There is no environment called ${code(env)}: it is misspelled, or it comes from a package this document doesn’t load.`,
 				fix: near ? `Did you mean ${code(near)}?` : `Check the name, load the package that defines it, or define it with \\newenvironment.`,
-				token
+				token,
+				...(near && { action: { label: `Rename to ${near}`, env: near } })
 			};
 		}
 	},
@@ -285,7 +289,8 @@ const RULES: Rule[] = [
 		hint: ([, begin, line, end]) => ({
 			explanation: `${code(`\\begin{${begin}}`)} on line ${line} is closed by ${code(`\\end{${end}}`)}.`,
 			fix: `Make them match: ${code(`\\end{${begin}}`)} here, or add the missing ${code(`\\end{${begin}}`)} before it.`,
-			token: `\\end{${end}}`
+			token: `\\end{${end}}`,
+			action: { label: `Change to \\end{${begin}}`, replace: `\\end{${begin}}` }
 		})
 	},
 	{
@@ -301,7 +306,7 @@ const RULES: Rule[] = [
 		hint: () => ({
 			explanation: 'An `&` outside a table or alignment: TeX uses it to separate columns.',
 			fix: 'Write `\\&` for a literal ampersand. In a table, check its environment (tabular, align) is open here.',
-			token: '&'
+			token: '&' // no quick fix: this is often a consequence (align without amsmath), where `\\&` would be wrong
 		})
 	},
 	{
@@ -324,7 +329,8 @@ const RULES: Rule[] = [
 		hint: () => ({
 			explanation: '`\\\\` (a line break) where there is no line to break, e.g. at the start of a paragraph or after a blank line.',
 			fix: 'Remove the `\\\\`; for space between paragraphs use a blank line or \\vspace{…}.',
-			token: '\\\\'
+			token: '\\\\',
+			action: { label: 'Remove \\\\', replace: '' }
 		})
 	},
 	{
@@ -454,7 +460,8 @@ function packageHint(name: string, ctx: HintContext): Hint {
 		return {
 			explanation: `There is no ${kind} called ${code(base)}: it looks like a typo of ${code(near)}.`,
 			fix: kind === 'package' ? `Change it to ${code(`\\usepackage{${near}}`)}.` : `Change it to ${code(`\\documentclass{${near}}`)}.`,
-			token
+			token,
+			action: { label: `Change to ${near}`, replace: near }
 		};
 	const elsewhere = ctx.paths.find((p) => p.split('/').pop() === name);
 	if (elsewhere)
@@ -485,7 +492,8 @@ function fileHint(name: string, ctx: HintContext): Hint {
 	return {
 		explanation: `The project has no file ${code(name)} at that path. Paths are relative to the main document’s folder and case-sensitive.`,
 		fix: found ? `Did you mean ${code(suggest(found))}?` : `Upload ${code(base(name))} into the project, or fix the path.`,
-		token: name.replace(/\.tex$/, '')
+		token: name.replace(/\.tex$/, ''),
+		...(found && { action: { label: `Change to ${suggest(found)}`, replace: suggest(found) } })
 	};
 }
 

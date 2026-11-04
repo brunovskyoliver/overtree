@@ -3,9 +3,10 @@
 A self-hosted LaTeX editor in the spirit of Overleaf. Write LaTeX with other people in real time, compile to PDF in a sandboxed TeX Live container, and keep everything on your own server.
 
 - Projects dashboard with templates (blank, article, report, beamer, letter) and zip import
-- Live collaboration with named cursors, offline edits that merge on reconnect
+- Live collaboration with named cursors, offline edits that merge on reconnect; a collaborator's avatar takes you to their cursor or their latest changes
 - Sharing with Owner, Editor and Reader roles, by email or link, and per file or folder
-- CodeMirror editor with tabs and LaTeX autocomplete (commands, environments, labels, citations, files)
+- CodeMirror editor with tabs and LaTeX autocomplete (commands, environments, labels, citations, files), plus suggestions as you type from your document's own patterns
+- Plain-language compile errors with one-click fixes for the common ones
 - PDF preview with SyncTeX jumps in both directions
 - Full history: browse versions, diff, label, restore a file or the whole project
 - Optional two-way sync with a GitHub repository
@@ -185,7 +186,11 @@ Site admins get an Admin page (`/admin`) to promote, demote and disable users, d
 
 The sidebar holds the file tree and an outline. Upload files or drag them in from the desktop, and download the whole project as a zip. A zip uploaded on the dashboard becomes a new project; its main document is the root `main.tex`, else the shallowest `.tex` with `\documentclass`.
 
-Compiling runs `latexmk` (with bibtex or biber as needed). Clicking a log entry opens the file at that line. Ctrl/Cmd+Alt+J jumps from the cursor to the PDF; double-clicking the PDF jumps back to the source. The Layout menu switches between side-by-side, editor only, PDF only and a separate PDF window.
+Compiling runs `latexmk` (with bibtex or biber as needed). Clicking a log entry opens the file at that line. Errors are explained in plain language, and the common ones (a missing `\usepackage`, a misspelt command, environment, package or file name, a mismatched `\end`) have a fix button, in the log entry and in the error's tooltip in the editor; what it changed blinks, and Ctrl/Cmd+Z takes it back. Ctrl/Cmd+Alt+J jumps from the cursor to the PDF; double-clicking a word in the PDF jumps back to it in the source.
+
+While you type, gray suggestions continue patterns from your own document: the next `&` and then `\\` of a table row, the line that followed the same line earlier (a figure block, for instance), or the rest of a command typed before. Tab accepts and Escape dismisses. They are worked out in your browser from the open file and send nothing anywhere. Turn them off with "Suggestions while typing" in the editor settings.
+
+Misspelt English words get a red wavy underline; hover one for suggestions or "Add to dictionary" (kept in your browser). Only prose is checked, not commands, math, comments, labels or file names, against a US or British English dictionary depending on babel or polyglossia (US when none is set). Documents in other languages keep the browser's own spell check. "Check spelling" in the editor settings turns it off. The Layout menu switches between side-by-side, editor only, PDF only and a separate PDF window.
 
 Appearance (Dark, Light or System) is in the account menu and in the editor settings ("Aa" in the toolbar), next to font size and spelling. These settings are saved per browser. The PDF toolbar's "Dark pages" toggle works separately in either appearance.
 

@@ -62,6 +62,12 @@ importers:
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
+      dictionary-en:
+        specifier: ^4.0.0
+        version: 4.0.0
+      dictionary-en-gb:
+        specifier: ^3.0.0
+        version: 3.0.0
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)
@@ -74,6 +80,9 @@ importers:
       node-diff3:
         specifier: ^3.2.1
         version: 3.2.1
+      nspell:
+        specifier: ^2.1.5
+        version: 2.1.5
       paneforge:
         specifier: ^1.0.2
         version: 1.0.2(svelte@5.57.1)
@@ -120,6 +129,9 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.19.1
+      '@types/nspell':
+        specifier: ^2.1.6
+        version: 2.1.6
       '@types/picomatch':
         specifier: ^4.0.3
         version: 4.0.3
@@ -1162,6 +1174,9 @@ packages:
   '@types/node@24.19.1':
     resolution: {integrity: sha512-aS3/DG0oM05K0RIXXP+hKjinGG5IgSSVGzswZxW3O0sS3pH4/fycXundUC9XsszgKCk4gHXylTEK6hyFxVxnoQ==}
 
+  '@types/nspell@2.1.6':
+    resolution: {integrity: sha512-PnWYqrBZhkKAreX2kIZDJcBeigZJzXC8VmSuNiXeILUNreczBZHLxGEv/pRT+zL8rsXLxT5bRbiIF9wuh6cGgg==}
+
   '@types/parse-json@4.0.2':
     resolution: {integrity: sha512-dISoDXWWQwUquiKsyZ4Ng+HX2KsPL7LyHKHQwgGFEA3IaKac4Obd+h2a/a6waisAoepJlBcx9paWqjA8/HVjCw==}
 
@@ -1368,6 +1383,12 @@ packages:
 
   devalue@5.9.4:
     resolution: {integrity: sha512-sPAT4pztbu6586/hrhOnMKS17IJrvg12mXiSPSS3W5qDeN2RGgvZ0diZCm31dBbnevfVmujNO3IM2wrS4Y2Rhg==}
+
+  dictionary-en-gb@3.0.0:
+    resolution: {integrity: sha512-gU/dwC9xGYPh/0CCcmGNXO8OwSgOySAqevcSXxADCsgUD+tr6OJ52u7XaC7No7dNssvdUSfVjkzcqLrRZq3kPA==}
+
+  dictionary-en@4.0.0:
+    resolution: {integrity: sha512-3NHnE1uq33ZE/CIwaZ6gqxa4BnglHnxeAcTM0GJ7cmtRGcvX9InMK/IqLtYcUMFCUpUNgybH+DzkqdgAo3F1zg==}
 
   dotenv@17.2.2:
     resolution: {integrity: sha512-Sf2LSQP+bOlhKWWyhFsn0UsfdK/kCWRv1iuA2gXAwt3dyNabr6QSj00I2V10pidqz69soatm9ZwZvpQMTIOd5Q==}
@@ -1590,6 +1611,10 @@ packages:
   is-arrayish@0.2.1:
     resolution: {integrity: sha512-zz06S8t0ozoDXMG+ube26zeCTNXcKIPJZJi8hBrF4idCLms4CG9QtK7qBl1boi5ODzFpjswb5JPmHCbMpjaYzg==}
 
+  is-buffer@2.0.5:
+    resolution: {integrity: sha512-i2R6zNFDwgEHJyQUtJEk0XFi1i0dPFn/oqjK3/vPCcDeJvW5NQ83V8QbicfF1SupOaB0h8ntgBC2YiE7dfyctQ==}
+    engines: {node: '>=4'}
+
   is-core-module@2.17.0:
     resolution: {integrity: sha512-J/vG0zBCbIKOQFfufSwyXdMrsohyJIUNkrnmo6WZGzoM7tr/lsbfW5b2BvisL6zsyMzK9UxV9L6c7AoFbyXHOA==}
     engines: {node: '>= 0.4'}
@@ -1743,6 +1768,9 @@ packages:
   node-diff3@3.2.1:
     resolution: {integrity: sha512-eKZcJ8RtMQ3cIaA15EgmtwG927fYnRlhtdA4Q9HAcCpAZPQhhU2XptnTH9GeAkMiX2bAXxlJSAFa9shFbztPgw==}
     engines: {bun: '>=1.3.10'}
+
+  nspell@2.1.5:
+    resolution: {integrity: sha512-PSStyugKMiD9mHmqI/CR5xXrSIGejUXPlo88FBRq5Og1kO5QwQ5Ilu8D8O5I/SHpoS+mibpw6uKA8rd3vXd2Sg==}
 
   obug@2.2.1:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
@@ -3033,6 +3061,10 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
+  '@types/nspell@2.1.6':
+    dependencies:
+      '@types/node': 24.19.1
+
   '@types/parse-json@4.0.2': {}
 
   '@types/picomatch@4.0.3': {}
@@ -3188,6 +3220,10 @@ snapshots:
   detect-libc@2.1.2: {}
 
   devalue@5.9.4: {}
+
+  dictionary-en-gb@3.0.0: {}
+
+  dictionary-en@4.0.0: {}
 
   dotenv@17.2.2: {}
 
@@ -3361,6 +3397,8 @@ snapshots:
 
   is-arrayish@0.2.1: {}
 
+  is-buffer@2.0.5: {}
+
   is-core-module@2.17.0:
     dependencies:
       hasown: 2.0.4
@@ -3465,6 +3503,10 @@ snapshots:
   node-addon-api@8.9.2: {}
 
   node-diff3@3.2.1: {}
+
+  nspell@2.1.5:
+    dependencies:
+      is-buffer: 2.0.5
 
   obug@2.2.1: {}
 

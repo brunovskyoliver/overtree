@@ -15,7 +15,13 @@ export type Hint = {
 	fix?: string;
 	/** the source text the entry is about (`\includegraphics`, a label key): the editor underlines it on the line */
 	token?: string;
+	/** a one-click fix (the editor's quick fix, the logs' Fix button), see quickfix.ts */
+	action?: HintAction;
 };
+
+/** `label` says what the fix changes. `replace`: the token becomes this text; `usepackage`: load the package in the
+ *  preamble; `env`: rename the environment whose `\begin{…}` is the token, and its `\end`. */
+export type HintAction = { label: string } & ({ replace: string } | { usepackage: string } | { env: string });
 
 export type LogEntry = {
 	level: 'error' | 'warning' | 'typesetting' | 'chktex'; // chktex: a ChkTeX warning (016), not from the TeX log

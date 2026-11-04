@@ -2,6 +2,7 @@
 	import { Pane, PaneGroup, PaneResizer } from 'paneforge';
 	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import type { CompileState } from '#lib/compile.svelte.ts';
+	import type { LogEntry } from '#lib/compile-types.ts';
 	import type { Layout, LayoutMode } from '#lib/layout.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
 	import { RECOMPILE_TO_SYNC, syncToCode, syncToPdf, syncWith } from '#lib/synctex.ts';
@@ -18,6 +19,7 @@
 		outline,
 		compile,
 		onopenat,
+		onfix,
 		project,
 		activeId,
 		onopen,
@@ -28,7 +30,8 @@
 		children: Snippet;
 		outline: Snippet;
 		compile: CompileState;
-		onopenat?: (fileId: string, line: number) => void;
+		onopenat?: (fileId: string, line: number, word?: string) => void;
+		onfix?: (entry: LogEntry) => void;
 		project: Project;
 		activeId?: string | null;
 		onopen?: (id: string) => void;
@@ -107,7 +110,7 @@
 		if (pdf.isCollapsed()) pdf.expand(); // to its size before the collapse (paneforge stores it)
 	}
 
-	/** The PDF asks for a source line: PDF only gives way to side-by-side so the editor shows it. */
+	/** A log entry asks for a source line: PDF only gives way to side-by-side so the editor shows it. */
 	function openAt(fileId: string, line: number) {
 		if (layout.mode === 'pdf') layout.set('split');
 		onopenat?.(fileId, line);
@@ -130,11 +133,13 @@
 		else if (r) await pdfPane?.showBox(r.page, r.boxes);
 	}
 
-	/** Double-click on the PDF or "←": open the source of that spot. */
-	async function reverse(page: number, x: number, y: number) {
+	/** Double-click on the PDF or "←": open the source of that spot, with the double-clicked word selected. PDF only
+	 *  stays PDF only (double-clicking to select text there shouldn't change the layout); the editor behind it moves to
+	 *  the spot, so switching back lands there. "←" is only offered side-by-side. */
+	async function reverse(page: number, x: number, y: number, word?: string) {
 		const r = await syncWith(compile, (id) => syncToCode(project.id, id, page, x, y, compile.last?.rootId));
 		if (r === 'stale') note?.show(RECOMPILE_TO_SYNC);
-		else if (r) openAt(r.fileId, r.line);
+		else if (r) onopenat?.(r.fileId, r.line, word);
 	}
 
 	function reverseVisible() {
@@ -226,7 +231,7 @@
 	>
 		<!-- inert while collapsed, like the sidebar; not rendered while the PDF has its own window -->
 		{#if layout.mode !== 'window'}
-			<PdfPane bind:this={pdfPane} {compile} projectId={project.id} onopenat={openAt} onsync={reverse} inert={!pdfOpen} />
+			<PdfPane bind:this={pdfPane} {compile} projectId={project.id} onopenat={openAt} {onfix} onsync={reverse} inert={!pdfOpen} />
 		{/if}
 	</Pane>
 </PaneGroup>

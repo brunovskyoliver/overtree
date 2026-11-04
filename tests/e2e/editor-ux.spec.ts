@@ -58,9 +58,10 @@ test('quotes stay single in LaTeX; brackets still pair', async ({ page }) => {
 
 test('spelling on by default; font size and spelling are per-device settings that survive a reload', async ({ page }) => {
 	const editor = await openEditor(page);
-	await expect(editor).toHaveAttribute('spellcheck', 'true');
 	await page.getByRole('button', { name: 'Editor settings' }).click();
 	const settings = page.getByRole('group', { name: 'Editor settings' });
+	// on by default (English text is checked by editor/spelling.ts, not the browser: spelling.spec.ts)
+	await expect(settings.getByLabel('Check spelling')).toBeChecked();
 	await settings.getByRole('button', { name: 'Larger text' }).click();
 	await settings.getByRole('button', { name: 'Larger text' }).click();
 	await expect(settings.locator('output')).toHaveText('15px');

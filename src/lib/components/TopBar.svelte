@@ -3,6 +3,7 @@
 	import { auth, signOut } from '#lib/auth.svelte.ts';
 	import { APPEARANCES, prefs, type Appearance } from '#lib/editor/prefs.svelte.ts';
 	import type { GitHub } from '#lib/github.svelte.ts';
+	import type { Latest } from '#lib/history.svelte.ts';
 	import type { Layout } from '#lib/layout.svelte.ts';
 	import { Menu } from '#lib/menu.svelte.ts';
 	import type { Peer } from '#lib/session.svelte.ts';
@@ -14,7 +15,8 @@
 	// `project`: the editor's title; the owner (onrename set) edits it in place, others see text.
 	type ProjectTitle = { title: string; onrename?: (title: string) => Promise<string | null> }; // resolves to an error or null
 	// `onshare`: the green "Share" button (editor page) opening the Share dialog
-	// `peers`: the others in the project (avatars, `onjump` goes to their cursor); `offline`: the socket dropped
+	// `peers`: the others in the project; an avatar opens a menu with their file (`pathOf`), "Go to cursor" (`onjump`)
+	// and "Latest changes" (`history.latestBy` finds them, `history.show` opens them); `offline`: the socket dropped
 	// `history`: the History toggle (008 contracts/ui.md), pressed while the History view is on
 	// `track`: the project's track-changes switch (013), `canToggle` for owners and editors; `review`: the review panel
 	// `layout`: the Layout menu (008 research R12)
@@ -26,6 +28,7 @@
 		onshare,
 		peers = [],
 		onjump,
+		pathOf,
 		offline = false,
 		history,
 		track,
@@ -39,8 +42,9 @@
 		onshare?: () => void;
 		peers?: Peer[];
 		onjump?: (peer: Peer) => void;
+		pathOf?: (fileId: string) => string | undefined;
 		offline?: boolean;
-		history?: { on: boolean; toggle: () => void };
+		history?: { on: boolean; toggle: () => void; latestBy?: (userId: string) => Promise<Latest | null>; show?: (l: Latest) => void };
 		track?: { on: boolean; canToggle: boolean; toggle: () => void };
 		review?: { on: boolean; toggle: () => void };
 		layout?: Layout;
@@ -90,9 +94,33 @@
 	const more = new Menu();
 	if (!auth.me) auth.loadMe();
 
-	function jump(peer: Peer) {
+	// one menu for whichever avatar (or "+N" row) was clicked; `peer` follows the live list, so it shows their file now
+	const pm = new Menu();
+	let peerId = $state<string>();
+	const peer = $derived(peers.find((p) => p.id === peerId));
+	let latest = $state<Latest | null>(); // undefined while it loads, null: no edits
+
+	function openPeer(p: Peer, toggle: HTMLElement) {
 		more.open = false;
+		if (pm.open && peerId === p.id) return void (pm.open = false);
+		peerId = p.id;
+		pm.root = more.root;
+		pm.toggle = toggle;
+		latest = undefined;
+		void history?.latestBy?.(p.id).then((l) => peerId === p.id && (latest = l));
+		pm.show();
+	}
+
+	function jump() {
+		if (!peer?.fileId) return;
+		pm.open = false;
 		onjump?.(peer);
+	}
+
+	function showLatest() {
+		if (!latest) return;
+		pm.open = false;
+		history?.show?.(latest);
 	}
 
 	function go(href: string) {
@@ -106,7 +134,7 @@
 	}
 </script>
 
-<svelte:window onpointerdown={(e) => (m.onwindowpointerdown(e), more.onwindowpointerdown(e))} />
+<svelte:window onpointerdown={(e) => (m.onwindowpointerdown(e), more.onwindowpointerdown(e), pm.onwindowpointerdown(e))} />
 
 <header class="topbar" class:project-bar={!!project}>
 	<a class="brand" href="/">Overtree</a>
@@ -143,7 +171,16 @@
 		{#if peers.length}
 			<div class="peers" bind:this={more.root}>
 				{#each peers.slice(0, MAX_PEERS) as peer (peer.id)}
-					<button type="button" class="peer" style:--ring={peer.color} aria-label="{peer.name} (go to cursor)" title={peer.name} onclick={() => jump(peer)}>
+					<button
+						type="button"
+						class="peer"
+						style:--ring={peer.color}
+						aria-label={peer.name}
+						aria-haspopup="menu"
+						aria-expanded={pm.open && peerId === peer.id}
+						title={peer.name}
+						onclick={(e) => openPeer(peer, e.currentTarget)}
+					>
 						<Avatar name={peer.name} avatarUrl={peer.avatarUrl} color={peer.color} />
 					</button>
 				{/each}
@@ -161,13 +198,27 @@
 					{#if more.open}
 						<div class="menu" role="menu" aria-label="More people" tabindex="-1" bind:this={more.menu} onkeydown={more.onmenukey}>
 							{#each peers.slice(MAX_PEERS) as peer (peer.id)}
-								<button type="button" role="menuitem" tabindex="-1" class="row" aria-label="{peer.name} (go to cursor)" onclick={() => jump(peer)}>
+								<button type="button" role="menuitem" tabindex="-1" class="row" aria-haspopup="menu" onclick={() => openPeer(peer, more.toggle!)}>
 									<Avatar name={peer.name} avatarUrl={peer.avatarUrl} color={peer.color} size={20} />
 									{peer.name}
 								</button>
 							{/each}
 						</div>
 					{/if}
+				{/if}
+				{#if pm.open && peer}
+					<div class="menu" role="menu" aria-label={peer.name} tabindex="-1" bind:this={pm.menu} onkeydown={pm.onmenukey}>
+						<div class="who">
+							<span class="name">{peer.name}</span>
+							<span class="email">{peer.fileId ? `In ${pathOf?.(peer.fileId) ?? 'a file'}` : 'No file open'}</span>
+						</div>
+						<button type="button" role="menuitem" tabindex="-1" aria-disabled={!peer.fileId} onclick={jump}>Go to cursor</button>
+						{#if history?.latestBy}
+							<button type="button" role="menuitem" tabindex="-1" aria-disabled={!latest} onclick={showLatest}>
+								{latest === undefined ? 'Latest changes…' : latest ? 'Latest changes' : 'No changes yet'}
+							</button>
+						{/if}
+					</div>
 				{/if}
 			</div>
 		{/if}
@@ -500,6 +551,10 @@
 	.menu button:focus-visible {
 		background: var(--panel-raised);
 		outline: none;
+	}
+	.menu button[aria-disabled='true'] {
+		color: var(--text-muted);
+		cursor: default;
 	}
 	.group {
 		display: flex;

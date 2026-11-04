@@ -154,7 +154,7 @@
 				<button type="button" aria-label="Larger text" disabled={prefs.fontSize >= FONT_SIZES.max} onclick={() => prefs.setFontSize(prefs.fontSize + 1)}>+</button>
 			</div>
 		</div>
-		<label class="row">
+		<label class="row" title="Underline misspelt English words with suggestions (US or British, from babel or polyglossia; the browser's own check for other languages)">
 			Check spelling
 			<input type="checkbox" checked={prefs.spellcheck} onchange={(e) => prefs.setSpellcheck(e.currentTarget.checked)} />
 		</label>
@@ -167,6 +167,10 @@
 		<label class="row" title="Mark unmatched \begin/\end, braces and $ while you type">
 			Code check
 			<input type="checkbox" checked={prefs.codeCheck} onchange={(e) => prefs.setCodeCheck(e.currentTarget.checked)} />
+		</label>
+		<label class="row" title="Gray suggestions from patterns in your document (the next table cell, a line like an earlier one); Tab accepts">
+			Suggestions while typing
+			<input type="checkbox" checked={prefs.predictions} onchange={(e) => prefs.setPredictions(e.currentTarget.checked)} />
 		</label>
 	</div>
 </div>

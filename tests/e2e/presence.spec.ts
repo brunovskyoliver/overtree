@@ -67,12 +67,12 @@ function caretAt(page: Page, pos: number) {
 
 test('remote caret and selection in the user color with a name label within 300 ms; avatars come and go (1, 2)', async ({ page }) => {
 	// avatars: each sees the other, in their color, never themselves
-	const bAvatar = page.getByRole('button', { name: `${bob.name} (go to cursor)` });
+	const bAvatar = page.getByRole('button', { name: bob.name, exact: true });
 	await expect(bAvatar).toBeVisible();
 	await expect(bAvatar).toHaveCSS('border-top-color', rgb(bob.color));
 	await expect(bAvatar).toHaveAttribute('title', bob.name);
-	await expect(b.getByRole('button', { name: 'admin (go to cursor)' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'admin (go to cursor)' })).toHaveCount(0);
+	await expect(b.getByRole('button', { name: 'admin', exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'admin', exact: true })).toHaveCount(0);
 
 	// B's caret at the start, labelled and colored
 	await b.locator('.cm-content').click();
@@ -108,7 +108,7 @@ test('remote caret and selection in the user color with a name label within 300 
 	await expect(caret).toHaveCount(0);
 });
 
-test('clicking an avatar opens that user’s file and scrolls to their cursor (3)', async ({ page }) => {
+test('an avatar’s menu shows their file; Go to cursor opens it, scrolls to their cursor and blinks the line (3)', async ({ page }) => {
 	const res = await page.request.post(`${api()}/files`, { data: { kind: 'text', name: 'long.tex', parentId: null } });
 	expect(res.status()).toBe(201);
 	await tree(b).getByRole('treeitem', { name: 'long.tex', exact: true }).click();
@@ -118,10 +118,35 @@ test('clicking an avatar opens that user’s file and scrolls to their cursor (3
 	await b.keyboard.press('ControlOrMeta+End');
 	for (let i = 0; i < 40; i++) await b.keyboard.press('ArrowUp'); // line 260
 
-	await page.getByRole('button', { name: `${bob.name} (go to cursor)` }).click();
+	await page.getByRole('button', { name: bob.name, exact: true }).click();
+	const menu = page.getByRole('menu', { name: bob.name });
+	await expect(menu).toContainText('In long.tex');
+	await menu.getByRole('menuitem', { name: 'Go to cursor' }).click();
+	await expect(menu).toHaveCount(0);
 	await expect(tabs(page).getByRole('tab', { name: 'long.tex', exact: true })).toHaveAttribute('aria-selected', 'true');
 	await expect(page.locator('.cm-ySelectionCaret')).toBeInViewport();
 	await expect(page.locator('.cm-line', { hasText: /^line 255$/ })).toBeInViewport(); // the caret's line holds its label
+	await expect(page.locator('.cm-line.cm-flash')).toHaveCount(1);
+	await expect(page.locator('.cm-flash')).toHaveCount(0, { timeout: 3_000 });
+});
+
+test('an avatar’s Latest changes opens History on their edits, the ones not in a version yet included', async ({ page }) => {
+	await b.locator('.cm-content').click();
+	await b.keyboard.press('ControlOrMeta+Home');
+	await b.keyboard.type('% bob was live\n');
+	await expect.poll(() => text(page)).toContain('% bob was live');
+
+	await page.getByRole('button', { name: bob.name, exact: true }).click();
+	const latest = page.getByRole('menu', { name: bob.name }).getByRole('menuitem', { name: 'Latest changes' });
+	await expect(latest).not.toHaveAttribute('aria-disabled', 'true');
+	await latest.click();
+	const diff = page.getByRole('region', { name: 'History' }).getByRole('region', { name: 'Diff' });
+	await expect(diff.locator(`ins[data-user="${bob.id}"]`)).toContainText('% bob was live');
+
+	// the owner hasn't edited this project: nothing to show
+	await b.getByRole('button', { name: 'admin', exact: true }).click();
+	const none = b.getByRole('menu', { name: 'admin' }).getByRole('menuitem', { name: 'No changes yet' });
+	await expect(none).toHaveAttribute('aria-disabled', 'true');
 });
 
 test('tree changes reach the other user without reload: create, rename, move, main, delete (4)', async ({ page }) => {
@@ -194,7 +219,7 @@ test('a removed user is disconnected within 2 s and their edits stop reaching ot
 	const headers = { origin: new URL(page.url()).origin };
 	expect((await page.request.delete(`${api()}/members/${bob.id}`, { headers })).status()).toBe(204);
 	await expect(b.getByRole('heading', { name: 'Your access was removed' })).toBeVisible({ timeout: 2_000 });
-	await expect(page.getByRole('button', { name: `${bob.name} (go to cursor)` })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: bob.name, exact: true })).toHaveCount(0);
 	// a direct write through a fresh socket is refused too (the editor is gone from B's page)
 	await b.goto(projectPath());
 	await expect(b.getByRole('heading', { name: 'You don’t have access to this project' })).toBeVisible();

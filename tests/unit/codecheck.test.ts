@@ -62,6 +62,22 @@ describe('codeCheck', () => {
 		expect(check(`${src}\\end{itemize}`)).toEqual([['\\end{itemize}', '\\end{itemize} has no \\begin{itemize} before it']]);
 	});
 
+	it('a definition inside a definition doesn’t end the outer one', () => {
+		// \renewcommand inside \sprint's body: the \end{table} after it is still part of \sprint
+		const src = [
+			'\\documentclass{article}',
+			'\\newcommand{\\sprint}[2]{%',
+			'  \\begin{table}[htbp]',
+			'    \\renewcommand{\\arraystretch}{1.4}',
+			'    \\begin{tabular}{ll} A & #1 \\\\ \\end{tabular}',
+			'    \\caption{Sprint #1.}',
+			'  \\end{table}%',
+			'}',
+			'\\begin{document}\n\\sprint{1}{x}\n\\end{document}\n'
+		].join('\n');
+		expect(codeCheck(src)).toEqual([]);
+	});
+
 	it('a starred environment name', () => {
 		expect(check('\\begin{align*}\na\n\\end{align*}')).toEqual([]);
 	});

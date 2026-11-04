@@ -81,7 +81,8 @@ export function codeCheck(text: string): Problem[] {
 			} else if ((name === ')' || name === ']') && !inDef()) {
 				if (math && CLOSER[math.open] === `\\${name}`) math = null;
 				else mathMismatch(i, end);
-			} else if (DEFINITIONS.has(name)) {
+			} else if (DEFINITIONS.has(name) && !inDef()) {
+				// one inside a definition (\renewcommand{\arraystretch} in a macro's body) is part of the outer one
 				defDepth = braces.length;
 				defArmed = true;
 			}

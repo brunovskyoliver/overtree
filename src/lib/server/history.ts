@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, exists, gt, inArray, lt, max, min, notExists, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { FileKind } from '../files.ts';
-import type { GitHubSource, HistoryPage, Label, UserRef, VersionInfo } from '../history-types.ts';
+import type { Compare, GitHubSource, HistoryPage, Label, UserRef, VersionInfo } from '../history-types.ts';
 import { colorFor } from '../presence.ts';
 import { broadcast, canEdit, projectRole, type Role } from './access.ts';
 import { getServer } from './collab.ts';
@@ -360,6 +360,29 @@ export function listVersions(
 		.limit(n + 1)
 		.all();
 	return { versions: versionInfos(pid, rows.slice(0, n), userId), hasMore: rows.length > n };
+}
+
+/** Where `userId`'s newest edits in `pid` are (a collaborator's avatar menu): edits since the last version → that
+ *  version against the current state; else the newest version they authored against the one before; null for none. */
+export function latestBy(pid: string, userId: string): { versionId: number; compare: Compare } | null {
+	flushHistory();
+	const last = lastVersion(pid);
+	if (!last) return null;
+	const live = db()
+		.select({ id: historyLog.id })
+		.from(historyLog)
+		.where(and(eq(historyLog.projectId, pid), gt(historyLog.id, last.watermark), eq(historyLog.userId, userId)))
+		.limit(1)
+		.get();
+	if (live) return { versionId: last.id, compare: 'current' };
+	const v = db()
+		.select({ id: versions.id })
+		.from(versions)
+		.where(and(eq(versions.projectId, pid), sql`exists (select 1 from json_each(${versions.authors}) where value = ${userId})`))
+		.orderBy(desc(versions.id))
+		.limit(1)
+		.get();
+	return v ? { versionId: v.id, compare: 'previous' } : null;
 }
 
 /** A version row of project `pid`; null for an unknown id or one of another project. */

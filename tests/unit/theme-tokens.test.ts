@@ -1,6 +1,7 @@
 // 018 light theme: app.css defines every color token in both sets, and the light editor colors meet WCAG AA.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(new URL('../../src/app.css', import.meta.url), 'utf8');
@@ -36,7 +37,7 @@ describe('theme tokens', () => {
 	});
 
 	it('every var(--token) in src without a fallback is defined in app.css or by its component', () => {
-		const src = new URL('../../src', import.meta.url).pathname;
+		const src = fileURLToPath(new URL('../../src', import.meta.url));
 		// set on an element by its component: style:--x or `--x:` inside a component's own CSS
 		const local = new Set<string>();
 		const used = new Map<string, string>();

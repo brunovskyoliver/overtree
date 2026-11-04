@@ -18,7 +18,12 @@
 	import type { EditorHandle } from '#lib/editor/types.ts';
 	import { Project } from '#lib/project.svelte.ts';
 	import { buildRegExp, matches, type SearchOptions } from '#lib/search.ts';
+	import { flash } from '#lib/editor/flash.ts';
+	import { entryRange } from '#lib/editor/lint.ts';
+	import { applyFix } from '#lib/editor/quickfix.ts';
+	import type { LogEntry } from '#lib/compile-types.ts';
 	import { Session, type Peer } from '#lib/session.svelte.ts';
+	import { wordNear } from '#lib/synctex.ts';
 	import * as Y from 'yjs';
 	import { PUBLIC_TEST_HOOKS } from '$app/env/public';
 
@@ -104,13 +109,28 @@
 		return editor === h ? h : undefined;
 	}
 
-	/** A log entry: open its file in a tab and put the cursor on the line (past the end: the last line). */
-	async function openAt(fileId: string, line: number) {
+	/** A log entry or a PDF double-click: open its file in a tab and put the cursor on the line (past the end: the
+	 *  last line) and blink it; with the double-clicked `word`, select and blink that word, so typing replaces it. */
+	async function openAt(fileId: string, line: number, word?: string) {
 		const view = (await opened(fileId))?.view;
 		if (!view) return;
 		const at = view.state.doc.line(Math.min(line, view.state.doc.lines));
-		view.dispatch({ selection: { anchor: at.from }, effects: EditorView.scrollIntoView(at.from, { y: 'center' }) });
+		const sel = (word && wordNear(view.state.doc.toString(), at.number, word)) || { from: at.from, to: at.from };
+		view.dispatch({ selection: { anchor: sel.from, head: sel.to }, effects: EditorView.scrollIntoView(sel.from, { y: 'center' }) });
+		flash(view, sel);
 		view.focus();
+	}
+
+	/** A log entry's Fix button: apply its hint's fix where it is (a package goes into the compiled document's
+	 *  preamble, also for an error in a chapter); when it no longer applies, just open the entry's line. */
+	async function fixEntry(entry: LogEntry) {
+		const action = entry.hint?.action;
+		if (!action || !entry.fileId) return;
+		const target = 'usepackage' in action ? (compile.last?.rootId ?? project.mainFileId) : entry.fileId;
+		const view = target && (await opened(target))?.view;
+		const range = view && target === entry.fileId ? entryRange(view.state.doc, entry) : { from: 0, to: 0 };
+		if (view && applyFix(view, action, range, entry.hint!.token)) return;
+		if (entry.line) await openAt(entry.fileId, entry.line);
 	}
 
 	/** A project search result (014): open its file and select the match nearest `from`, searched again in the
@@ -133,7 +153,7 @@
 	}
 
 	// Layout menu and the separate PDF window (008 research R12): its double-clicks open the source here
-	const layout = new Layout(project.id, (fileId, line) => void openAt(fileId, line));
+	const layout = new Layout(project.id, (fileId, line, word) => void openAt(fileId, line, word));
 	layout.mirror(compile);
 	onMount(() => () => layout.destroy());
 
@@ -168,6 +188,7 @@
 		const pos = head() && Y.createAbsolutePositionFromRelativePosition(head(), h.provider.document);
 		if (!pos || editor !== h) return;
 		h.view.dispatch({ effects: EditorView.scrollIntoView(pos.index, { y: 'center' }) });
+		flash(h.view, { from: pos.index, to: pos.index }); // their line blinks
 		h.view.focus();
 	}
 
@@ -193,8 +214,11 @@
 		onshare={project.details && !ended ? () => share?.open() : undefined}
 		peers={ended ? [] : session.peers}
 		onjump={jumpTo}
+		pathOf={(id) => project.path(id)}
 		offline={!ended && session.offline}
-		history={project.details && !ended ? { on: history.open, toggle: () => history.toggle() } : undefined}
+		history={project.details && !ended
+			? { on: history.open, toggle: () => history.toggle(), latestBy: (id) => history.latestBy(id), show: (l) => history.show(l) }
+			: undefined}
 		track={project.details && !ended
 			? { on: project.details.trackChanges, canToggle: project.details.permissions.canEdit, toggle: toggleTrack }
 			: undefined}
@@ -229,6 +253,7 @@
 					{compile}
 					{project}
 					onopenat={openAt}
+					onfix={fixEntry}
 					{cursor}
 					{layout}
 					activeId={project.active}
