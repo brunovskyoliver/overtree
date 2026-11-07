@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, type Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
 import type { FileEntry } from '../../src/lib/files.ts';
@@ -165,4 +167,42 @@ test('an oversized file is refused with a message, nothing changes (US4-7)', asy
 	await uploads(page).getByRole('button', { name: 'Dismiss big.png' }).click();
 	await expect(uploads(page)).toHaveCount(0);
 	expect(await files(page)).toEqual(before);
+});
+
+test('Upload folder adds the folder with its subfolders and files, without junk; a second upload asks once to replace', async ({ page }) => {
+	const dir = join(mkdtempSync(join(tmpdir(), 'overtree-folder-')), 'thesis');
+	for (const [path, content] of Object.entries({
+		'main.tex': '\\documentclass{article}',
+		'chapters/intro.tex': '\\section{Intro}',
+		'chapters/two.tex': '\\section{Two}',
+		'figs/plot.png': 'png',
+		'.DS_Store': 'junk',
+		'.git/HEAD': 'ref: refs/heads/main'
+	})) {
+		mkdirSync(join(dir, path, '..'), { recursive: true });
+		writeFileSync(join(dir, path), content);
+	}
+	const pick = async () => {
+		const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Upload folder', exact: true }).click()]);
+		await chooser.setFiles(dir);
+	};
+	await pick();
+	const paths = async () => {
+		const all = await files(page);
+		const path = (f: FileEntry): string => (f.parentId ? `${path(all.find((p) => p.id === f.parentId)!)}/` : '') + f.name;
+		return all.map(path).sort();
+	};
+	await expect.poll(paths).toEqual(['main.tex', 'thesis', 'thesis/chapters', 'thesis/chapters/intro.tex', 'thesis/chapters/two.tex', 'thesis/figs', 'thesis/figs/plot.png', 'thesis/main.tex']);
+	await expect(row(page, 'chapters')).toBeVisible(); // the uploaded folder is open, its subfolders closed
+	await expect(row(page, 'intro.tex')).toBeHidden();
+	await expect(uploads(page)).toHaveCount(0);
+
+	// again: one question for the whole folder, then the rest follows the answer
+	await pick();
+	await expect(dialog(page)).toContainText(/Replace existing file "thesis\/.+"\?/);
+	await expect(dialog(page)).toContainText('Your answer is for the other files of this upload that already exist, too.');
+	await dialog(page).getByRole('button', { name: 'Replace' }).click();
+	await expect(uploads(page)).toHaveCount(0);
+	await expect(dialog(page)).toBeHidden();
+	expect((await paths()).length).toBe(8);
 });

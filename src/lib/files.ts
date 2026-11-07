@@ -44,6 +44,10 @@ export function validateName(name: string, siblings: string[]): string | null {
 	return null;
 }
 
+/** Junk a zip or an uploaded folder brings along: macOS and Windows metadata, a Git repository's internals. */
+export const isJunkPath = (parts: string[]) =>
+	parts.some((s) => s === '__MACOSX' || s === '.git') || ['.DS_Store', 'Thumbs.db', 'desktop.ini'].includes(parts.at(-1)!);
+
 /** Slash-separated path from the root, e.g. 'chapters/intro.tex'. */
 export function pathOf(id: string, files: FileEntry[]): string {
 	const byId = new Map(files.map((f) => [f.id, f]));
