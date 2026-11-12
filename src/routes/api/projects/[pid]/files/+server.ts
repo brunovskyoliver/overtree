@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit';
-import { limits, type ProjectInfo } from '#lib/files.ts';
+import { limits, validateName, type ProjectInfo } from '#lib/files.ts';
 import { broadcast, canEdit, fileRoles, requireEditFiles, requireEditFolder, requireProject } from '#lib/server/access.ts';
 import { api } from '#lib/server/api.ts';
 import { createEntry, ensureFolder, findFolder, getMainFileId, listFiles, uploadFile } from '#lib/server/files.ts';
@@ -15,26 +15,33 @@ export const GET: RequestHandler = ({ locals, params }) => {
 
 // JSON: create a folder or an empty text file. Multipart: upload one file (contracts/files-api.md).
 // Edit access on the target folder; replacing a file also needs edit access on that file.
-// 015: `folder` names a subfolder of `parentId` to upload into, created when missing (edit access on `parentId`
-// then); `replace=rename` picks a free name instead of a clash.
+// 015: `folder` names a subfolder of `parentId` to upload into, created when missing (edit access on its parent
+// then); a path (`thesis/figures`, an uploaded folder's) makes each level. `replace=rename` picks a free name instead
+// of a clash.
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const { pid } = params;
 	const { user } = api(() => requireProject(locals, pid, 'read'));
 	if (request.headers.get('content-type')?.startsWith('multipart/form-data')) {
 		const form = await request.formData().catch(() => error(400, 'expected multipart form data'));
 		const file = form.get('file');
-		let parentId = form.get('parentId') || null;
+		const parent = form.get('parentId') || null;
 		const folder = form.get('folder');
-		if (!(file instanceof File) || !(parentId === null || typeof parentId === 'string') || !(folder === null || typeof folder === 'string'))
+		if (!(file instanceof File) || !(parent === null || typeof parent === 'string') || !(folder === null || typeof folder === 'string'))
 			error(400, 'expected fields file, parentId, folder and replace');
+		let parentId: string | null = parent;
 		const replace = form.get('replace') === 'rename' ? 'rename' : form.get('replace') === '1';
 		if (folder) {
 			// refused uploads (too big) shouldn't leave an empty folder behind
 			if (file.size > limits.uploadMaxFileMb * 1024 * 1024) error(413, `A file can be at most ${limits.uploadMaxFileMb} MB.`);
-			const into = parentId;
-			const found = api(() => findFolder(pid, into, folder));
-			api(() => requireEditFolder(pid, user.id, found?.id ?? into));
-			parentId = found?.id ?? api(() => ensureFolder(pid, into, folder, user.id)).id;
+			const names = folder.split('/').filter(Boolean);
+			const bad = names.map((n) => validateName(n, [])).find(Boolean);
+			if (bad) error(400, bad); // before making any level
+			for (const name of names) {
+				const into = parentId;
+				const found = api(() => findFolder(pid, into, name));
+				if (!found) api(() => requireEditFolder(pid, user.id, into));
+				parentId = found?.id ?? api(() => ensureFolder(pid, into, name, user.id)).id;
+			}
 		}
 		api(() => requireEditFolder(pid, user.id, parentId));
 		const existing = replace === true && listFiles(pid).find((f) => f.parentId === parentId && f.name.toLowerCase() === file.name.toLowerCase());

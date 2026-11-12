@@ -197,7 +197,7 @@ export class Project {
 	}
 
 	/** Adds a waiting line per file to the progress list, in the order they will go. */
-	queueUploads(files: File[]) {
+	queueUploads(files: { name: string; size: number }[]) {
 		return files.map((f) => {
 			this.uploads.push({ id: ++uploadIds, name: f.name, loaded: 0, total: f.size });
 			return this.uploads.at(-1)!; // the reactive proxy: progress set on it shows
@@ -216,7 +216,7 @@ export class Project {
 		folder?: string
 	): Promise<{ status: number; body: UploadBody }> {
 		const form = new FormData();
-		form.append('file', file);
+		form.append('file', file, file.name); // the name alone: from a picked folder the browser would send its path
 		form.append('parentId', parentId ?? '');
 		if (replace) form.append('replace', replace === 'rename' ? 'rename' : '1');
 		if (folder) form.append('folder', folder);
