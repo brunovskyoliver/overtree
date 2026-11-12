@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { strFromU8, Unzip, UnzipInflate, zip as compressZip, type Zippable } from 'fflate';
-import { kindForName, limits, pathOf, validateName } from '../files.ts';
+import { isJunkPath, kindForName, limits, pathOf, validateName } from '../files.ts';
 import { collectProject } from './compile.ts';
 import { FileError, listFiles, putBlob, readBlob, type Row } from './files.ts';
 import { manifestPaths, type Manifest } from './history.ts';
@@ -70,7 +70,7 @@ function cleanPath(name: string): string | null {
 	if (p.startsWith('/') || /^[a-z]:/i.test(p)) return null;
 	const parts = p.split('/').filter((s) => s && s !== '.');
 	if (!parts.length || parts.some((s) => validateName(s, []) !== null)) return null; // also refuses '..'
-	if (parts.includes('__MACOSX') || parts.at(-1) === '.DS_Store') return null;
+	if (isJunkPath(parts)) return null;
 	return parts.join('/');
 }
 

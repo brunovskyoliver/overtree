@@ -3,6 +3,7 @@
 	import { fileType, validateName, type FileEntry } from '#lib/files.ts';
 	import { Menu } from '#lib/menu.svelte.ts';
 	import type { Project } from '#lib/project.svelte.ts';
+	import { dropped, itemPath, picked, withoutJunk, type Item } from '#lib/upload.ts';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import FileIcon from './FileIcon.svelte';
 	import PermissionsDialog from './PermissionsDialog.svelte';
@@ -43,6 +44,7 @@
 	let confirm: ConfirmDialog;
 	let permissions: PermissionsDialog;
 	let picker: HTMLInputElement;
+	let folderPicker: HTMLInputElement;
 	let uploadTo: string | null = null;
 
 	const m = new Menu();
@@ -217,24 +219,38 @@
 
 	// --- upload (research R6) -------------------------------------------------------------------
 
-	function pick(parentId: string | null) {
+	function pick(parentId: string | null, folders = false) {
 		uploadTo = parentId;
-		picker.click();
+		(folders ? folderPicker : picker).click();
 	}
 
-	/** One file after the other, so a name clash asks Replace/Cancel for that file alone. */
-	async function upload(list: File[], parentId: string | null) {
+	/** One file after the other, so a name clash asks Replace/Cancel; for several files the answer is for all of them.
+	 *  Junk (.DS_Store, .git, __MACOSX) is left out, like a zip's. */
+	async function upload(all: Item[], parentId: string | null) {
+		const list = withoutJunk(all);
 		if (!list.length) return;
 		if (parentId) setExpanded(parentId, true);
-		const lines = project.queueUploads(list);
-		for (const [i, file] of list.entries()) {
-			const r = await project.send(lines[i], file, parentId);
+		const lines = project.queueUploads(list.map((i) => ({ name: itemPath(i), size: i.file.size })));
+		let replaceAll: boolean | undefined;
+		for (const [i, item] of list.entries()) {
+			const r = await project.send(lines[i], item.file, parentId, false, item.folder);
 			if (r.body.existingId) {
-				const replace = await confirm.ask({ title: `Replace existing file "${file.name}"?`, confirmLabel: 'Replace' });
-				if (replace) await project.send(lines[i], file, parentId, true);
+				const replace =
+					replaceAll ??
+					(await confirm.ask({
+						title: `Replace existing file "${itemPath(item)}"?`,
+						body: list.length > 1 ? 'Your answer is for the other files of this upload that already exist, too.' : undefined,
+						confirmLabel: 'Replace'
+					}));
+				if (list.length > 1) replaceAll = replace;
+				if (replace) await project.send(lines[i], item.file, parentId, true, item.folder);
 				else project.dismiss(lines[i]);
 			}
 			await project.load();
+			// the uploaded folder opens (its subfolders stay closed)
+			const top = item.folder?.split('/')[0].toLowerCase();
+			const made = top && project.files.find((f) => f.kind === 'folder' && f.parentId === parentId && f.name.toLowerCase() === top);
+			if (made) setExpanded(made.id, true);
 		}
 	}
 
@@ -320,11 +336,11 @@
 		dropTarget = undefined;
 		if (target === undefined) return;
 		if (!id) {
-			// from the desktop; a dropped folder is an entry that is a directory, skipped (read before any await)
-			const files = [...e.dataTransfer!.items]
-				.filter((i) => i.kind === 'file' && !i.webkitGetAsEntry()?.isDirectory)
-				.flatMap((i) => i.getAsFile() ?? []);
-			return upload(files, target);
+			// from the desktop: files, and folders with everything in them (both taken before any await)
+			const items = [...e.dataTransfer!.items].filter((i) => i.kind === 'file');
+			const found = items.map((i) => ({ entry: i.webkitGetAsEntry(), file: i.getAsFile() }));
+			const all = await Promise.all(found.map(({ entry, file }) => (entry?.isDirectory ? dropped(entry) : file ? [{ file }] : [])));
+			return upload(all.flat(), target);
 		}
 		const err = await project.move(id, target);
 		if (err) return flash(err);
@@ -451,8 +467,11 @@
 		<button type="button" class="tool" aria-label="New folder" title="New folder" disabled={!intoOk(folderOf(sel))} onclick={() => startNew('folder')}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3zM12 11v6M9 14h6" /></svg>
 		</button>
-		<button type="button" class="tool" aria-label="Upload" title="Upload" disabled={!intoOk(folderOf(sel))} onclick={() => pick(folderOf(sel))}>
+		<button type="button" class="tool" aria-label="Upload" title="Upload files" disabled={!intoOk(folderOf(sel))} onclick={() => pick(folderOf(sel))}>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" /></svg>
+		</button>
+		<button type="button" class="tool" aria-label="Upload folder" title="Upload a folder with its contents" disabled={!intoOk(folderOf(sel))} onclick={() => pick(folderOf(sel), true)}>
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3zM12 17v-6M9.5 13.5 12 11l2.5 2.5" /></svg>
 		</button>
 		{#if onsearch}
 			<button type="button" class="tool" aria-label="Search project" title="Search project (Ctrl/⌘+Shift+F)" data-search-button onclick={onsearch}>
@@ -468,8 +487,18 @@
 			hidden
 			bind:this={picker}
 			onchange={() => {
-				upload([...picker.files!], uploadTo);
+				upload([...picker.files!].map((file) => ({ file })), uploadTo);
 				picker.value = '';
+			}}
+		/>
+		<input
+			type="file"
+			webkitdirectory
+			hidden
+			bind:this={folderPicker}
+			onchange={() => {
+				upload(picked(folderPicker.files!), uploadTo);
+				folderPicker.value = '';
 			}}
 		/>
 	</div>
@@ -523,6 +552,7 @@
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('text', f.id))}>New file here</button>
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startNew('folder', f.id))}>New folder here</button>
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => pick(f.id), true)}>Upload here</button>
+			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => pick(f.id, true), true)}>Upload folder here</button>
 		{/if}
 		{#if changeable(f)}
 			<button type="button" role="menuitem" tabindex="-1" onclick={item(() => startRename(f))}>Rename</button>

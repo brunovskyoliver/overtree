@@ -184,7 +184,7 @@ Site admins get an Admin page (`/admin`) to promote, demote and disable users, d
 
 ### Files and compile
 
-The sidebar holds the file tree and an outline. Upload files or drag them in from the desktop, and download the whole project as a zip. A zip uploaded on the dashboard becomes a new project; its main document is the root `main.tex`, else the shallowest `.tex` with `\documentclass`.
+The sidebar holds the file tree and an outline. Upload files or whole folders (with their subfolders), or drag either in from the desktop, and download the whole project as a zip. Junk like `.DS_Store` and `.git` is left out. A zip uploaded on the dashboard becomes a new project; its main document is the root `main.tex`, else the shallowest `.tex` with `\documentclass`.
 
 Compiling runs `latexmk` (with bibtex or biber as needed). Clicking a log entry opens the file at that line. Errors are explained in plain language, and the common ones (a missing `\usepackage`, a misspelt command, environment, package or file name, a mismatched `\end`) have a fix button, in the log entry and in the error's tooltip in the editor; what it changed blinks, and Ctrl/Cmd+Z takes it back. Ctrl/Cmd+Alt+J jumps from the cursor to the PDF; double-clicking a word in the PDF jumps back to it in the source.
 
