@@ -11,6 +11,7 @@ A self-hosted LaTeX editor in the spirit of Overleaf. Write LaTeX with other peo
 - Full history: browse versions, diff, label, restore a file or the whole project
 - Optional two-way sync with a GitHub repository
 - Add references from a DOI, an arXiv id or your Zotero library, without writing BibTeX by hand
+- An MCP server at `/mcp`, so Claude Code and Codex can read, edit and compile your projects with a personal access token
 
 ## Install
 
@@ -219,6 +220,42 @@ The book button in the editor toolbar, or "Add reference…" at the end of the `
 The Zotero tab searches your own Zotero library. Connect it once with your user ID and a private API key from [zotero.org/settings/keys](https://www.zotero.org/settings/keys) (read-only library access is enough). The key is stored encrypted on the server, never sent back to the browser, and deleted when you disconnect. Pick any number of items and add them the same way.
 
 Readers can't add references. The server only talks to doi.org (and the Crossref, DataCite and mEDRA services it redirects to), the arXiv API and the Zotero API, with an 8-second limit and a 2 MB cap per answer. The Zotero key is encrypted with a random secret that Overtree creates in the data directory (`secret.key`); keep it with the database in backups, or users reconnect Zotero after a restore.
+
+### Connect coding agents (MCP)
+
+Overtree serves the [Model Context Protocol](https://modelcontextprotocol.io) over HTTP at `/mcp`. A coding agent such as Claude Code or Codex can then list your projects, read and change files and compile, as you.
+
+To connect one, open **Agent access** in the top bar of the projects page (or "Connect an agent…" in a project's row menu). Give the token a name, pick All my projects or a single project, and create it. The token is shown once, with setup commands for both clients filled in; copy it before closing the dialog. Overtree stores only a hash of it.
+
+A token acts as you, with your own role in each project: it can't edit a project where you are a reader. A token for one project sees only that project. Each account can have 20 tokens. Revoke a token in the same dialog to cut access at once; deleting a project removes the tokens scoped to it.
+
+Claude Code:
+
+```sh
+claude mcp add --transport http --scope user overtree https://tex.example.org/mcp \
+  --header "Authorization: Bearer otk_..."
+```
+
+Codex reads the token from an environment variable. Put the `export` line in your shell profile (`~/.zshrc` or similar):
+
+```sh
+export OVERTREE_TOKEN=otk_...
+codex mcp add overtree --url https://tex.example.org/mcp --bearer-token-env-var OVERTREE_TOKEN
+```
+
+The `codex mcp add` command writes this to `~/.codex/config.toml`, which you can also add by hand:
+
+```toml
+[mcp_servers.overtree]
+url = "https://tex.example.org/mcp"
+bearer_token_env_var = "OVERTREE_TOKEN"
+```
+
+Codex asks before each tool that changes something. To let it edit without asking (needed for `codex exec`, which can't ask), add `default_tools_approval_mode = "approve"` to that block.
+
+The tools are `list_projects`, `create_project`, `list_files`, `read_file`, `write_file`, `edit_file`, `delete_file`, `move_file`, `set_main_file`, `search` and `compile`.
+
+Behind a TLS proxy, `/mcp` needs the same `ORIGIN` (or `PROTOCOL_HEADER`) setting as the rest of the app, and agents must use the `https://` URL.
 
 ## Configuration
 

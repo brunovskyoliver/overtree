@@ -276,3 +276,24 @@ export const zoteroAccounts = sqliteTable('zotero_accounts', {
 	createdAt: integer('created_at').notNull(),
 	updatedAt: integer('updated_at').notNull()
 });
+
+// --- agent access over MCP ------------------------------------------------------------------------------------------
+
+// Personal access tokens for MCP clients (Claude Code, Codex). Only the SHA-256 of the token is stored; the token
+// acts as its user. `projectId` null: every project the user can open; else that one project.
+export const accessTokens = sqliteTable(
+	'access_tokens',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id),
+		name: text('name').notNull(),
+		projectId: text('project_id').references(() => projects.id),
+		hash: text('hash').notNull().unique(),
+		prefix: text('prefix').notNull(), // the first characters, to tell tokens apart in the list
+		createdAt: integer('created_at').notNull(),
+		lastUsedAt: integer('last_used_at')
+	},
+	(t) => [index('access_tokens_user_idx').on(t.userId)]
+);

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { blockedBy } from '#lib/auth.svelte.ts';
+	import AgentAccessDialog from '#lib/components/AgentAccessDialog.svelte';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import ProjectActions from '#lib/components/ProjectActions.svelte';
 	import TopBar from '#lib/components/TopBar.svelte';
@@ -42,6 +43,7 @@
 
 	let zipInput: HTMLInputElement;
 	let confirm: ConfirmDialog;
+	let agents: AgentAccessDialog;
 	const newMenu = new Menu();
 
 	const shown = $derived.by(() => {
@@ -139,8 +141,9 @@
 		}
 	}
 
-	async function action(p: Item, a: 'rename' | 'duplicate' | 'delete' | 'leave') {
+	async function action(p: Item, a: 'rename' | 'duplicate' | 'delete' | 'leave' | 'agent') {
 		if (a === 'rename') return startRename(p);
+		if (a === 'agent') return agents.open(p.id);
 		error = '';
 		if (a === 'delete') {
 			const ok = await confirm.ask({
@@ -207,7 +210,11 @@
 {/snippet}
 
 <div class="page">
-	<TopBar />
+	<TopBar>
+		{#snippet right()}
+			<button type="button" class="agents" onclick={() => agents.open()}>Agent access</button>
+		{/snippet}
+	</TopBar>
 
 	<main>
 		<div class="head">
@@ -293,6 +300,7 @@
 </dialog>
 
 <ConfirmDialog bind:this={confirm} />
+<AgentAccessDialog bind:this={agents} {projects} />
 
 <style>
 	.page {
@@ -482,6 +490,16 @@
 	button:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
+	}
+	.agents {
+		height: 28px;
+		padding: 0 12px;
+		border-radius: 14px;
+		background: none;
+		white-space: nowrap;
+	}
+	.agents:hover {
+		background: var(--panel-raised);
 	}
 	button.primary {
 		border-color: transparent;

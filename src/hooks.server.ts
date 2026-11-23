@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { authenticateRequest } from '#lib/server/auth.ts';
+import { authenticateBearer } from '#lib/server/tokens.ts';
 
 // Every request is authenticated (plan decision 1, research R2). Public pages still get `locals.user` when
 // signed in (the share landing page joins with it).
@@ -13,6 +14,18 @@ const see = (location: string) => new Response(null, { status: 303, headers: { l
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const path = event.url.pathname;
+	// MCP clients (Claude Code, Codex) sign in with a personal access token, never a Clerk session
+	if (path === '/mcp') {
+		const bearer = authenticateBearer(event.request.headers.get('authorization'));
+		if (!bearer)
+			return json(
+				{ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Missing or invalid Overtree access token. Create one under Agent access on the projects page.' } },
+				{ status: 401, headers: { 'www-authenticate': 'Bearer realm="overtree"' } }
+			);
+		event.locals.user = bearer.user;
+		event.locals.token = bearer.scope;
+		return resolve(event);
+	}
 	// GitHub's connect and callback (012) are top-level browser visits, not fetches: they get the page treatment
 	// (Clerk's handshake when the short-lived session token expired while on GitHub, sign-in when signed out)
 	const api = path.startsWith('/api/') && !isNavigation(path);

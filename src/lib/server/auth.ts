@@ -3,6 +3,7 @@ import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import { getServer } from './collab.ts';
 import type { Tx } from './files.ts';
 import {
+	accessTokens,
 	githubAccounts,
 	githubLinks,
 	githubRuns,
@@ -185,6 +186,7 @@ function moveUser(tx: Tx, from: User, to: string) {
 	tx.update(githubAccounts).set({ userId: to }).where(eq(githubAccounts.userId, from.id)).run();
 	tx.update(githubLinks).set({ userId: to }).where(eq(githubLinks.userId, from.id)).run();
 	tx.update(githubRuns).set({ userId: to }).where(eq(githubRuns.userId, from.id)).run();
+	tx.update(accessTokens).set({ userId: to }).where(eq(accessTokens.userId, from.id)).run();
 	tx.update(versions)
 		.set({ authors: sql`replace(${versions.authors}, ${JSON.stringify(from.id)}, ${JSON.stringify(to)})` })
 		.where(sql`${versions.authors} like ${'%' + JSON.stringify(from.id) + '%'}`)

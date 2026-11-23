@@ -161,7 +161,7 @@ test('collaborators see the title but cannot rename; they can duplicate and leav
 	await expect(r).toContainText('admin');
 	await expect(r).toContainText('Reader');
 	await actions(other, `Shared ${t}`).click();
-	await expect(other.getByRole('menu', { name: `Actions for Shared ${t}` }).getByRole('menuitem')).toHaveText(['Duplicate', 'Leave']);
+	await expect(other.getByRole('menu', { name: `Actions for Shared ${t}` }).getByRole('menuitem')).toHaveText(['Duplicate', 'Connect an agent…', 'Leave']);
 	await other.keyboard.press('Escape');
 
 	await other.goto(projectPath(pid));

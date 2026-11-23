@@ -2,8 +2,8 @@
 	import { Menu } from '#lib/menu.svelte.ts';
 
 	// Row actions on the dashboard (contracts/ui.md "Dashboard"): Rename, Duplicate, Delete for the owner; Duplicate,
-	// Leave for collaborators.
-	type Action = 'rename' | 'duplicate' | 'delete' | 'leave';
+	// Leave for collaborators; "Connect an agent…" for everyone (opens Agent access with this project as the scope).
+	type Action = 'rename' | 'duplicate' | 'delete' | 'leave' | 'agent';
 	let { title, owner, disabled = false, onaction }: { title: string; owner: boolean; disabled?: boolean; onaction: (a: Action) => void } =
 		$props();
 
@@ -13,10 +13,12 @@
 			? [
 					['rename', 'Rename'],
 					['duplicate', 'Duplicate'],
+					['agent', 'Connect an agent…'],
 					['delete', 'Delete']
 				]
 			: [
 					['duplicate', 'Duplicate'],
+					['agent', 'Connect an agent…'],
 					['leave', 'Leave']
 				]
 	);
@@ -90,7 +92,7 @@
 		z-index: 20;
 		display: flex;
 		flex-direction: column;
-		min-width: 150px;
+		min-width: 170px;
 		padding: 4px 0;
 		border: 1px solid var(--border);
 		border-radius: 6px;
