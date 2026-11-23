@@ -5,6 +5,7 @@ import type { CompileState } from '#lib/compile.svelte.ts';
 import type { EditorHandle } from '#lib/editor/types.ts';
 import type { User } from '#lib/server/auth.ts';
 import type { Db } from '#lib/server/db.ts';
+import type { TokenScope } from '#lib/server/tokens.ts';
 
 declare global {
 	namespace App {
@@ -20,6 +21,8 @@ declare global {
 		interface Locals {
 			/** the signed-in, enabled user (hooks.server.ts); null when signed out or blocked */
 			user: User | null;
+			/** set on /mcp: the access token that signed the request in, and the project it is limited to */
+			token?: TokenScope;
 		}
 		// interface PageData {}
 		// interface PageState {}

@@ -9,6 +9,7 @@ import { fail, getText, listFiles, textUpdate, type Row } from './files.ts';
 import { broadcast, kick, projectRole, type Role } from './access.ts';
 import { closeVersion, flushHistory } from './history.ts';
 import {
+	accessTokens,
 	compileSettings,
 	documents,
 	files,
@@ -177,6 +178,7 @@ export function deleteProject(pid: string) {
 		tx.delete(memberships).where(eq(memberships.projectId, pid)).run();
 		tx.delete(invites).where(eq(invites.projectId, pid)).run();
 		tx.delete(compileSettings).where(eq(compileSettings.project, pid)).run();
+		tx.delete(accessTokens).where(eq(accessTokens.projectId, pid)).run(); // agent tokens for this project only
 		// the link and its runs only; nothing on GitHub changes (012 FR-010)
 		tx.delete(githubRuns).where(eq(githubRuns.projectId, pid)).run();
 		tx.delete(githubLinks).where(eq(githubLinks.projectId, pid)).run();
