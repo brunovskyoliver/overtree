@@ -5,6 +5,7 @@ import { getServer } from './collab.ts';
 import { compileProject, compileRoot } from './compile.ts';
 import { createEntry, deleteEntry, ensureFolder, fail, FileError, findFolder, getMainFileId, listFiles, renameOrMove, setMainFile, setText } from './files.ts';
 import { closeVersion, currentText } from './history.ts';
+import { getLink, patchLink } from './github/links.ts';
 import { createProject, kickOverridden, listProjects } from './projects.ts';
 import { searchProject } from './search.ts';
 import { isTemplate, TEMPLATES, templateText } from './templates.ts';
@@ -239,7 +240,9 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'delete_file',
-		description: 'Delete a file, or a folder with everything in it. History keeps the old versions.',
+		description:
+			'Delete a file, or a folder with everything in it. History keeps the old versions. In a GitHub-linked project the ' +
+			'deletion is pushed to the repo unless the path matches github_ignore.',
 		properties: { ...P, path: PATH },
 		required: ['project', 'path'],
 		annotations: WRITE(true, true),
@@ -308,6 +311,23 @@ const TOOLS: Tool[] = [
 			const lines = r.files.flatMap((f) => f.matches.map((m) => `${f.path}:${m.line}: ${m.before}${m.match}${m.after}`));
 			const head = `${plural(r.total, 'match', 'matches')} in ${plural(r.files.length, 'file')}${r.truncated ? ' (stopped at the cap, narrow the search)' : ''}:`;
 			return [head, ...lines].join('\n');
+		}
+	},
+	{
+		name: 'github_ignore',
+		description:
+			'Owner only, GitHub-linked projects: the “Not pulled from GitHub” glob patterns. Matching paths are neither pulled ' +
+			'nor pushed, so deleting them here afterwards leaves them on GitHub (until a pattern is removed: then the next push ' +
+			'deletes them there). Without patterns: the current list. With patterns: replaces the whole list, so keep the ' +
+			'defaults you read.',
+		properties: { ...P, patterns: { type: 'array', items: { type: 'string' }, description: 'Optional: the new full list, one glob each.' } },
+		required: ['project'],
+		annotations: WRITE(false, true),
+		run: async (locals, args) => {
+			const { pid, user } = project(locals, args, 'owner');
+			if (!getLink(pid)) fail(404, 'This project isn’t linked to a GitHub repository.');
+			if (args.patterns !== undefined) await patchLink(pid, user.id, { ignore: args.patterns });
+			return (JSON.parse(getLink(pid)!.ignore) as string[]).join('\n');
 		}
 	},
 	{
