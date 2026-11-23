@@ -253,7 +253,7 @@ bearer_token_env_var = "OVERTREE_TOKEN"
 
 Codex asks before each tool that changes something. To let it edit without asking (needed for `codex exec`, which can't ask), add `default_tools_approval_mode = "approve"` to that block.
 
-The tools are `list_projects`, `create_project`, `list_files`, `read_file`, `write_file`, `edit_file`, `delete_file`, `move_file`, `set_main_file`, `search` and `compile`.
+The tools are `list_projects`, `create_project`, `list_files`, `read_file`, `write_file`, `edit_file`, `delete_file`, `move_file`, `set_main_file`, `search`, `github_ignore` and `compile`. `github_ignore` (owner only) reads or replaces a GitHub-linked project’s “Not pulled from GitHub” patterns, so an agent can hide repo folders such as code projects without deleting them on GitHub.
 
 Behind a TLS proxy, `/mcp` needs the same `ORIGIN` (or `PROTOCOL_HEADER`) setting as the rest of the app, and agents must use the `https://` URL.
 

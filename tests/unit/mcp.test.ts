@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createEntry, getMainFileId, getText, listFiles, setText, uploadFile } from '../../src/lib/server/files.ts';
 import { closeVersion, listVersions } from '../../src/lib/server/history.ts';
 import { listProjects } from '../../src/lib/server/projects.ts';
-import { memberships, overrides, users, type MemberRole } from '../../src/lib/server/schema.ts';
+import { githubLinks, memberships, overrides, users, type MemberRole } from '../../src/lib/server/schema.ts';
 import { authenticateBearer, createToken, revokeToken, type TokenScope } from '../../src/lib/server/tokens.ts';
 import { handle } from '../../src/hooks.server.ts';
 import * as route from '../../src/routes/mcp/+server.ts';
@@ -80,7 +80,7 @@ describe('protocol', () => {
 		const { tools } = (await rpc(OWNER, 'tools/list')).result;
 		expect(tools.map((t: { name: string }) => t.name)).toEqual([
 			'list_projects', 'create_project', 'list_files', 'read_file', 'write_file', 'edit_file',
-			'delete_file', 'move_file', 'set_main_file', 'search', 'compile'
+			'delete_file', 'move_file', 'set_main_file', 'search', 'github_ignore', 'compile'
 		]);
 		const edit = tools.find((t: { name: string }) => t.name === 'edit_file');
 		expect(edit.inputSchema).toMatchObject({ type: 'object', required: ['project', 'path', 'old_string', 'new_string'] });
@@ -195,6 +195,20 @@ describe('tools', () => {
 		expect(getMainFileId(pid)).toBe(null);
 		expect(JSON.parse((await tool(R, 'compile', { project: pid })).text)).toMatchObject({ status: 'failure', message: expect.stringMatching(/No main document/) });
 		expect(await tool(R, 'compile', { project: pid, path: 'chapters' })).toEqual({ isError: true, text: 'Not a .tex file.' });
+	});
+});
+
+describe('github_ignore', () => {
+	it('reads and replaces the owner’s “not pulled” patterns; refuses editors and unlinked projects', async () => {
+		const { server, pid } = await setup();
+		expect((await tool(OWNER, 'github_ignore', { project: pid })).isError).toBe(true); // not linked
+		const now = Date.now();
+		server.db.insert(githubLinks).values({ projectId: pid, userId: user().id, installationId: 1, repoId: 1, repo: 'a/b', branch: 'main', ignore: '["**/*.aux"]', status: 'active', createdAt: now, updatedAt: now }).run();
+		expect((await tool(OWNER, 'github_ignore', { project: pid })).text).toBe('**/*.aux');
+		expect((await tool(OWNER, 'github_ignore', { project: pid, patterns: ['**/*.aux', ' src/** ', ''] })).text).toBe('**/*.aux\nsrc/**');
+		expect((await tool(OWNER, 'github_ignore', { project: pid, patterns: 'src/**' })).isError).toBe(true);
+		expect((await tool(B, 'github_ignore', { project: pid, patterns: [] })).isError).toBe(true);
+		expect((await tool(OWNER, 'github_ignore', { project: pid })).text).toBe('**/*.aux\nsrc/**');
 	});
 });
 
